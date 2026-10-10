@@ -1,0 +1,214 @@
+import {
+    Volume2,
+    VolumeX,
+    Plus,
+    Search,
+    Square,
+    Headphones,
+    Minus,
+    Maximize2,
+    X,
+} from "lucide-react";
+import { AudioVisualizer } from "./AudioVisualizer";
+import { AudioRoutingConfig } from "../types/sound";
+
+interface HeaderProps {
+    searchQuery: string;
+    onSearchChange: (query: string) => void;
+    onAddNewSound: () => void;
+    onStopAll: () => void;
+    routingConfig: AudioRoutingConfig;
+    onRoutingConfigChange: (newConfig: AudioRoutingConfig) => void;
+    activePlayingCount: number;
+    onOpenRoutingTab: () => void;
+}
+
+export function Header({
+    searchQuery,
+    onSearchChange,
+    onAddNewSound,
+    onStopAll,
+    routingConfig,
+    onRoutingConfigChange,
+    activePlayingCount,
+    onOpenRoutingTab,
+}: HeaderProps) {
+    const isMuted = routingConfig.masterVolume === 0;
+
+    const handleToggleMute = () => {
+        onRoutingConfigChange({
+            ...routingConfig,
+            masterVolume: isMuted ? 0.85 : 0,
+        });
+    };
+
+    const handleVolumeSlider = (val: number) => {
+        onRoutingConfigChange({
+            ...routingConfig,
+            masterVolume: val,
+        });
+    };
+
+    const handleMinimize = () => {
+        if (window.electronAPI?.minimizeWindow) {
+            window.electronAPI.minimizeWindow();
+        }
+    };
+
+    const handleMaximize = () => {
+        if (window.electronAPI?.maximizeWindow) {
+            window.electronAPI.maximizeWindow();
+        }
+    };
+
+    const handleClose = () => {
+        if (window.electronAPI?.closeWindow) {
+            window.electronAPI.closeWindow();
+        }
+    };
+
+    return (
+        <header className="h-16 px-2 py-2 bg-[#000000] flex items-center justify-between gap-3 shrink-0 select-none window-drag-region">
+            {/* Floating Capsule Bar Container */}
+            <div className="w-full h-11 flex items-center justify-between gap-2.5 px-3 bg-zinc-950/90 backdrop-blur-md border border-zinc-800/90 rounded-full shadow-lg shadow-black/40">
+                {/* Left zone: Audio Device & Equalizer Capsule */}
+                <div className="flex items-center gap-2 window-no-drag">
+                    {/* Device Routing Indicator */}
+                    <button
+                        onClick={onOpenRoutingTab}
+                        title="Ses çıkış ayarlarını düzenle"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800/80 text-xs text-zinc-300 transition-all group cursor-pointer shadow-sm"
+                    >
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="font-mono text-[11px] truncate max-w-[170px] text-zinc-200">
+                            {routingConfig.primaryDeviceLabel || "CABLE Input"}
+                        </span>
+                        {routingConfig.dualOutputEnabled && (
+                            <div className="flex items-center gap-1 text-[10px] text-zinc-400 border border-zinc-800 bg-zinc-950 px-1.5 py-0.2 rounded-full font-mono">
+                                <Headphones className="w-2.5 h-2.5" />
+                                <span>Çift</span>
+                            </div>
+                        )}
+                    </button>
+
+                    {/* Equalizer Visualizer Capsule */}
+                    <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 bg-zinc-900/60 rounded-full border border-zinc-800/80">
+                        <AudioVisualizer
+                            isPlaying={activePlayingCount > 0}
+                            height={16}
+                        />
+                        <span className="text-[10px] font-mono text-zinc-400">
+                            {activePlayingCount > 0 ? "PLAYING" : "IDLE"}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Center Zone: Capsule Search Bar */}
+                <div className="flex-1 max-w-sm relative window-no-drag">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        placeholder="Ses veya kısayol ara..."
+                        className="w-full bg-zinc-900/80 text-xs text-zinc-200 placeholder-zinc-500 pl-8.5 pr-7 py-1.5 rounded-full border border-zinc-800/80 focus:outline-none focus:border-zinc-600 focus:bg-zinc-900 transition-all"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => onSearchChange("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-200"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
+
+                {/* Right Zone: Master Volume, Stop All, Yeni Ses, and Window Controls */}
+                <div className="flex items-center gap-2 window-no-drag">
+                    {/* Master Volume Capsule */}
+                    <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-zinc-900/80 rounded-full border border-zinc-800/80">
+                        <button
+                            onClick={handleToggleMute}
+                            className="text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                            title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
+                        >
+                            {isMuted ? (
+                                <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                            ) : (
+                                <Volume2 className="w-3.5 h-3.5 text-zinc-300" />
+                            )}
+                        </button>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.02"
+                            value={routingConfig.masterVolume}
+                            onChange={(e) =>
+                                handleVolumeSlider(parseFloat(e.target.value))
+                            }
+                            className="w-16 accent-white cursor-pointer"
+                            title={`Ana Ses: %${Math.round(routingConfig.masterVolume * 100)}`}
+                        />
+                        <span className="text-[11px] font-mono tabular-nums text-zinc-400 w-7 text-right">
+                            %{Math.round(routingConfig.masterVolume * 100)}
+                        </span>
+                    </div>
+
+                    {/* Stop All Capsule */}
+                    <button
+                        onClick={onStopAll}
+                        title="Tüm sesleri durdur (ESC)"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                            activePlayingCount > 0
+                                ? "bg-rose-950/60 border-rose-700 text-rose-300 hover:bg-rose-950/80 shadow-sm shadow-rose-950"
+                                : "bg-zinc-900/80 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850"
+                        }`}
+                    >
+                        <Square className="w-3 h-3 fill-current" />
+                        <span className="hidden md:inline">Durdur</span>
+                        <kbd className="font-mono text-[9px] px-1.5 py-0.2 rounded-full border border-zinc-700 bg-zinc-950 text-zinc-400">
+                            ESC
+                        </kbd>
+                    </button>
+
+                    {/* Primary Action Capsule: Yeni Ses */}
+                    <button
+                        onClick={onAddNewSound}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-zinc-200 active:bg-zinc-300 text-black text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shadow-sm hover:shadow"
+                    >
+                        <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Yeni Ses</span>
+                    </button>
+
+                    {/* Circular Window Controls inside capsule */}
+                    <div className="flex items-center pl-2 ml-0.5 border-l border-zinc-800/90 gap-0.5">
+                        <button
+                            onClick={handleMinimize}
+                            title="Simge Durumuna Küçült"
+                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                        >
+                            <Minus className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                            onClick={handleMaximize}
+                            title="Ekranı Kapla / Geri Yükle"
+                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                        >
+                            <Maximize2 className="w-3 h-3" />
+                        </button>
+
+                        <button
+                            onClick={handleClose}
+                            title="Kapat"
+                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-rose-600 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+    );
+}
