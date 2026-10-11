@@ -98,9 +98,16 @@ export function HotkeysView({
                   </button>
 
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-zinc-200">{sound.title}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-zinc-200">{sound.title}</span>
+                      {(sound.category === 'Spotify' || sound.spotifyUri) && (
+                        <span className="text-[10px] font-mono text-[#1db954] bg-[#1db954]/10 border border-[#1db954]/30 px-1 py-0.2 rounded">
+                          Spotify
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[11px] text-zinc-500">
-                      {sound.category} · {sound.duration.toFixed(1)}s
+                      {sound.spotifyArtist || sound.category} · {sound.duration.toFixed(0)}s
                     </span>
                   </div>
                 </div>

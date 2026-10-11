@@ -104,5 +104,20 @@ export const STARTER_SOUNDS: SoundItem[] = [
     playMode: 'overlap',
     synthPreset: 'applause',
     addedAt: Date.now() - 30000
+  },
+  {
+    id: 'snd-spotify-test',
+    title: 'Flashing Lights (Spotify Test)',
+    hotkey: 'F9',
+    duration: 237,
+    category: 'Spotify',
+    volume: 1.0,
+    isFavorite: true,
+    loop: false,
+    playMode: 'overlap',
+    spotifyUri: 'spotify:track:5GOyyufqny38BvNu99ts2z',
+    spotifyTrackId: '5GOyyufqny38BvNu99ts2z',
+    spotifyArtist: 'Kanye West, Dwele',
+    addedAt: Date.now() - 20000
   }
 ];

@@ -5,16 +5,16 @@ import {
     Keyboard,
     Mic,
     HelpCircle,
-    FolderHeart,
-    Terminal,
     Activity,
+    Settings,
 } from "lucide-react";
 
 export type NavTab =
     | "soundboard"
+    | "recorder"
     | "routing"
     | "hotkeys"
-    | "recorder"
+    | "settings"
     | "guide";
 
 interface SidebarProps {
@@ -24,6 +24,7 @@ interface SidebarProps {
     favoriteCount: number;
     isElectron: boolean;
     activePlayingCount: number;
+    spotifyConnected?: boolean;
 }
 
 export function Sidebar({
@@ -33,6 +34,7 @@ export function Sidebar({
     favoriteCount,
     isElectron,
     activePlayingCount,
+    spotifyConnected = false,
 }: SidebarProps) {
     const navItems = [
         {
@@ -40,6 +42,12 @@ export function Sidebar({
             label: "Soundboard",
             icon: Volume2,
             badge: soundCount,
+        },
+        {
+            id: "recorder" as NavTab,
+            label: "Ses Kaydedici",
+            icon: Mic,
+            badge: null,
         },
         {
             id: "routing" as NavTab,
@@ -51,6 +59,18 @@ export function Sidebar({
             id: "hotkeys" as NavTab,
             label: "Kısayol Matrisi",
             icon: Keyboard,
+            badge: null,
+        },
+        {
+            id: "settings" as NavTab,
+            label: "Ayarlar & Spotify",
+            icon: Settings,
+            badge: spotifyConnected ? "SPOTIFY" : null,
+        },
+        {
+            id: "guide" as NavTab,
+            label: "Kullanım Kılavuzu",
+            icon: HelpCircle,
             badge: null,
         },
     ];

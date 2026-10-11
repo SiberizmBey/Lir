@@ -1,4 +1,4 @@
-export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel';
+export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel' | 'Spotify';
 
 export interface SoundItem {
   id: string;
@@ -14,6 +14,58 @@ export interface SoundItem {
   dataUrl?: string; // base64 or object URL or generated identifier
   synthPreset?: string; // name of synthesizer preset if generated
   addedAt: number;
+  // Spotify integration fields
+  spotifyUri?: string;
+  spotifyTrackId?: string;
+  spotifyArtist?: string;
+  spotifyAlbumCover?: string;
+  spotifyPreviewUrl?: string;
+}
+
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  uri: string;
+  duration_ms: number;
+  preview_url: string | null;
+  artists: Array<{ name: string; id: string }>;
+  album: {
+    name: string;
+    images: Array<{ url: string; height?: number; width?: number }>;
+  };
+}
+
+export interface SpotifyUser {
+  id: string;
+  display_name: string;
+  email?: string;
+  product?: string; // 'premium' | 'free' | 'open'
+  images?: Array<{ url: string }>;
+  country?: string;
+}
+
+export interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string; // 'Computer' | 'Smartphone' | 'Speaker' etc.
+  is_active: boolean;
+  is_restricted: boolean;
+  volume_percent: number | null;
+}
+
+export interface SpotifyAuthState {
+  isConnected: boolean;
+  accessToken: string | null;
+  refreshToken: string | null;
+  expiresAt: number | null;
+  user: SpotifyUser | null;
+  devices: SpotifyDevice[];
+  activeDeviceId: string | null;
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+  preferConnect: boolean;
+  error: string | null;
 }
 
 export interface AudioRoutingConfig {

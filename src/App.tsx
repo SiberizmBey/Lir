@@ -27,6 +27,8 @@ import { AudioRoutingView } from "./components/AudioRoutingView";
 import { HotkeysView } from "./components/HotkeysView";
 import { RecorderView } from "./components/RecorderView";
 import { GuideView } from "./components/GuideView";
+import { SettingsView } from "./components/SettingsView";
+import { spotifyService } from "./utils/spotifyService";
 
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
@@ -92,6 +94,17 @@ export default function App() {
         connected: false,
         clientId: "1558769862053077114",
     });
+
+    const [spotifyState, setSpotifyState] = useState(() =>
+        spotifyService.getState()
+    );
+
+    useEffect(() => {
+        const unsub = spotifyService.subscribe((s) => {
+            setSpotifyState(s);
+        });
+        return () => unsub();
+    }, []);
 
     const isElectron =
         typeof window !== "undefined" && !!window.electronAPI?.isElectron;
@@ -205,7 +218,13 @@ export default function App() {
 
     useEffect(() => {
         audioEngine.setPlaybackListener((playingIds) => {
-            setActivePlayingIds(playingIds);
+            setActivePlayingIds((prev) => {
+                const spotifyActive = prev.filter((id) => {
+                    const s = sounds.find((item) => item.id === id);
+                    return s && (s.category === "Spotify" || s.spotifyUri);
+                });
+                return Array.from(new Set([...playingIds, ...spotifyActive]));
+            });
         });
 
         const handleUserGesture = () => {
@@ -219,10 +238,41 @@ export default function App() {
             window.removeEventListener("keydown", handleUserGesture);
             window.removeEventListener("focus", handleUserGesture);
         };
-    }, []);
+    }, [sounds]);
 
     const handlePlaySound = useCallback(
-        (sound: SoundItem) => {
+        async (sound: SoundItem) => {
+            if (sound.category === "Spotify" || sound.spotifyUri) {
+                if (routingConfig.playbackMode === "cutoff") {
+                    audioEngine.stopAll();
+                    await spotifyService.pauseTrack();
+                }
+                const trackUri =
+                    sound.spotifyUri ||
+                    `spotify:track:${sound.spotifyTrackId || ""}`;
+                await spotifyService.playTrack(
+                    trackUri,
+                    sound.spotifyPreviewUrl,
+                    (playing) => {
+                        if (playing) {
+                            setActivePlayingIds((prev) => [
+                                ...prev.filter((id) => id !== sound.id),
+                                sound.id,
+                            ]);
+                        } else {
+                            setActivePlayingIds((prev) =>
+                                prev.filter((id) => id !== sound.id),
+                            );
+                        }
+                    },
+                );
+                setActivePlayingIds((prev) => [
+                    ...prev.filter((id) => id !== sound.id),
+                    sound.id,
+                ]);
+                return;
+            }
+
             audioEngine.playSound(
                 sound,
                 routingConfig.masterVolume,
@@ -235,12 +285,24 @@ export default function App() {
         [routingConfig],
     );
 
-    const handleStopSound = useCallback((soundId: string) => {
-        audioEngine.stopSound(soundId);
-    }, []);
+    const handleStopSound = useCallback(
+        (soundId: string) => {
+            const sound = sounds.find((s) => s.id === soundId);
+            if (sound?.category === "Spotify" || sound?.spotifyUri) {
+                spotifyService.pauseTrack();
+                setActivePlayingIds((prev) =>
+                    prev.filter((id) => id !== soundId),
+                );
+            }
+            audioEngine.stopSound(soundId);
+        },
+        [sounds],
+    );
 
     const handleStopAll = useCallback(() => {
+        spotifyService.pauseTrack();
         audioEngine.stopAll();
+        setActivePlayingIds([]);
     }, []);
 
     const handleTriggerByKey = useCallback(
@@ -449,6 +511,7 @@ export default function App() {
 
     const categories: SoundCategory[] = [
         "Tümü",
+        "Spotify",
         "Meme & Eğlence",
         "Oyun SFX",
         "Reaksiyon",
@@ -471,6 +534,7 @@ export default function App() {
                 favoriteCount={favoriteCount}
                 isElectron={isElectron}
                 activePlayingCount={activePlayingIds.length}
+                spotifyConnected={spotifyState.isConnected}
             />
 
             {/* Main View Area */}
@@ -614,6 +678,14 @@ export default function App() {
                         <RecorderView onAddRecordedSound={handleAddSound} />
                     )}
 
+                    {currentTab === "settings" && (
+                        <SettingsView
+                            routingConfig={routingConfig}
+                            onRoutingConfigChange={setRoutingConfig}
+                            onResetToDefaults={handleResetToDefaults}
+                        />
+                    )}
+
                     {currentTab === "guide" && <GuideView />}
                 </main>
             </div>
@@ -721,6 +793,7 @@ export default function App() {
                     onAddSound={handleAddSound}
                     isElectron={isElectron}
                     onOpenElectronFilePicker={handleOpenElectronFilePicker}
+                    existingSoundCount={sounds.length}
                 />
             )}
 
