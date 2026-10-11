@@ -10,7 +10,7 @@ import {
     X,
 } from "lucide-react";
 import { AudioVisualizer } from "./AudioVisualizer";
-import { AudioRoutingConfig } from "../types/sound";
+import { AudioRoutingConfig, DiscordStatus } from "../types/sound";
 
 interface HeaderProps {
     searchQuery: string;
@@ -21,6 +21,7 @@ interface HeaderProps {
     onRoutingConfigChange: (newConfig: AudioRoutingConfig) => void;
     activePlayingCount: number;
     onOpenRoutingTab: () => void;
+    discordStatus?: DiscordStatus;
 }
 
 export function Header({
@@ -32,6 +33,7 @@ export function Header({
     onRoutingConfigChange,
     activePlayingCount,
     onOpenRoutingTab,
+    discordStatus,
 }: HeaderProps) {
     const isMuted = routingConfig.masterVolume === 0;
 
@@ -101,6 +103,22 @@ export function Header({
                             {activePlayingCount > 0 ? "PLAYING" : "IDLE"}
                         </span>
                     </div>
+
+                    {/* Discord RPC Capsule */}
+                    {/* <button
+                        onClick={onOpenRoutingTab}
+                        title={`Discord Rich Presence (Bot ID: ${discordStatus?.clientId || "1558769862053077114"}) - ${discordStatus?.connected ? "Bağlandı (Aktif)" : "Bekleniyor"}`}
+                        className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono transition-colors cursor-pointer ${
+                            discordStatus?.connected
+                                ? "bg-indigo-950/60 border-indigo-700/80 text-indigo-300 hover:bg-indigo-950/80"
+                                : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+                        }`}
+                    >
+                        <div
+                            className={`w-1.5 h-1.5 rounded-full ${discordStatus?.connected ? "bg-indigo-400 animate-pulse" : "bg-zinc-600"}`}
+                        />
+                        <span>Discord RPC</span>
+                    </button> */}
                 </div>
 
                 {/* Center Zone: Capsule Search Bar */}
@@ -181,32 +199,34 @@ export function Header({
                         <span>Yeni Ses</span>
                     </button>
 
-                    {/* Circular Window Controls inside capsule */}
-                    <div className="flex items-center pl-2 ml-0.5 border-l border-zinc-800/90 gap-0.5">
-                        <button
-                            onClick={handleMinimize}
-                            title="Simge Durumuna Küçült"
-                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
-                        >
-                            <Minus className="w-3.5 h-3.5" />
-                        </button>
+                    {/* Circular Window Controls inside capsule (Electron only) */}
+                    {window.electronAPI?.isElectron && (
+                        <div className="flex items-center pl-2 ml-0.5 border-l border-zinc-800/90 gap-0.5">
+                            <button
+                                onClick={handleMinimize}
+                                title="Simge Durumuna Küçült"
+                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+                            >
+                                <Minus className="w-3.5 h-3.5" />
+                            </button>
 
-                        <button
-                            onClick={handleMaximize}
-                            title="Ekranı Kapla / Geri Yükle"
-                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
-                        >
-                            <Maximize2 className="w-3 h-3" />
-                        </button>
+                            <button
+                                onClick={handleMaximize}
+                                title="Ekranı Kapla / Geri Yükle"
+                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+                            >
+                                <Maximize2 className="w-3 h-3" />
+                            </button>
 
-                        <button
-                            onClick={handleClose}
-                            title="Kapat"
-                            className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-rose-600 transition-colors"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
+                            <button
+                                onClick={handleClose}
+                                title="Kapat"
+                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-rose-600 transition-colors cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </header>

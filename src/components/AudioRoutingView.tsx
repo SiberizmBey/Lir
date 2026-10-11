@@ -12,20 +12,27 @@ import {
     Activity,
     CheckCircle2,
     AlertTriangle,
+    Bot,
+    RefreshCw,
+    Sparkles,
 } from "lucide-react";
-import { AudioRoutingConfig } from "../types/sound";
+import { AudioRoutingConfig, DiscordStatus } from "../types/sound";
 import { audioEngine } from "../utils/audioEngine";
 
 interface AudioRoutingViewProps {
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (config: AudioRoutingConfig) => void;
     isElectron: boolean;
+    discordStatus?: DiscordStatus;
+    onReconnectDiscord?: () => Promise<void>;
 }
 
 export function AudioRoutingView({
     routingConfig,
     onRoutingConfigChange,
     isElectron,
+    discordStatus,
+    onReconnectDiscord,
 }: AudioRoutingViewProps) {
     const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
     const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -631,6 +638,75 @@ export function AudioRoutingView({
                 </div>
             </div>
 
+            {/* Discord Rich Presence (RPC) Card */}
+            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-indigo-900/40 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-indigo-950 flex items-center justify-center border border-indigo-850">
+                            <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                        </div>
+                        <div>
+                            <h2 className="text-xs font-semibold text-white">
+                                Discord Rich Presence (RPC)
+                            </h2>
+                            <p className="text-[11px] text-zinc-400">
+                                Discord profilinizde canlı olarak ne çaldığınızı
+                                ve soundboard durumunuzu gösterir.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                discordStatus?.connected
+                                    ? "border-indigo-700 bg-indigo-950/80 text-indigo-300"
+                                    : "border-zinc-800 bg-zinc-950 text-zinc-400"
+                            }`}
+                        >
+                            {discordStatus?.connected
+                                ? "BAĞLANDI"
+                                : "BEKLENİYOR / HAZIR"}
+                        </span>
+                        {onReconnectDiscord && (
+                            <button
+                                onClick={() => void onReconnectDiscord()}
+                                title="Discord RPC bağlantısını yenile"
+                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-300 transition-colors cursor-pointer"
+                            >
+                                <RefreshCw className="w-2.5 h-2.5" />
+                                <span>Yenile</span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Discord RPC Activity Simulation Card */}
+                <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-950/80 border border-indigo-800/80 flex items-center justify-center relative shrink-0">
+                            <Sparkles className="w-5 h-5 text-indigo-400" />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-black" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase font-mono tracking-wider text-indigo-400 font-semibold">
+                                Discord Aktivitesi
+                            </span>
+                            <span className="text-xs font-semibold text-white">
+                                Lir • Gelişmiş Soundpad
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="text-[11px] font-mono text-zinc-500 self-end sm:self-center text-right">
+                        <span>
+                            {isElectron
+                                ? "Yerel IPC Boru Hattı Aktif"
+                                : "Web Önizleme Modu"}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             {/* Discord Quick Configuration Guide */}
             <div className="p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
@@ -651,11 +727,11 @@ export function AudioRoutingView({
                             1. Lir Ayarı
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>Ses şeysi</strong>
-                            {/* <strong>Birincil Çıkış:</strong> CABLE Input seçin.
+                            <strong>Ses çıkış ayarları</strong>
+                            <strong>Birincil Çıkış:</strong> CABLE Input seçin.
                             <br />
                             <strong>Mikrofon Geçişi:</strong> AÇIK yapıp kendi
-                            mikrofonunuzu (örn. Fuxi-H3) seçin. */}
+                            mikrofonunuzu (örn. Fuxi-H3) seçin.
                         </p>
                     </div>
 
@@ -664,8 +740,8 @@ export function AudioRoutingView({
                             2. Discord Ayarı (Çokomelli!)
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>Ses giriş cart curtu</strong>
-                            {/* • <strong>Giriş Aygıtı:</strong>{" "}
+                            <strong>Ses giriş ayarları</strong>•{" "}
+                            <strong>Giriş Aygıtı:</strong>{" "}
                             <span className="text-white">
                                 VB-Audio Virtual Cable (CABLE Output)
                             </span>
@@ -679,7 +755,7 @@ export function AudioRoutingView({
                             yapın (Krisp sesleri gürültü sanıp aşırı kısar!).
                             <br />• <strong>Yankı Engelleme:</strong> Kapatın.
                             <br />• <strong>Giriş Hassasiyeti:</strong>{" "}
-                            Otomatiği kapatıp seviyeyi sola (-60 dB) çekin. */}
+                            Otomatiği kapatıp seviyeyi sola (-60 dB) çekin.
                         </p>
                     </div>
 
@@ -688,14 +764,9 @@ export function AudioRoutingView({
                             3. Kulaklık Durumu
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>
-                                Burdaki bilgilendirmeyi yazmaya üşendim. Bunu
-                                yazana kadar bilgilendirmede yazabilirdim. Çok
-                                kasma işte kullan geç
-                            </strong>
-                            {/* <strong>Çift Çıkış</strong> açıkken bastığınız
+                            <strong>Çift Çıkış</strong> açıkken bastığınız
                             sesleri siz de duyarsınız; kapatırsanız sadece
-                            Discord'dakiler duyar. */}
+                            Discord'dakiler duyar.
                         </p>
                     </div>
                 </div>

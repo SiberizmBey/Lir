@@ -33,8 +33,12 @@ class AudioEngine {
   private currentMicVolume: number = 1.0;
   private isMicConnecting: boolean = false;
 
-  // Active playing sources
+  // Active playing sources & concurrency protection
   private activeSources: Map<string, AudioBufferSourceNode[]> = new Map();
+  private allLiveSources: Set<AudioBufferSourceNode> = new Set();
+  private pendingTokens: Map<string, number> = new Map();
+  private currentPlayInstance: Map<string, number> = new Map();
+  private tokenCounter: number = 0;
   private audioBuffers: Map<string, AudioBuffer> = new Map();
   private onPlaybackStateChange?: (playingIds: string[]) => void;
   private currentlyPlaying: Set<string> = new Set();
@@ -432,17 +436,30 @@ class AudioEngine {
 
     if (isCutoffMode) {
       this.stopAll();
-    }
-
-    if (this.activeSources.has(sound.id)) {
+    } else {
+      // Immediately stop any existing playback of this exact sound to prevent stacking
       this.stopSound(sound.id);
     }
 
+    // Assign a monotonic token to this play request
+    const requestToken = ++this.tokenCounter;
+    this.pendingTokens.set(sound.id, requestToken);
+
     const buffer = await this.getOrGenerateBuffer(sound);
-    if (!buffer) return;
+
+    // If request was cancelled or superseded while resolving buffer, drop it completely!
+    if (this.pendingTokens.get(sound.id) !== requestToken) {
+      return;
+    }
+
+    if (!buffer || !this.cableCtx || !this.cableEffectsGain) {
+      this.pendingTokens.delete(sound.id);
+      return;
+    }
 
     const soundVolume = sound.volume ?? 1;
     const sourcesToTrack: AudioBufferSourceNode[] = [];
+    const instanceId = requestToken;
 
     // 1. Play on Cable Context (Discord / Stream mixer)
     const cableSource = this.cableCtx.createBufferSource();
@@ -456,11 +473,12 @@ class AudioEngine {
     cableSoundGain.connect(this.cableEffectsGain);
 
     sourcesToTrack.push(cableSource);
-    cableSource.start();
+    this.allLiveSources.add(cableSource);
 
     // 2. Play on Monitor Context if dual output is enabled (User's Headphones)
+    let monitorSource: AudioBufferSourceNode | null = null;
     if (this.dualOutputEnabled && this.monitorCtx && this.monitorEffectsGain) {
-      const monitorSource = this.monitorCtx.createBufferSource();
+      monitorSource = this.monitorCtx.createBufferSource();
       monitorSource.buffer = buffer;
       monitorSource.loop = !!sound.loop;
 
@@ -471,30 +489,57 @@ class AudioEngine {
       monitorSoundGain.connect(this.monitorEffectsGain);
 
       sourcesToTrack.push(monitorSource);
-      monitorSource.start();
+      this.allLiveSources.add(monitorSource);
+
+      monitorSource.onended = () => {
+        if (monitorSource) {
+          this.allLiveSources.delete(monitorSource);
+        }
+      };
     }
 
     cableSource.onended = () => {
-      this.activeSources.delete(sound.id);
-      this.currentlyPlaying.delete(sound.id);
-      if (this.onPlaybackStateChange) {
-        this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+      this.allLiveSources.delete(cableSource);
+      // Only remove playing state if this exact instance is the active one!
+      if (this.currentPlayInstance.get(sound.id) === instanceId) {
+        this.activeSources.delete(sound.id);
+        this.currentlyPlaying.delete(sound.id);
+        this.currentPlayInstance.delete(sound.id);
+        if (this.onPlaybackStateChange) {
+          this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+        }
       }
     };
 
     this.activeSources.set(sound.id, sourcesToTrack);
+    this.currentPlayInstance.set(sound.id, instanceId);
     this.currentlyPlaying.add(sound.id);
 
     if (this.onPlaybackStateChange) {
       this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
     }
+
+    try {
+      cableSource.start(0);
+      if (monitorSource) {
+        monitorSource.start(0);
+      }
+    } catch (e) {
+      console.warn('Audio playback start error:', e);
+      this.stopSound(sound.id);
+    }
   }
 
   public stopSound(soundId: string) {
+    this.pendingTokens.delete(soundId);
+    this.currentPlayInstance.delete(soundId);
+
     const sources = this.activeSources.get(soundId);
     if (sources) {
       sources.forEach((source) => {
         try {
+          this.allLiveSources.delete(source);
+          source.onended = null;
           source.stop();
           source.disconnect();
         } catch (e) {}
@@ -508,15 +553,30 @@ class AudioEngine {
   }
 
   public stopAll() {
+    this.pendingTokens.clear();
+    this.currentPlayInstance.clear();
+
     this.activeSources.forEach((sources) => {
       sources.forEach((source) => {
         try {
+          source.onended = null;
           source.stop();
           source.disconnect();
         } catch (e) {}
       });
     });
     this.activeSources.clear();
+
+    // Universal failsafe: Terminate and disconnect all live sources
+    this.allLiveSources.forEach((source) => {
+      try {
+        source.onended = null;
+        source.stop();
+        source.disconnect();
+      } catch (e) {}
+    });
+    this.allLiveSources.clear();
+
     this.currentlyPlaying.clear();
     if (this.onPlaybackStateChange) {
       this.onPlaybackStateChange([]);

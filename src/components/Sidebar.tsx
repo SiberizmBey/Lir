@@ -49,7 +49,7 @@ export function Sidebar({
         },
         {
             id: "hotkeys" as NavTab,
-            label: "Global Kısayollar",
+            label: "Kısayol Matrisi",
             icon: Keyboard,
             badge: null,
         },

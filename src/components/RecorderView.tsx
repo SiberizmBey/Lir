@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Play, Check } from 'lucide-react';
+import { Mic, Square, Play, Check, AlertCircle } from 'lucide-react';
 import { SoundItem } from '../types/sound';
 
 interface RecorderViewProps {
@@ -13,6 +13,7 @@ export function RecorderView({ onAddRecordedSound }: RecorderViewProps) {
   const [soundTitle, setSoundTitle] = useState('Mikrofon Kaydı ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
   const [suggestedHotkey, setSuggestedHotkey] = useState('F9');
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -26,6 +27,7 @@ export function RecorderView({ onAddRecordedSound }: RecorderViewProps) {
   }, []);
 
   const startRecording = async () => {
+    setMicError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -59,7 +61,7 @@ export function RecorderView({ onAddRecordedSound }: RecorderViewProps) {
       }, 100);
     } catch (err) {
       console.error('Mikrofon erişim hatası:', err);
-      alert('Mikrofona erişilemedi. Lütfen tarayıcı / sistem mikrofon izinlerini kontrol edin.');
+      setMicError('Mikrofona erişilemedi. Lütfen tarayıcı ve sistem mikrofon izinlerini kontrol edin.');
     }
   };
 
@@ -123,6 +125,22 @@ export function RecorderView({ onAddRecordedSound }: RecorderViewProps) {
           Mikrofonunuzdan anlık ses kaydedip kısayol tuşu atayarak soundboard'a ekleyin.
         </p>
       </div>
+
+      {/* Error Banner */}
+      {micError && (
+        <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{micError}</span>
+          </div>
+          <button
+            onClick={() => setMicError(null)}
+            className="text-rose-400 hover:text-white text-xs px-2 py-0.5 rounded bg-rose-900/50 hover:bg-rose-900 transition-colors"
+          >
+            Kapat
+          </button>
+        </div>
+      )}
 
       {/* Recording Box */}
       <div className="p-8 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col items-center justify-center gap-5">

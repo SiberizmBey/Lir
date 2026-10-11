@@ -125,6 +125,18 @@ export function GuideView() {
               <strong className="text-zinc-200">Dual Output:</strong> Lir uygulamasında "Çift Çıkış" açık olduğu sürece kendi bastığınız sesleri siz de kulaklığınızdan gecikmesiz duyarsınız.
             </div>
           </div>
+          <div className="flex items-start gap-2">
+            <span className="font-mono text-zinc-600">04.</span>
+            <div>
+              <strong className="text-zinc-200">Discord Rich Presence (RPC):</strong> Bot ID <span className="text-indigo-300 font-mono">1558769862053077114</span> ile Discord profilinizde ne çaldığınız ve aktif sesler otomatik olarak görüntülenir.
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="font-mono text-zinc-600">05.</span>
+            <div>
+              <strong className="text-zinc-200">Acil Durdurma (ESC):</strong> Herhangi bir anda <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px]">ESC</kbd> tuşuna bastığınızda çalan tüm sesler anında kesilir. Kısayol tuşuna ikinci kez bastığınızda ise o ses durdurulur (Toggle).
+            </div>
+          </div>
         </div>
       </div>
     </div>

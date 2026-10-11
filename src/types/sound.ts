@@ -38,6 +38,25 @@ export interface UpdateInfo {
   url: string;
 }
 
+export interface DiscordActivity {
+  details?: string;
+  state?: string;
+  startTimestamp?: number | Date;
+  endTimestamp?: number | Date;
+  largeImageKey?: string;
+  largeImageText?: string;
+  smallImageKey?: string;
+  smallImageText?: string;
+  instance?: boolean;
+}
+
+export interface DiscordStatus {
+  connected: boolean;
+  clientId: string;
+  username?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   isElectron: boolean;
   openFileDialog: () => Promise<Array<{
@@ -63,6 +82,11 @@ export interface ElectronAPI {
   checkForUpdates: () => Promise<UpdateInfo | null>;
   openUpdateRelease: (url: string) => void;
   openExternal: (url: string) => void;
+  // Discord Rich Presence
+  updateDiscordActivity?: (activity: DiscordActivity) => Promise<boolean>;
+  getDiscordRPCStatus?: () => Promise<DiscordStatus>;
+  reconnectDiscordRPC?: () => Promise<boolean>;
+  onDiscordStatusChange?: (callback: (status: DiscordStatus) => void) => () => void;
 }
 
 declare global {
@@ -70,3 +94,4 @@ declare global {
     electronAPI?: ElectronAPI;
   }
 }
+

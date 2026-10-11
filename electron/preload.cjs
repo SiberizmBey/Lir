@@ -30,5 +30,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openUpdateRelease: (url) => ipcRenderer.send('updates:openRelease', url),
   
   // Open external links (VB-Audio cable download, github, etc.)
-  openExternal: (url) => ipcRenderer.send('shell:openExternal', url)
+  openExternal: (url) => ipcRenderer.send('shell:openExternal', url),
+
+  // Discord Rich Presence (RPC)
+  updateDiscordActivity: (activity) => ipcRenderer.invoke('discord:setActivity', activity),
+  getDiscordRPCStatus: () => ipcRenderer.invoke('discord:getStatus'),
+  reconnectDiscordRPC: () => ipcRenderer.invoke('discord:reconnect'),
+  onDiscordStatusChange: (callback) => {
+    const subscription = (_event, status) => callback(status);
+    ipcRenderer.on('discord:status', subscription);
+    return () => ipcRenderer.removeListener('discord:status', subscription);
+  }
 });
