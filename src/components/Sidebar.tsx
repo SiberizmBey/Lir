@@ -93,14 +93,11 @@ export function Sidebar({
                             <span className="font-semibold text-sm tracking-tight text-white">
                                 Lir
                             </span>
-                            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                                ses şeysi
-                            </span>
                         </div>
                     </div>
 
                     <span className="text-[10px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 rounded">
-                        v1.0
+                        v1.0.2
                     </span>
                 </div>
 
