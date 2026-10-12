@@ -61,7 +61,7 @@ class SpotifyService {
 
   private async fetchEnvConfig() {
     try {
-      const res = await fetch('/api/spotify/config');
+      const res = await fetch(this.getApiUrl('/api/spotify/config'));
       if (res.ok) {
         const data = await res.json();
         if (data.envClientId && !this.state.clientId) {
@@ -155,12 +155,20 @@ class SpotifyService {
     return 'https://lir.anticvalley.com.tr/auth/callback';
   }
 
+  private getApiUrl(path: string): string {
+    const baseUrl = window.location.protocol === 'file:'
+      ? new URL(this.getRedirectUri()).origin
+      : window.location.origin;
+    return `${baseUrl}${path}`;
+  }
+
   public async initiateLogin(): Promise<void> {
     const clientId = this.state.clientId?.trim();
     if (!clientId) {
       throw new Error('Spotify Client ID girilmelidir. Lütfen Ayarlar sekmesinden Client ID kaydedin.');
     }
 
+    this.updateState({ error: null });
     const redirectUri = this.getRedirectUri();
     const verifier = this.generateRandomString(64);
     sessionStorage.setItem(VERIFIER_STORAGE_KEY, verifier);
@@ -224,7 +232,7 @@ class SpotifyService {
     const clientSecret = this.state.clientSecret?.trim() || undefined;
 
     try {
-      const res = await fetch('/api/spotify/token', {
+      const res = await fetch(this.getApiUrl('/api/spotify/token'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,7 +272,7 @@ class SpotifyService {
     }
 
     try {
-      const res = await fetch('/api/spotify/refresh', {
+      const res = await fetch(this.getApiUrl('/api/spotify/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

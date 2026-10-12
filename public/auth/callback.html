@@ -38,7 +38,7 @@
     </head>
     <body>
         <div class="box">
-            <h2 id="heading">Spotify Bağlantısı Başarılı</h2>
+            <h2 id="heading">Yetkilendirme kontrol ediliyor...</h2>
             <p id="sub">
                 Pencere kapatılıyor ve Lir uygulamasına aktarılıyor...
             </p>
@@ -47,7 +47,7 @@
             (function () {
                 const urlParams = new URLSearchParams(window.location.search);
                 const code = urlParams.get("code");
-                const error = urlParams.get("error");
+                const error = urlParams.get("error") || (!code ? "missing_code" : "");
                 const state = urlParams.get("state");
 
                 if (error) {
@@ -55,7 +55,14 @@
                         "Bağlantı Başarısız";
                     document.getElementById("heading").style.color = "#f87171";
                     document.getElementById("sub").innerText =
-                        "Yetkilendirme reddedildi veya bir hata oluştu.";
+                        error === "missing_code"
+                            ? "Spotify yetkilendirme kodu göndermedi."
+                            : "Yetkilendirme reddedildi veya bir hata oluştu.";
+                } else {
+                    document.getElementById("heading").innerText =
+                        "Yetkilendirme alındı";
+                    document.getElementById("sub").innerText =
+                        "Spotify bağlantısı doğrulanıyor...";
                 }
 
                 if (window.opener) {

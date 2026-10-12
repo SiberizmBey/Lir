@@ -220,6 +220,13 @@ export function SettingsView({
                 </div>
             )}
 
+            {spotifyState.error && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border bg-rose-950/40 border-rose-700/80 text-rose-200 text-xs">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{spotifyState.error}</span>
+                </div>
+            )}
+
             {/* 1. SPOTIFY INTEGRATION SECTION */}
             <div className="rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5 shadow-xl">
                 {/* Section title & connection pill */}

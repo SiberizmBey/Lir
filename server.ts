@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
+import { handleSpotifyApi } from './server/spotifyApi';
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 // 1. Spotify OAuth callback route (handles both with and without trailing slash)
 app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
   const { code, error, state } = req.query;
+  const authError = error || (!code ? 'missing_code' : '');
 
   const html = `<!DOCTYPE html>
 <html lang="tr">
@@ -38,22 +40,22 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
       text-align: center;
       max-width: 380px;
     }
-    h2 { margin: 0 0 8px 0; font-size: 16px; color: ${error ? '#f87171' : '#1db954'}; }
+    h2 { margin: 0 0 8px 0; font-size: 16px; color: ${authError ? '#f87171' : '#1db954'}; }
     p { margin: 0; font-size: 13px; color: #a1a1aa; }
   </style>
 </head>
 <body>
   <div class="box">
-    <h2>${error ? 'Bağlantı Başarısız' : 'Spotify Bağlantısı Başarılı'}</h2>
-    <p>${error ? 'Yetkilendirme reddedildi veya bir hata oluştu.' : 'Pencere kapatılıyor ve Lir uygulamasına aktarılıyor...'}</p>
+    <h2>${authError ? 'Bağlantı Başarısız' : 'Yetkilendirme alındı'}</h2>
+    <p>${authError ? (authError === 'missing_code' ? 'Spotify yetkilendirme kodu göndermedi.' : 'Yetkilendirme reddedildi veya bir hata oluştu.') : 'Spotify bağlantısı doğrulanıyor...'}</p>
   </div>
   <script>
     try {
       if (window.opener) {
         window.opener.postMessage({
-          type: ${error ? "'OAUTH_AUTH_ERROR'" : "'OAUTH_AUTH_SUCCESS'"},
+          type: ${authError ? "'OAUTH_AUTH_ERROR'" : "'OAUTH_AUTH_SUCCESS'"},
           code: ${JSON.stringify(code || '')},
-          error: ${JSON.stringify(error || '')},
+          error: ${JSON.stringify(authError || '')},
           state: ${JSON.stringify(state || '')}
         }, '*');
         setTimeout(() => window.close(), 600);
@@ -73,114 +75,20 @@ app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
 
 // 2. Spotify Token Exchange endpoint
 app.post('/api/spotify/token', async (req, res) => {
-  try {
-    const { code, redirect_uri, client_id, client_secret, code_verifier } = req.body;
-
-    const clientId = client_id || process.env.SPOTIFY_CLIENT_ID;
-    const clientSecret = client_secret || process.env.SPOTIFY_CLIENT_SECRET;
-
-    if (!clientId) {
-      return res.status(400).json({ error: 'Spotify Client ID eksik' });
-    }
-
-    if (!code) {
-      return res.status(400).json({ error: 'Yetkilendirme kodu (code) eksik' });
-    }
-
-    const bodyParams = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: String(code),
-      redirect_uri: String(redirect_uri),
-      client_id: String(clientId),
-    });
-
-    if (code_verifier) {
-      bodyParams.append('code_verifier', String(code_verifier));
-    }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    if (clientSecret) {
-      const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-      headers['Authorization'] = `Basic ${basicAuth}`;
-    }
-
-    const spotifyRes = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers,
-      body: bodyParams.toString(),
-    });
-
-    const data = await spotifyRes.json();
-    if (!spotifyRes.ok) {
-      return res.status(spotifyRes.status).json(data);
-    }
-
-    res.json(data);
-  } catch (err: unknown) {
-    console.error('Spotify token exchange error:', err);
-    res.status(500).json({ error: 'Token değişimi sırasında sunucu hatası oluştu' });
-  }
+  const result = await handleSpotifyApi('token', req.body);
+  res.status(result.status).json(result.body);
 });
 
 // 3. Spotify Token Refresh endpoint
 app.post('/api/spotify/refresh', async (req, res) => {
-  try {
-    const { refresh_token, client_id, client_secret } = req.body;
-
-    const clientId = client_id || process.env.SPOTIFY_CLIENT_ID;
-    const clientSecret = client_secret || process.env.SPOTIFY_CLIENT_SECRET;
-
-    if (!clientId) {
-      return res.status(400).json({ error: 'Spotify Client ID eksik' });
-    }
-
-    if (!refresh_token) {
-      return res.status(400).json({ error: 'Refresh token eksik' });
-    }
-
-    const bodyParams = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: String(refresh_token),
-      client_id: String(clientId),
-    });
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    if (clientSecret) {
-      const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-      headers['Authorization'] = `Basic ${basicAuth}`;
-    }
-
-    const spotifyRes = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers,
-      body: bodyParams.toString(),
-    });
-
-    const data = await spotifyRes.json();
-    if (!spotifyRes.ok) {
-      return res.status(spotifyRes.status).json(data);
-    }
-
-    res.json(data);
-  } catch (err: unknown) {
-    console.error('Spotify token refresh error:', err);
-    res.status(500).json({ error: 'Token yenileme sırasında sunucu hatası oluştu' });
-  }
+  const result = await handleSpotifyApi('refresh', req.body);
+  res.status(result.status).json(result.body);
 });
 
 // 4. Spotify configuration endpoint
-app.get('/api/spotify/config', (req, res) => {
-  res.json({
-    hasEnvClientId: Boolean(process.env.SPOTIFY_CLIENT_ID),
-    hasEnvClientSecret: Boolean(process.env.SPOTIFY_CLIENT_SECRET),
-    envClientId: process.env.SPOTIFY_CLIENT_ID || '',
-  });
+app.get('/api/spotify/config', async (_req, res) => {
+  const result = await handleSpotifyApi('config');
+  res.status(result.status).json(result.body);
 });
 
 // Mount Vite middleware for dev or serve dist in production
