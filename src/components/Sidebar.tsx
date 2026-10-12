@@ -95,7 +95,9 @@ export function Sidebar({
                     backgroundColor: backgroundImageEnabled
                         ? `color-mix(in srgb, var(--bg-canvas) ${100 - transparency}%, transparent)`
                         : undefined,
-                    backdropFilter: backgroundImageEnabled ? "blur(8px)" : undefined,
+                    backdropFilter: backgroundImageEnabled
+                        ? "blur(8px)"
+                        : undefined,
                 }}
             >
                 {/* Brand Header */}
@@ -118,7 +120,7 @@ export function Sidebar({
                         </div>
 
                         <span className="text-[10px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 rounded">
-                            v1.0.3
+                            v1.0.4
                         </span>
                     </div>
 
