@@ -139,15 +139,11 @@ export function GuideView() {
                         <span className="font-mono text-zinc-600">05.</span>
                         <div>
                             <strong className="text-zinc-200">
-                                Acil Durdurma (ESC):
+                                Tüm Sesleri Durdur:
                             </strong>{" "}
-                            Herhangi bir anda{" "}
-                            <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px]">
-                                ESC
-                            </kbd>{" "}
-                            tuşuna bastığınızda çalan tüm sesler anında kesilir.
-                            Kısayol tuşuna ikinci kez bastığınızda ise o ses
-                            durdurulur (Toggle).
+                            Üst çubuktaki durdur düğmesine basarak çalan tüm
+                            sesleri anında kesebilir veya Ayarlar’dan bir
+                            durdurma kısayolu atayabilirsiniz.
                         </div>
                     </div>
                 </div>

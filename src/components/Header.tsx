@@ -193,7 +193,7 @@ export function Header({
                     {/* Stop All Capsule */}
                     <button
                         onClick={onStopAll}
-                        title="Tüm sesleri durdur (ESC)"
+                        title={`Tüm sesleri durdur (${routingConfig.stopAllHotkey})`}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
                             activePlayingCount > 0
                                 ? "bg-rose-950/60 border-rose-700 text-rose-300 hover:bg-rose-950/80"

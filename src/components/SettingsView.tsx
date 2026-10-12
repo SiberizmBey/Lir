@@ -41,6 +41,7 @@ interface SettingsViewProps {
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (config: AudioRoutingConfig) => void;
     onResetToDefaults: () => void;
+    onStopAllHotkeyCaptureChange: (capturing: boolean) => Promise<void>;
     isElectron: boolean;
     discordStatus: DiscordStatus;
     onReconnectDiscord: () => Promise<void>;
@@ -118,6 +119,7 @@ export function SettingsView({
     routingConfig,
     onRoutingConfigChange,
     onResetToDefaults,
+    onStopAllHotkeyCaptureChange,
     isElectron,
     discordStatus,
     onReconnectDiscord,
@@ -148,6 +150,61 @@ export function SettingsView({
         text: string;
     } | null>(null);
     const [isPreparingBackground, setIsPreparingBackground] = useState(false);
+    const [isCapturingStopHotkey, setIsCapturingStopHotkey] = useState(false);
+
+    useEffect(() => {
+        if (!isCapturingStopHotkey) return;
+
+        const handleStopHotkeyCapture = (event: KeyboardEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const key = event.key.toUpperCase();
+            if (["CONTROL", "ALT", "SHIFT", "META"].includes(key)) return;
+
+            const modifiers: string[] = [];
+            if (event.ctrlKey) modifiers.push("CTRL");
+            if (event.altKey) modifiers.push("ALT");
+            if (event.shiftKey) modifiers.push("SHIFT");
+
+            let mainKey = key;
+            if (
+                event.code.startsWith("F") &&
+                !Number.isNaN(Number.parseInt(event.code.slice(1), 10))
+            ) {
+                mainKey = event.code.toUpperCase();
+            } else if (event.code.startsWith("Numpad")) {
+                mainKey = event.code.toUpperCase();
+            } else if (key === " " || event.code === "Space") {
+                mainKey = "SPACE";
+            } else if (key === "ESCAPE") {
+                mainKey = "ESC";
+            }
+
+            const hotkey =
+                modifiers.length > 0
+                    ? `${modifiers.join("+")}+${mainKey}`
+                    : mainKey;
+            onRoutingConfigChange({ ...routingConfig, stopAllHotkey: hotkey });
+            setIsCapturingStopHotkey(false);
+            void onStopAllHotkeyCaptureChange(false);
+        };
+
+        window.addEventListener("keydown", handleStopHotkeyCapture, true);
+        return () => {
+            window.removeEventListener("keydown", handleStopHotkeyCapture, true);
+        };
+    }, [
+        isCapturingStopHotkey,
+        onRoutingConfigChange,
+        onStopAllHotkeyCaptureChange,
+        routingConfig,
+    ]);
+
+    useEffect(
+        () => () => void onStopAllHotkeyCaptureChange(false),
+        [onStopAllHotkeyCaptureChange],
+    );
 
     const updateAppearance = async (next: AppearanceSettings) => {
         if (await onAppearanceChange(next)) {
@@ -865,6 +922,44 @@ export function SettingsView({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Stop All Hotkey */}
+                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                        <label className="text-xs font-medium text-white">
+                            Tüm Sesleri Durdur Kısayolu
+                        </label>
+                        <p className="text-[11px] text-zinc-500">
+                            Oyunlarda ESC’nin etkilenmemesi için bir tuş veya
+                            kombinasyon belirleyin.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const next = !isCapturingStopHotkey;
+                                if (!next) {
+                                    setIsCapturingStopHotkey(false);
+                                    void onStopAllHotkeyCaptureChange(false);
+                                    return;
+                                }
+                                void onStopAllHotkeyCaptureChange(true)
+                                    .then(() => {
+                                        setFeedbackMessage(null);
+                                        setIsCapturingStopHotkey(true);
+                                    })
+                                    .catch(() => {
+                                        setFeedbackMessage({
+                                            type: "error",
+                                            text: "Kısayol kaydı başlatılamadı.",
+                                        });
+                                    });
+                            }}
+                            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left font-mono text-xs text-zinc-200 transition-colors hover:border-zinc-600"
+                        >
+                            {isCapturingStopHotkey
+                                ? "Bir tuşa basın... (iptal için tekrar tıklayın)"
+                                : routingConfig.stopAllHotkey || "Tuş ata"}
+                        </button>
+                    </div>
+
                     {/* Playback Mode */}
                     <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
                         <label className="text-xs font-medium text-white">Çalma Modu</label>

@@ -67,9 +67,12 @@ const DEFAULT_CONFIG: AudioRoutingConfig = {
     micDeviceLabel: "Varsayılan Mikrofon",
     micVolume: 1.0,
     playbackMode: "overlap",
-    stopAllHotkey: "Escape",
+    stopAllHotkey: "CTRL+SHIFT+X",
     discordRpcEnabled: true,
 };
+
+const normalizeHotkey = (hotkey: string) =>
+    hotkey.trim().toUpperCase().replace(/^ESCAPE$/, "ESC");
 
 export default function App() {
     const [theme, setTheme] = useState<AppTheme>(() => {
@@ -222,7 +225,19 @@ export default function App() {
         () => {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
-                if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+                if (saved) {
+                    const parsed = JSON.parse(saved) as Partial<AudioRoutingConfig>;
+                    return {
+                        ...DEFAULT_CONFIG,
+                        ...parsed,
+                        stopAllHotkey:
+                            typeof parsed.stopAllHotkey === "string" &&
+                            parsed.stopAllHotkey.trim() !== "" &&
+                            normalizeHotkey(parsed.stopAllHotkey) !== "ESC"
+                                ? parsed.stopAllHotkey
+                                : DEFAULT_CONFIG.stopAllHotkey,
+                    };
+                }
             } catch (e) {
                 // fallback
             }
@@ -234,6 +249,7 @@ export default function App() {
     const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [activePlayingIds, setActivePlayingIds] = useState<string[]>([]);
+    const [isCapturingStopHotkey, setIsCapturingStopHotkey] = useState(false);
     const [editingHotkeySound, setEditingHotkeySound] =
         useState<SoundItem | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -480,18 +496,41 @@ export default function App() {
         setActivePlayingIds([]);
     }, []);
 
+    const handleStopAllHotkeyCaptureChange = useCallback(
+        async (capturing: boolean) => {
+            if (capturing && isElectron && window.electronAPI) {
+                try {
+                    const result = await window.electronAPI.registerHotkeys([]);
+                    if (!result.success) {
+                        throw new Error("Global kısayollar kaldırılamadı.");
+                    }
+                } catch (error) {
+                    console.error(
+                        "Kısayol kaydı başlatılamadı:",
+                        error,
+                    );
+                    throw error;
+                }
+            }
+            setIsCapturingStopHotkey(capturing);
+        },
+        [isElectron],
+    );
+
     const handleTriggerByKey = useCallback(
         (keyString: string) => {
             if (!keyString) return;
-            const cleanKey = keyString.trim().toUpperCase();
+            const cleanKey = normalizeHotkey(keyString);
 
-            if (cleanKey === "ESCAPE" || cleanKey === "ESC") {
+            if (
+                cleanKey === normalizeHotkey(routingConfig.stopAllHotkey)
+            ) {
                 handleStopAll();
                 return;
             }
 
             const matchedSound = sounds.find(
-                (s) => s.hotkey.trim().toUpperCase() === cleanKey,
+                (s) => normalizeHotkey(s.hotkey) === cleanKey,
             );
 
             if (matchedSound) {
@@ -515,35 +554,39 @@ export default function App() {
             handlePlaySound,
             handleStopSound,
             handleStopAll,
+            routingConfig.stopAllHotkey,
         ],
     );
 
     useEffect(() => {
         // 1. Electron Global Hotkeys (when running as desktop app)
         let unsubscribeElectron: (() => void) | undefined;
-        if (isElectron && window.electronAPI) {
+        if (isElectron && window.electronAPI && !isCapturingStopHotkey) {
             const hotkeyList = sounds
-                .filter((s) => s.hotkey && s.hotkey.trim() !== "")
+                .filter(
+                    (s) =>
+                        s.hotkey &&
+                        s.hotkey.trim() !== "" &&
+                        normalizeHotkey(s.hotkey) !==
+                            normalizeHotkey(routingConfig.stopAllHotkey),
+                )
                 .map((s) => ({ hotkey: s.hotkey, id: s.id }));
-
-            // Add ESC as global stop shortcut in Electron
-            hotkeyList.push({ hotkey: "Escape", id: "stop-all-global-esc" });
+            hotkeyList.push({
+                hotkey: routingConfig.stopAllHotkey,
+                id: "stop-all",
+            });
 
             window.electronAPI.registerHotkeys(hotkeyList);
 
             unsubscribeElectron = window.electronAPI.onTriggerHotkey((key) => {
+                if (isCapturingStopHotkey) return;
                 handleTriggerByKey(key);
             });
         }
 
         // 2. Window keydown listener (ALWAYS ACTIVE in both Electron and Web mode)
         const handleKeyDown = (e: KeyboardEvent) => {
-            // ESCAPE key stops all playing sounds immediately
-            if (e.key === "Escape" || e.code === "Escape") {
-                e.preventDefault();
-                handleStopAll();
-                return;
-            }
+            if (isCapturingStopHotkey) return;
 
             const target = e.target as HTMLElement;
             if (
@@ -581,7 +624,13 @@ export default function App() {
             if (unsubscribeElectron) unsubscribeElectron();
             window.removeEventListener("keydown", handleKeyDown, true);
         };
-    }, [isElectron, sounds, handleTriggerByKey, handleStopAll]);
+    }, [
+        isElectron,
+        sounds,
+        routingConfig.stopAllHotkey,
+        isCapturingStopHotkey,
+        handleTriggerByKey,
+    ]);
 
     const handleToggleFavorite = (soundId: string) => {
         setSounds((prev) =>
@@ -861,6 +910,9 @@ export default function App() {
                             routingConfig={routingConfig}
                             onRoutingConfigChange={setRoutingConfig}
                             onResetToDefaults={handleResetToDefaults}
+                            onStopAllHotkeyCaptureChange={
+                                handleStopAllHotkeyCaptureChange
+                            }
                             isElectron={isElectron}
                             discordStatus={discordStatus}
                             onReconnectDiscord={async () => {
