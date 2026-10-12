@@ -1,5 +1,3 @@
-import { handleSpotifyApi } from '../../server/spotifyApi';
-
 interface ApiRequest {
   method?: string;
 }
@@ -16,6 +14,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const result = await handleSpotifyApi('config');
-  return res.status(result.status).json(result.body);
+  return res.status(200).json({
+    hasEnvClientId: Boolean(process.env.SPOTIFY_CLIENT_ID),
+    hasEnvClientSecret: Boolean(process.env.SPOTIFY_CLIENT_SECRET),
+    envClientId: process.env.SPOTIFY_CLIENT_ID || '',
+  });
 }
