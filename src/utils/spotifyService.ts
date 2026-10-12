@@ -401,7 +401,7 @@ class SpotifyService {
     }
 
     const res = await fetch(
-      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query.trim())}&type=track&limit=15`,
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query.trim())}&type=track&limit=10`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }

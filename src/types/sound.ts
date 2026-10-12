@@ -1,4 +1,13 @@
 export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel' | 'Spotify';
+export type AppTheme = 'amoled' | 'dark' | 'light';
+
+export interface AppearanceSettings {
+  backgroundImage: string | null;
+  backgroundBlur: number;
+  sidebarTransparency: number;
+  cardTransparency: number;
+  headerTransparency: number;
+}
 
 export interface SoundItem {
   id: string;
@@ -81,6 +90,7 @@ export interface AudioRoutingConfig {
   micVolume: number;
   playbackMode: 'overlap' | 'cutoff'; // Play multiple sounds together or stop previous
   stopAllHotkey: string;
+  discordRpcEnabled: boolean;
 }
 
 export interface UpdateInfo {
@@ -109,6 +119,14 @@ export interface DiscordStatus {
   error?: string;
 }
 
+export interface SubtitleOverlaySettings {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+}
+
 export interface ElectronAPI {
   isElectron: boolean;
   openFileDialog: () => Promise<Array<{
@@ -134,9 +152,16 @@ export interface ElectronAPI {
   checkForUpdates: () => Promise<UpdateInfo | null>;
   openUpdateRelease: (url: string) => void;
   openExternal: (url: string) => void;
+  setSubtitleOverlayVisible: (visible: boolean) => Promise<boolean>;
+  setSubtitleOverlaySettings: (settings: SubtitleOverlaySettings) => Promise<boolean>;
+  updateSubtitleOverlay: (translation: string) => void;
+  onSubtitleOverlayUpdate: (callback: (translation: string) => void) => () => void;
+  onSubtitleOverlaySettings: (callback: (settings: SubtitleOverlaySettings) => void) => () => void;
+  onSubtitleOverlayVisibilityChange: (callback: (visible: boolean) => void) => () => void;
   // Discord Rich Presence
   updateDiscordActivity?: (activity: DiscordActivity) => Promise<boolean>;
   getDiscordRPCStatus?: () => Promise<DiscordStatus>;
+  setDiscordRPCEnabled?: (enabled: boolean) => Promise<DiscordStatus>;
   reconnectDiscordRPC?: () => Promise<boolean>;
   onDiscordStatusChange?: (callback: (status: DiscordStatus) => void) => () => void;
 }
@@ -146,4 +171,3 @@ declare global {
     electronAPI?: ElectronAPI;
   }
 }
-

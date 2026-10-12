@@ -68,7 +68,7 @@ export function HotkeysView({
       </div>
 
       {/* Flat Vercel Table */}
-      <div className="rounded-xl bg-[#0a0a0a] border border-zinc-800/80 overflow-hidden">
+      <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800/80 overflow-hidden">
         <div className="px-4 py-2.5 border-b border-zinc-800/80 flex items-center justify-between text-[11px] font-mono uppercase text-zinc-500">
           <span>Kısayol Tuşu & Ses Dosyası</span>
           <span>İşlemler</span>

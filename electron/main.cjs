@@ -7,6 +7,7 @@ const {
     shell,
     Menu,
     session,
+    screen,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -22,7 +23,150 @@ app.commandLine.appendSwitch("enable-features", "AudioServiceOutOfProcess");
 Menu.setApplicationMenu(null);
 
 let mainWindow = null;
+let subtitleOverlayWindow = null;
 let registeredShortcuts = new Set();
+let subtitleOverlayVisible = false;
+let subtitleOverlayText = "";
+let subtitleOverlaySettings = {
+    x: 100,
+    y: 4,
+    width: 400,
+    height: 510,
+    fontSize: 17,
+};
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function applySubtitleOverlaySettings() {
+    if (!subtitleOverlayWindow || subtitleOverlayWindow.isDestroyed()) return;
+
+    const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
+    const overlayWidth = Math.min(subtitleOverlaySettings.width, width - 16);
+    const overlayHeight = Math.min(subtitleOverlaySettings.height, height - 16);
+    const maxX = x + width - overlayWidth;
+    const maxY = y + height - overlayHeight;
+    const bounds = {
+        x: Math.round(x + ((maxX - x) * subtitleOverlaySettings.x) / 100),
+        y: Math.round(y + ((maxY - y) * subtitleOverlaySettings.y) / 100),
+        width: overlayWidth,
+        height: overlayHeight,
+    };
+
+    subtitleOverlayWindow.setBounds(bounds);
+    if (!subtitleOverlayWindow.webContents.isLoading()) {
+        subtitleOverlayWindow.webContents.send(
+            "subtitle-overlay:settings",
+            subtitleOverlaySettings,
+        );
+    }
+}
+
+function sendSubtitleOverlayVisibility() {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+            "subtitle-overlay:visibility",
+            subtitleOverlayVisible,
+        );
+    }
+}
+
+function createSubtitleOverlayWindow() {
+    if (subtitleOverlayWindow && !subtitleOverlayWindow.isDestroyed()) {
+        return subtitleOverlayWindow;
+    }
+
+    subtitleOverlayWindow = new BrowserWindow({
+        width: subtitleOverlaySettings.width,
+        height: subtitleOverlaySettings.height,
+        minWidth: 320,
+        maxWidth: 1200,
+        frame: false,
+        transparent: true,
+        backgroundColor: "#00000000",
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        closable: false,
+        focusable: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        alwaysOnTop: true,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, "preload.cjs"),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
+            backgroundThrottling: false,
+        },
+    });
+    subtitleOverlayWindow.setAlwaysOnTop(true);
+    subtitleOverlayWindow.setContentProtection(true);
+    subtitleOverlayWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+    });
+    subtitleOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+    const distFile = path.join(__dirname, "../dist/index.html");
+    if (process.env.VITE_DEV_SERVER_URL) {
+        subtitleOverlayWindow.loadURL(
+            `${process.env.VITE_DEV_SERVER_URL}#subtitle-overlay`,
+        );
+    } else if (fs.existsSync(distFile)) {
+        subtitleOverlayWindow.loadFile(distFile, {
+            hash: "subtitle-overlay",
+        });
+    } else {
+        subtitleOverlayWindow.loadURL(
+            "http://localhost:3000/#subtitle-overlay",
+        );
+    }
+
+    subtitleOverlayWindow.webContents.on("did-finish-load", () => {
+        applySubtitleOverlaySettings();
+        if (subtitleOverlayText) {
+            subtitleOverlayWindow?.webContents.send(
+                "subtitle-overlay:update",
+                subtitleOverlayText,
+            );
+        }
+    });
+    subtitleOverlayWindow.on("closed", () => {
+        subtitleOverlayWindow = null;
+        subtitleOverlayVisible = false;
+        sendSubtitleOverlayVisibility();
+    });
+
+    return subtitleOverlayWindow;
+}
+
+function setSubtitleOverlayVisible(visible) {
+    if (visible) {
+        const overlay = createSubtitleOverlayWindow();
+        applySubtitleOverlaySettings();
+        overlay.showInactive();
+    } else if (subtitleOverlayWindow && !subtitleOverlayWindow.isDestroyed()) {
+        subtitleOverlayWindow.hide();
+    }
+
+    subtitleOverlayVisible = visible;
+    sendSubtitleOverlayVisibility();
+}
+
+function registerSubtitleOverlayShortcut() {
+    globalShortcut.unregister("Control+Shift+Y");
+    const registered = globalShortcut.register("Control+Shift+Y", () => {
+        setSubtitleOverlayVisible(!subtitleOverlayVisible);
+    });
+    if (!registered) {
+        console.warn(
+            "Altyazı penceresi kısayolu kaydedilemedi: Ctrl+Shift+Y",
+        );
+    }
+}
 
 // Discord Rich Presence (RPC) Configuration
 let DiscordRPC = null;
@@ -35,6 +179,7 @@ try {
 const DISCORD_CLIENT_ID = "1558769862053077114";
 let rpcClient = null;
 let isRpcConnected = false;
+let isRpcEnabled = false;
 let appStartTime = Math.floor(Date.now() / 1000);
 
 if (DiscordRPC) {
@@ -46,7 +191,7 @@ if (DiscordRPC) {
 }
 
 function initDiscordRPC() {
-    if (!DiscordRPC) return;
+    if (!DiscordRPC || !isRpcEnabled) return;
     if (rpcClient) {
         try {
             rpcClient.destroy();
@@ -58,6 +203,7 @@ function initDiscordRPC() {
         rpcClient = new DiscordRPC.Client({ transport: "ipc" });
 
         rpcClient.on("ready", () => {
+            if (!isRpcEnabled) return;
             isRpcConnected = true;
             console.log(
                 "Discord RPC: Bağlantı kuruldu! Kullanıcı:",
@@ -72,23 +218,12 @@ function initDiscordRPC() {
                 smallImageKey: "mic",
                 smallImageText: "VB-Audio Aktif",
             });
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send("discord:status", {
-                    connected: true,
-                    clientId: DISCORD_CLIENT_ID,
-                    username: rpcClient.user?.username,
-                });
-            }
+            sendDiscordStatus();
         });
 
         rpcClient.on("disconnected", () => {
             isRpcConnected = false;
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send("discord:status", {
-                    connected: false,
-                    clientId: DISCORD_CLIENT_ID,
-                });
-            }
+            sendDiscordStatus();
         });
 
         rpcClient.login({ clientId: DISCORD_CLIENT_ID }).catch((err) => {
@@ -97,22 +232,51 @@ function initDiscordRPC() {
                 "Discord RPC: Discord istemcisi kapalı veya bağlantı başarısız:",
                 err?.message || err,
             );
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send("discord:status", {
-                    connected: false,
-                    clientId: DISCORD_CLIENT_ID,
-                    error: err?.message,
-                });
-            }
+            sendDiscordStatus({ error: err?.message });
         });
     } catch (err) {
         console.warn("Discord RPC başlatma hatası:", err);
         isRpcConnected = false;
+        sendDiscordStatus({ error: err?.message || String(err) });
     }
 }
 
+function getDiscordStatus(extra = {}) {
+    return {
+        connected: isRpcConnected,
+        clientId: DISCORD_CLIENT_ID,
+        username: rpcClient?.user?.username || undefined,
+        ...extra,
+    };
+}
+
+function sendDiscordStatus(extra = {}) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("discord:status", getDiscordStatus(extra));
+    }
+}
+
+function setDiscordRPCEnabled(enabled) {
+    isRpcEnabled = enabled;
+    if (enabled) {
+        initDiscordRPC();
+    } else {
+        isRpcConnected = false;
+        if (rpcClient) {
+            try {
+                rpcClient.destroy();
+            } catch (err) {
+                console.warn("Discord RPC kapatma hatası:", err);
+            }
+            rpcClient = null;
+        }
+        sendDiscordStatus();
+    }
+    return getDiscordStatus();
+}
+
 function updateDiscordActivity(activity) {
-    if (!rpcClient || !isRpcConnected) return;
+    if (!isRpcEnabled || !rpcClient || !isRpcConnected) return;
     try {
         const act = {
             details: activity.details || "Lir • Gelişmiş Soundpad",
@@ -132,8 +296,8 @@ function updateDiscordActivity(activity) {
     }
 }
 
-const GITHUB_RELEASE_API =
-    "https://api.github.com/repos/SiberizmBey/Lir/releases/latest";
+const GITHUB_RELEASES_API =
+    "https://api.github.com/repos/SiberizmBey/Lir/releases?per_page=100";
 
 function parseVersion(version) {
     const match =
@@ -258,6 +422,9 @@ function createWindow() {
 
     mainWindow.on("closed", () => {
         mainWindow = null;
+        if (subtitleOverlayWindow && !subtitleOverlayWindow.isDestroyed()) {
+            subtitleOverlayWindow.close();
+        }
     });
 }
 
@@ -266,6 +433,7 @@ function registerGlobalHotkeys(hotkeyList) {
     // Clear existing
     globalShortcut.unregisterAll();
     registeredShortcuts.clear();
+    registerSubtitleOverlayShortcut();
 
     if (!Array.isArray(hotkeyList))
         return { success: false, registeredCount: 0 };
@@ -338,9 +506,67 @@ app.whenReady().then(() => {
     }
 
     createWindow();
-    initDiscordRPC();
-
     // Setup IPC Handlers
+    registerSubtitleOverlayShortcut();
+
+    ipcMain.handle("subtitle-overlay:setVisible", (event, visible) => {
+        if (
+            !mainWindow ||
+            event.sender !== mainWindow.webContents ||
+            typeof visible !== "boolean"
+        ) {
+            return false;
+        }
+
+        setSubtitleOverlayVisible(visible);
+        return true;
+    });
+
+    ipcMain.handle("subtitle-overlay:setSettings", (event, settings) => {
+        if (
+            !mainWindow ||
+            event.sender !== mainWindow.webContents ||
+            !settings ||
+            !["x", "y", "width", "height", "fontSize"].every(
+                (key) => Number.isFinite(settings[key]),
+            )
+        ) {
+            return false;
+        }
+
+        subtitleOverlaySettings = {
+            x: clamp(Math.round(settings.x), 0, 100),
+            y: clamp(Math.round(settings.y), 0, 100),
+            width: clamp(Math.round(settings.width), 320, 1200),
+            height: clamp(Math.round(settings.height), 100, 700),
+            fontSize: clamp(Math.round(settings.fontSize), 14, 48),
+        };
+        applySubtitleOverlaySettings();
+        return true;
+    });
+
+    ipcMain.on("subtitle-overlay:update", (event, translation) => {
+        if (
+            !mainWindow ||
+            event.sender !== mainWindow.webContents ||
+            typeof translation !== "string"
+        ) {
+            return;
+        }
+
+        subtitleOverlayText = translation.slice(0, 2000);
+        if (
+            subtitleOverlayWindow &&
+            !subtitleOverlayWindow.isDestroyed() &&
+            subtitleOverlayWindow.webContents.isLoading() === false
+        ) {
+            subtitleOverlayWindow.webContents.send(
+                "subtitle-overlay:update",
+                subtitleOverlayText,
+            );
+        }
+    });
+
     ipcMain.handle("dialog:openSoundFile", async () => {
         if (!mainWindow) return null;
 
@@ -390,6 +616,7 @@ app.whenReady().then(() => {
     ipcMain.handle("shortcuts:unregisterAll", () => {
         globalShortcut.unregisterAll();
         registeredShortcuts.clear();
+        registerSubtitleOverlayShortcut();
         return true;
     });
 
@@ -398,7 +625,7 @@ app.whenReady().then(() => {
         const timeout = setTimeout(() => controller.abort(), 10000);
 
         try {
-            const response = await fetch(GITHUB_RELEASE_API, {
+            const response = await fetch(GITHUB_RELEASES_API, {
                 headers: {
                     Accept: "application/vnd.github+json",
                     "User-Agent": "Lir-Desktop-Updater",
@@ -412,21 +639,36 @@ app.whenReady().then(() => {
                 );
             }
 
-            const release = await response.json();
-            if (
-                typeof release.tag_name !== "string" ||
-                typeof release.html_url !== "string" ||
-                !release.html_url.startsWith(
-                    "https://github.com/SiberizmBey/Lir/releases/",
-                )
-            ) {
+            const releases = await response.json();
+            if (!Array.isArray(releases)) {
                 throw new Error(
-                    "GitHub yanıtında geçerli bir release bilgisi bulunamadı.",
+                    "GitHub yanıtında geçerli bir release listesi bulunamadı.",
                 );
             }
 
-            if (!isNewerVersion(release.tag_name, app.getVersion()))
-                return null;
+            const currentVersion = app.getVersion();
+            const release = releases.reduce((latest, candidate) => {
+                if (
+                    !candidate ||
+                    candidate.draft ||
+                    typeof candidate.tag_name !== "string" ||
+                    typeof candidate.html_url !== "string" ||
+                    !candidate.html_url.startsWith(
+                        "https://github.com/SiberizmBey/Lir/releases/",
+                    ) ||
+                    !parseVersion(candidate.tag_name) ||
+                    !isNewerVersion(candidate.tag_name, currentVersion)
+                ) {
+                    return latest;
+                }
+
+                return !latest ||
+                    isNewerVersion(candidate.tag_name, latest.tag_name)
+                    ? candidate
+                    : latest;
+            }, null);
+
+            if (!release) return null;
 
             return {
                 version: release.tag_name,
@@ -483,11 +725,14 @@ app.whenReady().then(() => {
     });
 
     // Discord Rich Presence IPC
-    ipcMain.handle("discord:getStatus", () => ({
-        connected: isRpcConnected,
-        clientId: DISCORD_CLIENT_ID,
-        username: rpcClient?.user?.username || null,
-    }));
+    ipcMain.handle("discord:getStatus", () => getDiscordStatus());
+
+    ipcMain.handle("discord:setEnabled", (_event, enabled) => {
+        if (typeof enabled !== "boolean") {
+            throw new Error("Discord RPC ayarı geçersiz.");
+        }
+        return setDiscordRPCEnabled(enabled);
+    });
 
     ipcMain.handle("discord:setActivity", (_event, activity) => {
         updateDiscordActivity(activity);
@@ -495,6 +740,7 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle("discord:reconnect", () => {
+        if (!isRpcEnabled) return false;
         initDiscordRPC();
         return isRpcConnected;
     });

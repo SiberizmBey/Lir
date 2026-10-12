@@ -50,10 +50,10 @@ export function SoundCard({
   return (
     <div
       onMouseLeave={() => setShowMenu(false)}
-      className={`group relative flex flex-col justify-between p-3.5 rounded-xl transition-all border ${
+      className={`app-card group relative flex flex-col justify-between p-3.5 rounded-xl transition-all border ${
         isPlaying
           ? isSpotify
-            ? 'bg-[#0f1f14] border-[#1db954]/70 shadow-lg shadow-[#1db954]/10'
+            ? 'bg-[#0f1f14] border-[#1db954]/70'
             : 'bg-[#121212] border-zinc-600'
           : 'bg-[#0a0a0a] hover:bg-[#111111] border-zinc-800/80 hover:border-zinc-700'
       }`}
@@ -118,7 +118,7 @@ export function SoundCard({
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-36 py-1 bg-[#121212] border border-zinc-800 rounded-md z-30 shadow-xl">
+              <div className="absolute right-0 top-full mt-1 w-36 py-1 bg-[#121212] border border-zinc-800 rounded-md z-30">
                 <button
                   onClick={() => {
                     setShowMenu(false);
@@ -206,9 +206,9 @@ export function SoundCard({
           onClick={() => (isPlaying ? onStop(sound.id) : onPlay(sound))}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
             isPlaying
-              ? 'bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 shadow-sm'
+              ? 'bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200'
               : isSpotify
-                ? 'bg-[#1db954] hover:bg-[#1ed760] text-black shadow-sm'
+                ? 'bg-[#1db954] hover:bg-[#1ed760] text-black'
                 : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-white'
           }`}
         >
@@ -243,15 +243,6 @@ export function SoundCard({
           </span>
         </div>
       </div>
-
-      {/* Playing indicator bar */}
-      {isPlaying && (
-        <div
-          className={`absolute top-0 left-0 right-0 h-[2.5px] rounded-t-xl ${
-            isSpotify ? 'bg-[#1db954] shadow-sm shadow-[#1db954]' : 'bg-white'
-          }`}
-        />
-      )}
     </div>
   );
 }

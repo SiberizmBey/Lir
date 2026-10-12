@@ -32,9 +32,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open external links (VB-Audio cable download, github, etc.)
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url),
 
+  // Floating subtitle overlay
+  setSubtitleOverlayVisible: (visible) => ipcRenderer.invoke('subtitle-overlay:setVisible', visible),
+  setSubtitleOverlaySettings: (settings) => ipcRenderer.invoke('subtitle-overlay:setSettings', settings),
+  updateSubtitleOverlay: (translation) => ipcRenderer.send('subtitle-overlay:update', translation),
+  onSubtitleOverlayUpdate: (callback) => {
+    const subscription = (_event, translation) => callback(translation);
+    ipcRenderer.on('subtitle-overlay:update', subscription);
+    return () => ipcRenderer.removeListener('subtitle-overlay:update', subscription);
+  },
+  onSubtitleOverlaySettings: (callback) => {
+    const subscription = (_event, settings) => callback(settings);
+    ipcRenderer.on('subtitle-overlay:settings', subscription);
+    return () => ipcRenderer.removeListener('subtitle-overlay:settings', subscription);
+  },
+  onSubtitleOverlayVisibilityChange: (callback) => {
+    const subscription = (_event, visible) => callback(visible);
+    ipcRenderer.on('subtitle-overlay:visibility', subscription);
+    return () => ipcRenderer.removeListener('subtitle-overlay:visibility', subscription);
+  },
+
   // Discord Rich Presence (RPC)
   updateDiscordActivity: (activity) => ipcRenderer.invoke('discord:setActivity', activity),
   getDiscordRPCStatus: () => ipcRenderer.invoke('discord:getStatus'),
+  setDiscordRPCEnabled: (enabled) => ipcRenderer.invoke('discord:setEnabled', enabled),
   reconnectDiscordRPC: () => ipcRenderer.invoke('discord:reconnect'),
   onDiscordStatusChange: (callback) => {
     const subscription = (_event, status) => callback(status);

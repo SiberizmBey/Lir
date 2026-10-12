@@ -143,7 +143,7 @@ export function RecorderView({ onAddRecordedSound }: RecorderViewProps) {
       )}
 
       {/* Recording Box */}
-      <div className="p-8 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col items-center justify-center gap-5">
+      <div className="app-card p-8 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col items-center justify-center gap-5">
         <div className="flex flex-col items-center gap-1">
           <span className="font-mono text-4xl font-semibold tracking-tight text-white tabular-nums">
             {recordingTime.toFixed(1)}s

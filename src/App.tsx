@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from "react";
 import {
     RotateCcw,
     Heart,
@@ -13,6 +13,8 @@ import {
     SoundItem,
     SoundCategory,
     AudioRoutingConfig,
+    AppTheme,
+    AppearanceSettings,
     UpdateInfo,
     DiscordStatus,
 } from "./types/sound";
@@ -28,10 +30,30 @@ import { HotkeysView } from "./components/HotkeysView";
 import { RecorderView } from "./components/RecorderView";
 import { GuideView } from "./components/GuideView";
 import { SettingsView } from "./components/SettingsView";
+import { SubtitleTranslatorView } from "./components/SubtitleTranslatorView";
 import { spotifyService } from "./utils/spotifyService";
+import {
+    getStoredBackgroundImage,
+    storeBackgroundImage,
+} from "./utils/appearanceStorage";
 
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
+const STORAGE_KEY_THEME = "lir_theme_v1";
+const STORAGE_KEY_APPEARANCE = "lir_appearance_v1";
+
+const DEFAULT_APPEARANCE: AppearanceSettings = {
+    backgroundImage: null,
+    backgroundBlur: 0,
+    sidebarTransparency: 20,
+    cardTransparency: 20,
+    headerTransparency: 20,
+};
+
+const clampPercentage = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value)
+        ? Math.min(100, Math.max(0, value))
+        : fallback;
 
 const DEFAULT_CONFIG: AudioRoutingConfig = {
     masterVolume: 0.85,
@@ -46,9 +68,143 @@ const DEFAULT_CONFIG: AudioRoutingConfig = {
     micVolume: 1.0,
     playbackMode: "overlap",
     stopAllHotkey: "Escape",
+    discordRpcEnabled: true,
 };
 
 export default function App() {
+    const [theme, setTheme] = useState<AppTheme>(() => {
+        try {
+            const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
+            if (
+                savedTheme === "amoled" ||
+                savedTheme === "dark" ||
+                savedTheme === "light"
+            ) {
+                return savedTheme;
+            }
+        } catch (error) {
+            console.warn("Tema tercihi okunamadı:", error);
+        }
+        return "amoled";
+    });
+
+    useLayoutEffect(() => {
+        document.documentElement.dataset.theme = theme;
+        try {
+            localStorage.setItem(STORAGE_KEY_THEME, theme);
+        } catch (error) {
+            console.warn("Tema tercihi kaydedilemedi:", error);
+        }
+    }, [theme]);
+
+    const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_APPEARANCE);
+            if (saved) {
+                const parsed: unknown = JSON.parse(saved);
+                if (parsed && typeof parsed === "object") {
+                    const stored = parsed as Partial<AppearanceSettings> & {
+                        soundCardTransparency?: unknown;
+                    };
+                    return {
+                        backgroundImage:
+                            typeof stored.backgroundImage === "string" &&
+                            stored.backgroundImage.startsWith("data:image/")
+                                ? stored.backgroundImage
+                                : null,
+                        backgroundBlur: Math.min(
+                            20,
+                            clampPercentage(
+                                stored.backgroundBlur,
+                                DEFAULT_APPEARANCE.backgroundBlur,
+                            ),
+                        ),
+                        sidebarTransparency: clampPercentage(
+                            stored.sidebarTransparency,
+                            DEFAULT_APPEARANCE.sidebarTransparency,
+                        ),
+                        cardTransparency: clampPercentage(
+                            stored.cardTransparency ??
+                                stored.soundCardTransparency,
+                            DEFAULT_APPEARANCE.cardTransparency,
+                        ),
+                        headerTransparency: clampPercentage(
+                            stored.headerTransparency,
+                            DEFAULT_APPEARANCE.headerTransparency,
+                        ),
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn("Görünüm ayarları okunamadı:", error);
+        }
+        return DEFAULT_APPEARANCE;
+    });
+    const backgroundImageRef = useRef(appearance.backgroundImage);
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadBackground = async () => {
+            try {
+                const storedImage = await getStoredBackgroundImage();
+                const legacyImage = backgroundImageRef.current;
+                if (legacyImage) {
+                    await storeBackgroundImage(legacyImage);
+                    try {
+                        const saved = localStorage.getItem(STORAGE_KEY_APPEARANCE);
+                        if (saved) {
+                            const parsed = JSON.parse(saved) as AppearanceSettings;
+                            localStorage.setItem(
+                                STORAGE_KEY_APPEARANCE,
+                                JSON.stringify({ ...parsed, backgroundImage: null }),
+                            );
+                        }
+                    } catch (error) {
+                        console.warn("Eski arka plan ayarı taşınamadı:", error);
+                    }
+                } else if (storedImage && isMounted) {
+                    backgroundImageRef.current = storedImage;
+                    setAppearance((current) => ({
+                        ...current,
+                        backgroundImage: storedImage,
+                    }));
+                }
+            } catch (error) {
+                console.error("Arka plan görseli yüklenemedi:", error);
+            }
+        };
+        void loadBackground();
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const handleAppearanceChange = useCallback(
+        async (nextAppearance: AppearanceSettings) => {
+            const imageChanged =
+                backgroundImageRef.current !== nextAppearance.backgroundImage;
+            backgroundImageRef.current = nextAppearance.backgroundImage;
+            setAppearance(nextAppearance);
+            try {
+                localStorage.setItem(
+                    STORAGE_KEY_APPEARANCE,
+                    JSON.stringify({
+                        ...nextAppearance,
+                        backgroundImage: null,
+                    }),
+                );
+                if (imageChanged) {
+                    await storeBackgroundImage(nextAppearance.backgroundImage);
+                }
+                return true;
+            } catch (error) {
+                console.error("Görünüm ayarları kaydedilemedi:", error);
+                return false;
+            }
+        },
+        [],
+    );
+
     const [sounds, setSounds] = useState<SoundItem[]>(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY_SOUNDS);
@@ -66,7 +222,7 @@ export default function App() {
         () => {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
-                if (saved) return JSON.parse(saved);
+                if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
             } catch (e) {
                 // fallback
             }
@@ -75,8 +231,6 @@ export default function App() {
     );
 
     const [currentTab, setCurrentTab] = useState<NavTab>("soundboard");
-    const [selectedCategory, setSelectedCategory] =
-        useState<SoundCategory>("Tümü");
     const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [activePlayingIds, setActivePlayingIds] = useState<string[]>([]);
@@ -88,7 +242,7 @@ export default function App() {
     );
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [updateCheckStatus, setUpdateCheckStatus] = useState<
-        "idle" | "checking" | "error"
+        "idle" | "checking" | "error" | "current" | "available"
     >("idle");
     const [discordStatus, setDiscordStatus] = useState<DiscordStatus>({
         connected: false,
@@ -109,14 +263,6 @@ export default function App() {
     const isElectron =
         typeof window !== "undefined" && !!window.electronAPI?.isElectron;
 
-    const handleReconnectDiscord = useCallback(async () => {
-        if (window.electronAPI?.reconnectDiscordRPC) {
-            await window.electronAPI.reconnectDiscordRPC();
-            const status = await window.electronAPI.getDiscordRPCStatus?.();
-            if (status) setDiscordStatus(status);
-        }
-    }, []);
-
     // Poll / listen for Discord RPC status
     useEffect(() => {
         if (!isElectron || !window.electronAPI) return;
@@ -136,7 +282,12 @@ export default function App() {
 
     // Synchronize playback activity to Discord Rich Presence
     useEffect(() => {
-        if (!isElectron || !window.electronAPI?.updateDiscordActivity) return;
+        if (
+            !isElectron ||
+            !routingConfig.discordRpcEnabled ||
+            !window.electronAPI?.updateDiscordActivity
+        )
+            return;
 
         if (activePlayingIds.length > 0) {
             const playingSounds = sounds.filter((s) =>
@@ -165,7 +316,31 @@ export default function App() {
                 smallImageText: "Hazır",
             });
         }
-    }, [isElectron, activePlayingIds, sounds, routingConfig.masterVolume]);
+    }, [
+        isElectron,
+        routingConfig.discordRpcEnabled,
+        activePlayingIds,
+        sounds,
+        routingConfig.masterVolume,
+    ]);
+
+    useEffect(() => {
+        if (!isElectron || !window.electronAPI?.setDiscordRPCEnabled) return;
+
+        let isMounted = true;
+        window.electronAPI
+            .setDiscordRPCEnabled(routingConfig.discordRpcEnabled)
+            .then((status) => {
+                if (isMounted) setDiscordStatus(status);
+            })
+            .catch((error: unknown) => {
+                console.error("Discord RPC ayarı uygulanamadı:", error);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isElectron, routingConfig.discordRpcEnabled]);
 
     const handleCheckForUpdates = useCallback(async () => {
         if (!window.electronAPI) return;
@@ -174,7 +349,7 @@ export default function App() {
         try {
             const availableUpdate = await window.electronAPI.checkForUpdates();
             setUpdateInfo(availableUpdate);
-            setUpdateCheckStatus("idle");
+            setUpdateCheckStatus(availableUpdate ? "available" : "current");
         } catch (error) {
             console.error("GitHub sürüm kontrolü başarısız oldu:", error);
             setUpdateCheckStatus("error");
@@ -489,12 +664,6 @@ export default function App() {
 
     const filteredSounds = useMemo(() => {
         return sounds.filter((s) => {
-            if (
-                selectedCategory !== "Tümü" &&
-                s.category !== selectedCategory
-            ) {
-                return false;
-            }
             if (showOnlyFavorites && !s.isFavorite) {
                 return false;
             }
@@ -507,17 +676,7 @@ export default function App() {
             }
             return true;
         });
-    }, [sounds, selectedCategory, showOnlyFavorites, searchQuery]);
-
-    const categories: SoundCategory[] = [
-        "Tümü",
-        "Spotify",
-        "Meme & Eğlence",
-        "Oyun SFX",
-        "Reaksiyon",
-        "Anime & Dizi",
-        "Özel",
-    ];
+    }, [sounds, showOnlyFavorites, searchQuery]);
 
     const favoriteCount = useMemo(
         () => sounds.filter((s) => s.isFavorite).length,
@@ -525,7 +684,34 @@ export default function App() {
     );
 
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ededed] font-sans select-none antialiased">
+        <div
+            className="relative flex h-screen w-screen overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-primary)] font-sans select-none antialiased"
+            data-background-image={appearance.backgroundImage ? "true" : undefined}
+            style={{
+                "--card-transparency": `${appearance.cardTransparency}%`,
+                backgroundColor: appearance.backgroundImage
+                    ? "transparent"
+                    : "var(--bg-canvas)",
+            } as React.CSSProperties}
+        >
+            {appearance.backgroundImage && (
+                <div
+                    className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+                    aria-hidden="true"
+                >
+                    <div
+                        className="absolute inset-0 scale-[1.04] bg-cover bg-center"
+                        style={{
+                            backgroundImage: `url("${appearance.backgroundImage}")`,
+                            filter:
+                                appearance.backgroundBlur > 0
+                                    ? `blur(${appearance.backgroundBlur}px)`
+                                    : undefined,
+                        }}
+                    />
+                    <div className="absolute inset-0 bg-black/40" />
+                </div>
+            )}
             {/* Vercel-Style Sidebar */}
             <Sidebar
                 currentTab={currentTab}
@@ -535,10 +721,19 @@ export default function App() {
                 isElectron={isElectron}
                 activePlayingCount={activePlayingIds.length}
                 spotifyConnected={spotifyState.isConnected}
+                backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                transparency={appearance.sidebarTransparency}
             />
 
             {/* Main View Area */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#000000]">
+            <div
+                className="relative z-10 flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--bg-canvas)]"
+                style={{
+                    backgroundColor: appearance.backgroundImage
+                        ? "transparent"
+                        : "var(--bg-canvas)",
+                }}
+            >
                 {/* Precision Header */}
                 <Header
                     searchQuery={searchQuery}
@@ -550,33 +745,16 @@ export default function App() {
                     activePlayingCount={activePlayingIds.length}
                     onOpenRoutingTab={() => setCurrentTab("routing")}
                     discordStatus={discordStatus}
+                    backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                    transparency={appearance.headerTransparency}
                 />
 
                 {/* Dynamic Tab Views */}
                 <main className="flex-1 overflow-y-auto px-6 py-5 flex flex-col">
                     {currentTab === "soundboard" && (
                         <div className="flex-1 flex flex-col gap-4 max-w-7xl mx-auto w-full">
-                            {/* Category Segmented Controls & Utility Bar */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-zinc-800/80">
-                                {/* Segmented Filter */}
-                                <div className="flex items-center gap-1 overflow-x-auto py-0.5 scrollbar-none">
-                                    {categories.map((cat) => (
-                                        <button
-                                            key={cat}
-                                            onClick={() =>
-                                                setSelectedCategory(cat)
-                                            }
-                                            className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                                                selectedCategory === cat
-                                                    ? "bg-zinc-800 text-white font-medium"
-                                                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/60"
-                                            }`}
-                                        >
-                                            {cat}
-                                        </button>
-                                    ))}
-                                </div>
-
+                            {/* Soundboard utilities */}
+                            <div className="flex items-center justify-end gap-2.5 pb-2 border-b border-zinc-800/80">
                                 {/* Sub-toggles */}
                                 <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                                     <button
@@ -632,7 +810,7 @@ export default function App() {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center rounded-xl bg-[#0a0a0a] border border-zinc-800/80 my-6">
+                                <div className="app-card flex-1 flex flex-col items-center justify-center p-12 text-center rounded-xl bg-[#0a0a0a] border border-zinc-800/80 my-6">
                                     <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-2.5 text-zinc-400">
                                         <Music className="w-5 h-5" />
                                     </div>
@@ -660,8 +838,6 @@ export default function App() {
                             routingConfig={routingConfig}
                             onRoutingConfigChange={setRoutingConfig}
                             isElectron={isElectron}
-                            discordStatus={discordStatus}
-                            onReconnectDiscord={handleReconnectDiscord}
                         />
                     )}
 
@@ -674,6 +850,8 @@ export default function App() {
                         />
                     )}
 
+                    {currentTab === "translator" && <SubtitleTranslatorView />}
+
                     {currentTab === "recorder" && (
                         <RecorderView onAddRecordedSound={handleAddSound} />
                     )}
@@ -683,6 +861,19 @@ export default function App() {
                             routingConfig={routingConfig}
                             onRoutingConfigChange={setRoutingConfig}
                             onResetToDefaults={handleResetToDefaults}
+                            isElectron={isElectron}
+                            discordStatus={discordStatus}
+                            onReconnectDiscord={async () => {
+                                if (!routingConfig.discordRpcEnabled) return;
+                                await window.electronAPI?.reconnectDiscordRPC?.();
+                            }}
+                            updateInfo={updateInfo}
+                            updateCheckStatus={updateCheckStatus}
+                            onCheckForUpdates={handleCheckForUpdates}
+                            theme={theme}
+                            onThemeChange={setTheme}
+                            appearance={appearance}
+                            onAppearanceChange={handleAppearanceChange}
                         />
                     )}
 
@@ -704,7 +895,7 @@ export default function App() {
             {(updateInfo || updateCheckStatus === "error") && (
                 <aside
                     role={updateInfo ? "status" : "alert"}
-                    className="fixed bottom-4 right-4 z-[60] w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-zinc-700 bg-zinc-950/95 p-4 shadow-2xl shadow-black/60 backdrop-blur"
+                    className="fixed bottom-4 right-4 z-[60] w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-zinc-700 bg-zinc-950/95 p-4 backdrop-blur"
                 >
                     <button
                         onClick={() => {
@@ -799,7 +990,7 @@ export default function App() {
 
             {isResetConfirmOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-sm bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4 shadow-2xl">
+                    <div className="w-full max-w-sm bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4">
                         <div className="flex items-center gap-2 text-rose-400">
                             <RotateCcw className="w-4 h-4" />
                             <h3 className="text-xs font-semibold text-white">

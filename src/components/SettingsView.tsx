@@ -21,20 +21,113 @@ import {
     Globe,
     HelpCircle,
     Server,
+    Bot,
+    Image as ImageIcon,
+    Upload,
+    Trash2,
 } from "lucide-react";
-import { AudioRoutingConfig, SpotifyAuthState, SpotifyDevice } from "../types/sound";
+import {
+    AudioRoutingConfig,
+    AppearanceSettings,
+    AppTheme,
+    DiscordStatus,
+    SpotifyAuthState,
+    SpotifyDevice,
+    UpdateInfo,
+} from "../types/sound";
 import { spotifyService } from "../utils/spotifyService";
 
 interface SettingsViewProps {
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (config: AudioRoutingConfig) => void;
     onResetToDefaults: () => void;
+    isElectron: boolean;
+    discordStatus: DiscordStatus;
+    onReconnectDiscord: () => Promise<void>;
+    updateInfo: UpdateInfo | null;
+    updateCheckStatus: "idle" | "checking" | "error" | "current" | "available";
+    onCheckForUpdates: () => Promise<void>;
+    theme: AppTheme;
+    onThemeChange: (theme: AppTheme) => void;
+    appearance: AppearanceSettings;
+    onAppearanceChange: (appearance: AppearanceSettings) => Promise<boolean>;
+}
+
+const MAX_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_BACKGROUND_DATA_SIZE = 1.5 * 1024 * 1024;
+
+async function prepareBackgroundImage(file: File): Promise<string> {
+    if (!file.type.startsWith("image/")) {
+        throw new Error("Lütfen geçerli bir görsel dosyası seçin.");
+    }
+    if (file.size > MAX_BACKGROUND_FILE_SIZE) {
+        throw new Error("Görsel dosyası 20 MB sınırını aşamaz.");
+    }
+
+    const source = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+            typeof reader.result === "string"
+                ? resolve(reader.result)
+                : reject(new Error("Görsel dosyası okunamadı."));
+        reader.onerror = () => reject(new Error("Görsel dosyası okunamadı."));
+        reader.readAsDataURL(file);
+    });
+
+    if (
+        file.type.toLowerCase() === "image/gif" ||
+        file.name.toLowerCase().endsWith(".gif")
+    ) {
+        return source.replace(/^data:[^;,]*/, "data:image/gif");
+    }
+
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error("Görsel dosyası açılamadı."));
+        element.src = source;
+    });
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+        throw new Error("Görsel işlemek için canvas başlatılamadı.");
+    }
+
+    let scale = Math.min(1, 1920 / Math.max(image.naturalWidth, image.naturalHeight));
+    let quality = 0.82;
+    let compressed = "";
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        context.fillStyle = "#000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        compressed = canvas.toDataURL("image/jpeg", quality);
+        if (compressed.length * 0.75 <= MAX_BACKGROUND_DATA_SIZE) {
+            return compressed;
+        }
+        scale *= 0.8;
+        quality = Math.max(0.5, quality - 0.08);
+    }
+
+    throw new Error("Bu görsel saklama alanı için küçültülemiyor.");
 }
 
 export function SettingsView({
     routingConfig,
     onRoutingConfigChange,
     onResetToDefaults,
+    isElectron,
+    discordStatus,
+    onReconnectDiscord,
+    updateInfo,
+    updateCheckStatus,
+    onCheckForUpdates,
+    theme,
+    onThemeChange,
+    appearance,
+    onAppearanceChange,
 }: SettingsViewProps) {
     const [spotifyState, setSpotifyState] = useState<SpotifyAuthState>(() =>
         spotifyService.getState()
@@ -54,6 +147,38 @@ export function SettingsView({
         type: "success" | "error" | "info";
         text: string;
     } | null>(null);
+    const [isPreparingBackground, setIsPreparingBackground] = useState(false);
+
+    const updateAppearance = async (next: AppearanceSettings) => {
+        if (await onAppearanceChange(next)) {
+            setFeedbackMessage(null);
+        } else {
+            setFeedbackMessage({
+                type: "error",
+                text: "Görünüm ayarı kaydedilemedi. Tarayıcı saklama alanı dolu olabilir.",
+            });
+        }
+    };
+
+    const handleBackgroundImage = async (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = "";
+        if (!file) return;
+
+        setIsPreparingBackground(true);
+        try {
+            const backgroundImage = await prepareBackgroundImage(file);
+            await updateAppearance({ ...appearance, backgroundImage });
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            setFeedbackMessage({ type: "error", text: message });
+        } finally {
+            setIsPreparingBackground(false);
+        }
+    };
 
     // Synchronize spotify state
     useEffect(() => {
@@ -182,6 +307,162 @@ export function SettingsView({
 
     return (
         <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
+            <section className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
+                    <Sliders className="w-4 h-4 text-zinc-400" />
+                    <h2 className="text-xs font-semibold text-white">Görünüm</h2>
+                </div>
+                <div>
+                    <p className="text-xs font-medium text-white">Tema</p>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                        Uygulamanın renk görünümünü seçin.
+                    </p>
+                    <div
+                        className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2"
+                        role="radiogroup"
+                        aria-label="Uygulama teması"
+                    >
+                        {(
+                            [
+                                ["amoled", "AMOLED", "Tam siyah arka plan"],
+                                ["dark", "Karanlık", "Mor vurgulu koyu tema"],
+                                ["light", "Aydınlık", "Açık ve ferah görünüm"],
+                            ] as const
+                        ).map(([value, label, description]) => (
+                            <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={theme === value}
+                                onClick={() => onThemeChange(value)}
+                                className={`rounded-lg border p-3 text-left transition-colors ${
+                                    theme === value
+                                        ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                                        : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
+                                }`}
+                            >
+                                <span className="block text-xs font-semibold text-white">
+                                    {label}
+                                </span>
+                                <span className="mt-1 block text-[11px] text-zinc-500">
+                                    {description}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex flex-col gap-3 border-t border-zinc-800/80 pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-medium text-white">
+                                Arka plan görseli
+                            </p>
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                                Görsel uygulamanın tamamında kullanılır ve okunabilirlik için hafifçe karartılır.
+                            </p>
+                        </div>
+                        {appearance.backgroundImage && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void updateAppearance({
+                                        ...appearance,
+                                        backgroundImage: null,
+                                    });
+                                }}
+                                className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-rose-800 hover:text-rose-300"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Kaldır
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500">
+                            {appearance.backgroundImage ? (
+                                <ImageIcon className="h-3.5 w-3.5" />
+                            ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                            )}
+                            {isPreparingBackground
+                                ? "Görsel hazırlanıyor..."
+                                : appearance.backgroundImage
+                                  ? "Görseli değiştir"
+                                  : "Görsel seç"}
+                            <input
+                                type="file"
+                                accept="image/*,.gif"
+                                onChange={handleBackgroundImage}
+                                disabled={isPreparingBackground}
+                                className="sr-only"
+                            />
+                        </label>
+                        <span className="text-[11px] text-zinc-500">
+                            JPG, PNG, WebP veya hareketli GIF · en fazla 20 MB
+                        </span>
+                    </div>
+                    {appearance.backgroundImage && (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <label className="flex flex-col gap-1.5 text-[11px] text-zinc-400">
+                                <span className="flex justify-between">
+                                    <span>Arka plan bulanıklığı</span>
+                                    <span className="font-mono">
+                                        {appearance.backgroundBlur}px
+                                    </span>
+                                </span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="20"
+                                    step="1"
+                                    value={appearance.backgroundBlur}
+                                    onChange={(event) =>
+                                        void updateAppearance({
+                                            ...appearance,
+                                            backgroundBlur: Number(event.target.value),
+                                        })
+                                    }
+                                    aria-label="Arka plan bulanıklığı"
+                                />
+                            </label>
+                            {(
+                                [
+                                    ["sidebarTransparency", "Sidebar saydamlığı"],
+                                    ["cardTransparency", "Card saydamlığı"],
+                                    ["headerTransparency", "Header saydamlığı"],
+                                ] as const
+                            ).map(([key, label]) => (
+                                <label
+                                    key={key}
+                                    className="flex flex-col gap-1.5 text-[11px] text-zinc-400"
+                                >
+                                    <span className="flex justify-between">
+                                        <span>{label}</span>
+                                        <span className="font-mono">
+                                            %{appearance[key]}
+                                        </span>
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="90"
+                                        step="5"
+                                        value={appearance[key]}
+                                        onChange={(event) =>
+                                            void updateAppearance({
+                                                ...appearance,
+                                                [key]: Number(event.target.value),
+                                            })
+                                        }
+                                        aria-label={label}
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </section>
+
             {/* Header */}
             <div className="flex flex-col gap-1 pb-3 border-b border-zinc-800/80">
                 <div className="flex items-center gap-2">
@@ -228,7 +509,7 @@ export function SettingsView({
             )}
 
             {/* 1. SPOTIFY INTEGRATION SECTION */}
-            <div className="rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5 shadow-xl">
+            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5">
                 {/* Section title & connection pill */}
                 <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
                     <div className="flex items-center gap-2.5">
@@ -302,7 +583,7 @@ export function SettingsView({
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={handleTestPlay}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-semibold transition-colors cursor-pointer shadow-sm"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-semibold transition-colors cursor-pointer"
                                         title={`Test Şarkısı: ${TEST_TRACK_NAME}`}
                                     >
                                         <Play className="w-3 h-3 fill-current" />
@@ -360,7 +641,7 @@ export function SettingsView({
                                                 onClick={() => handleSelectDevice(device.id)}
                                                 className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
                                                     isSelected
-                                                        ? "bg-[#1db954]/10 border-[#1db954]/60 text-white shadow-sm"
+                                                        ? "bg-[#1db954]/10 border-[#1db954]/60 text-white"
                                                         : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-850"
                                                 }`}
                                             >
@@ -566,7 +847,7 @@ export function SettingsView({
                             <button
                                 onClick={handleConnectSpotify}
                                 disabled={isConnecting || !clientIdInput.trim()}
-                                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#1db954] hover:bg-[#1ed760] disabled:opacity-50 text-black text-xs font-semibold transition-all cursor-pointer shadow-md hover:shadow-lg"
+                                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#1db954] hover:bg-[#1ed760] disabled:opacity-50 text-black text-xs font-semibold transition-all cursor-pointer"
                             >
                                 <Sparkles className="w-3.5 h-3.5 fill-current" />
                                 <span>{isConnecting ? "Bağlanılıyor..." : "Spotify ile Bağlan"}</span>
@@ -577,7 +858,7 @@ export function SettingsView({
             </div>
 
             {/* 2. GENERAL SOUNDPAD AUDIO SETTINGS */}
-            <div className="rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4 shadow-lg">
+            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
                     <Sliders className="w-4 h-4 text-zinc-400" />
                     <h2 className="text-xs font-semibold text-white">Genel Soundpad Ayarları</h2>
@@ -665,6 +946,140 @@ export function SettingsView({
                         className="px-3 py-1.5 rounded-md bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800 text-rose-300 text-xs font-medium transition-colors cursor-pointer"
                     >
                         Sesleri Sıfırla
+                    </button>
+                </div>
+            </div>
+
+            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
+                    <Bot className="w-4 h-4 text-indigo-400" />
+                    <h2 className="text-xs font-semibold text-white">
+                        Discord Rich Presence (RPC)
+                    </h2>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-medium text-white">
+                            Discord etkinliğini göster
+                        </p>
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                            Lir’de çalan sesleri ve uygulama durumunu Discord
+                            profilinizde isteğe bağlı olarak gösterir.
+                        </p>
+                        <p className="mt-2 text-[11px] text-zinc-400">
+                            {!isElectron
+                                ? "Discord RPC masaüstü uygulamasında kullanılabilir."
+                                : !routingConfig.discordRpcEnabled
+                                  ? "Discord RPC kapalı."
+                                  : discordStatus.connected
+                                    ? `Discord’a bağlandı${discordStatus.username ? `: ${discordStatus.username}` : "."}`
+                                    : "Açık; Discord istemcisi bekleniyor."}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {routingConfig.discordRpcEnabled &&
+                            isElectron &&
+                            !discordStatus.connected && (
+                                <button
+                                    onClick={() => void onReconnectDiscord()}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs transition-colors"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    Yeniden bağlan
+                                </button>
+                            )}
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={routingConfig.discordRpcEnabled}
+                            aria-label="Discord Rich Presence"
+                            disabled={!isElectron}
+                            onClick={() =>
+                                onRoutingConfigChange({
+                                    ...routingConfig,
+                                    discordRpcEnabled:
+                                        !routingConfig.discordRpcEnabled,
+                                })
+                            }
+                            className={`relative h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                routingConfig.discordRpcEnabled
+                                    ? "bg-indigo-600"
+                                    : "bg-zinc-700"
+                            }`}
+                        >
+                            <span
+                                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                                    routingConfig.discordRpcEnabled
+                                        ? "translate-x-5"
+                                        : "translate-x-0.5"
+                                }`}
+                            />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
+                    <RefreshCw className="w-4 h-4 text-zinc-400" />
+                    <h2 className="text-xs font-semibold text-white">
+                        Güncellemeler
+                    </h2>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium text-white">
+                            Lir güncellemelerini kontrol et
+                        </p>
+                        <p
+                            role={updateCheckStatus === "error" ? "alert" : "status"}
+                            className={`mt-1 text-[11px] ${
+                                updateCheckStatus === "error"
+                                    ? "text-amber-300"
+                                    : updateCheckStatus === "available"
+                                      ? "text-emerald-300"
+                                      : "text-zinc-500"
+                            }`}
+                        >
+                            {!isElectron
+                                ? "Güncelleme kontrolü masaüstü uygulamasında kullanılabilir."
+                                : updateCheckStatus === "checking"
+                                  ? "GitHub üzerinde güncellemeler aranıyor..."
+                                  : updateCheckStatus === "error"
+                                    ? "Kontrol başarısız oldu. Bağlantınızı kontrol edip yeniden deneyin."
+                                    : updateInfo
+                                      ? `${updateInfo.title} (${updateInfo.version}) kullanılabilir.`
+                                      : updateCheckStatus === "current"
+                                        ? "Uygulamanız güncel."
+                                        : "En son sürümü kontrol edin."}
+                        </p>
+                        {updateInfo && (
+                            <button
+                                onClick={() =>
+                                    window.electronAPI?.openUpdateRelease(
+                                        updateInfo.url,
+                                    )
+                                }
+                                className="mt-2 flex items-center gap-1 text-[11px] text-zinc-300 hover:text-white"
+                            >
+                                <ExternalLink className="w-3 h-3" />
+                                GitHub sürümünü aç
+                            </button>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => void onCheckForUpdates()}
+                        disabled={!isElectron || updateCheckStatus === "checking"}
+                        className="flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <RefreshCw
+                            className={`w-3.5 h-3.5 ${
+                                updateCheckStatus === "checking"
+                                    ? "animate-spin"
+                                    : ""
+                            }`}
+                        />
+                        Güncellemeleri denetle
                     </button>
                 </div>
             </div>

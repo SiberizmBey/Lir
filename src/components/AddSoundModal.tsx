@@ -15,7 +15,7 @@ import {
   ExternalLink,
   Plus
 } from 'lucide-react';
-import { SoundCategory, SoundItem, SpotifyTrack } from '../types/sound';
+import { SoundCategory, SoundItem, SpotifyAuthState, SpotifyTrack } from '../types/sound';
 import { spotifyService } from '../utils/spotifyService';
 
 interface AddSoundModalProps {
@@ -33,7 +33,12 @@ export function AddSoundModal({
   onOpenElectronFilePicker,
   existingSoundCount = 8
 }: AddSoundModalProps) {
-  const [activeTab, setActiveTab] = useState<'local' | 'spotify'>('local');
+  const [spotifyState, setSpotifyState] = useState<SpotifyAuthState>(() =>
+    spotifyService.getState()
+  );
+  const [activeTab, setActiveTab] = useState<'local' | 'spotify'>(() =>
+    spotifyState.isConnected ? 'spotify' : 'local'
+  );
 
   // Local Sound State
   const [title, setTitle] = useState('');
@@ -58,8 +63,6 @@ export function AddSoundModal({
 
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const spotifyState = spotifyService.getState();
-
   const categories: SoundCategory[] = [
     'Meme & Eğlence',
     'Oyun SFX',
@@ -79,6 +82,17 @@ export function AddSoundModal({
     { name: 'Coin Chime', preset: 'coin', dur: 0.6, cat: 'Oyun SFX' as SoundCategory },
     { name: 'Stadyum Alkış', preset: 'applause', dur: 2.0, cat: 'Reaksiyon' as SoundCategory },
   ];
+
+  useEffect(() => {
+    const unsubscribe = spotifyService.subscribe(setSpotifyState);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (spotifyState.isConnected) {
+      setActiveTab('spotify');
+    }
+  }, [spotifyState.isConnected]);
 
   useEffect(() => {
     return () => {
@@ -248,7 +262,7 @@ export function AddSoundModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-xl bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="w-full max-w-xl bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
         {/* Header & Mode Switcher */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
           <div className="flex items-center gap-1.5 p-0.5 rounded-lg bg-zinc-950 border border-zinc-800">
@@ -256,7 +270,7 @@ export function AddSoundModal({
               onClick={() => setActiveTab('local')}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 activeTab === 'local'
-                  ? 'bg-zinc-800 text-white shadow-sm'
+                  ? 'bg-zinc-800 text-white'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -267,7 +281,7 @@ export function AddSoundModal({
               onClick={() => setActiveTab('spotify')}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                 activeTab === 'spotify'
-                  ? 'bg-[#1db954] text-black shadow-sm'
+                  ? 'bg-[#1db954] text-black'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >

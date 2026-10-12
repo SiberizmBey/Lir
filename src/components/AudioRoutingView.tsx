@@ -12,27 +12,20 @@ import {
     Activity,
     CheckCircle2,
     AlertTriangle,
-    Bot,
-    RefreshCw,
-    Sparkles,
 } from "lucide-react";
-import { AudioRoutingConfig, DiscordStatus } from "../types/sound";
+import { AudioRoutingConfig } from "../types/sound";
 import { audioEngine } from "../utils/audioEngine";
 
 interface AudioRoutingViewProps {
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (config: AudioRoutingConfig) => void;
     isElectron: boolean;
-    discordStatus?: DiscordStatus;
-    onReconnectDiscord?: () => Promise<void>;
 }
 
 export function AudioRoutingView({
     routingConfig,
     onRoutingConfigChange,
     isElectron,
-    discordStatus,
-    onReconnectDiscord,
 }: AudioRoutingViewProps) {
     const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
     const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -219,7 +212,7 @@ export function AudioRoutingView({
             </div>
 
             {/* Pipeline Diagram */}
-            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
                     {/* Node 1: Sources */}
                     <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col items-center text-center gap-1.5 relative">
@@ -291,7 +284,7 @@ export function AudioRoutingView({
             {/* Main Grid: Device Configuration */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Output Routing Box */}
-                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Radio className="w-3.5 h-3.5 text-zinc-400" />
@@ -423,7 +416,7 @@ export function AudioRoutingView({
                 </div>
 
                 {/* Microphone Pass-Through Box (CRITICAL FIX FOR USER'S VOICE CUTTING OFF) */}
-                <div className="p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Mic className="w-3.5 h-3.5 text-zinc-400" />
@@ -638,77 +631,8 @@ export function AudioRoutingView({
                 </div>
             </div>
 
-            {/* Discord Rich Presence (RPC) Card */}
-            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-indigo-900/40 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md bg-indigo-950 flex items-center justify-center border border-indigo-850">
-                            <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                        </div>
-                        <div>
-                            <h2 className="text-xs font-semibold text-white">
-                                Discord Rich Presence (RPC)
-                            </h2>
-                            <p className="text-[11px] text-zinc-400">
-                                Discord profilinizde canlı olarak ne çaldığınızı
-                                ve soundboard durumunuzu gösterir.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span
-                            className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                                discordStatus?.connected
-                                    ? "border-indigo-700 bg-indigo-950/80 text-indigo-300"
-                                    : "border-zinc-800 bg-zinc-950 text-zinc-400"
-                            }`}
-                        >
-                            {discordStatus?.connected
-                                ? "BAĞLANDI"
-                                : "BEKLENİYOR / HAZIR"}
-                        </span>
-                        {onReconnectDiscord && (
-                            <button
-                                onClick={() => void onReconnectDiscord()}
-                                title="Discord RPC bağlantısını yenile"
-                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-300 transition-colors cursor-pointer"
-                            >
-                                <RefreshCw className="w-2.5 h-2.5" />
-                                <span>Yenile</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Discord RPC Activity Simulation Card */}
-                <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-indigo-950/80 border border-indigo-800/80 flex items-center justify-center relative shrink-0">
-                            <Sparkles className="w-5 h-5 text-indigo-400" />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-black" />
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-[10px] uppercase font-mono tracking-wider text-indigo-400 font-semibold">
-                                Discord Aktivitesi
-                            </span>
-                            <span className="text-xs font-semibold text-white">
-                                Lir • Gelişmiş Soundpad
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="text-[11px] font-mono text-zinc-500 self-end sm:self-center text-right">
-                        <span>
-                            {isElectron
-                                ? "Yerel IPC Boru Hattı Aktif"
-                                : "Web Önizleme Modu"}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
             {/* Discord Quick Configuration Guide */}
-            <div className="p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <HelpCircle className="w-4 h-4 text-zinc-400" />
@@ -722,7 +646,7 @@ export function AudioRoutingView({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-zinc-400">
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             1. Lir Ayarı
                         </span>
@@ -735,7 +659,7 @@ export function AudioRoutingView({
                         </p>
                     </div>
 
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             2. Discord Ayarı (Çokomelli!)
                         </span>
@@ -759,7 +683,7 @@ export function AudioRoutingView({
                         </p>
                     </div>
 
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             3. Kulaklık Durumu
                         </span>
