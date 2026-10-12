@@ -3,6 +3,26 @@ import { SpotifyTrack, SpotifyUser, SpotifyDevice, SpotifyAuthState } from '../t
 const STORAGE_KEY_SPOTIFY = 'lir_spotify_auth_v1';
 const VERIFIER_STORAGE_KEY = 'lir_spotify_code_verifier';
 
+async function readJsonResponse<T>(response: Response, endpoint: string): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(
+      `${endpoint} boş yanıt verdi (HTTP ${response.status}). Sunucudaki Spotify API uçlarını kontrol edip yeniden dağıtın.`
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const isHtml = /<\/?(?:!doctype|html)\b/i.test(text);
+    throw new Error(
+      isHtml
+        ? `${endpoint} JSON yerine web sayfası döndürdü (HTTP ${response.status}). Spotify API uçları dağıtımda bulunamadı; Vercel dağıtımını kontrol edin.`
+        : `${endpoint} geçersiz JSON yanıtı verdi (HTTP ${response.status}).`
+    );
+  }
+}
+
 // Default default scopes for full player control and library search
 const SPOTIFY_SCOPES = [
   'user-read-playback-state',
@@ -244,9 +264,18 @@ class SpotifyService {
         }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        error?: string;
+        error_description?: string;
+      }>(res, 'Spotify token API');
       if (!res.ok) {
         throw new Error(data.error_description || data.error || 'Token alınamadı');
+      }
+      if (!data.access_token) {
+        throw new Error('Spotify token API erişim anahtarı döndürmedi.');
       }
 
       const expiresAt = Date.now() + (data.expires_in || 3600) * 1000;
@@ -282,9 +311,18 @@ class SpotifyService {
         }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        error?: string;
+        error_description?: string;
+      }>(res, 'Spotify token yenileme API');
       if (!res.ok) {
         throw new Error(data.error_description || data.error || 'Token yenilenemedi');
+      }
+      if (!data.access_token) {
+        throw new Error('Spotify token yenileme API erişim anahtarı döndürmedi.');
       }
 
       const expiresAt = Date.now() + (data.expires_in || 3600) * 1000;
