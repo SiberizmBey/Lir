@@ -91,12 +91,20 @@ export function AudioRoutingView({
                     updated = true;
                 }
 
-                // Auto-detect user's physical microphone (ignoring virtual cable inputs)
-                const physicalMic = inputs.find(
-                    (d) =>
-                        !d.label.toLowerCase().includes("cable") &&
-                        !d.label.toLowerCase().includes("voicemeeter"),
-                );
+                // Auto-detect user's physical microphone (ignoring virtual cables and loopback/stereo mix)
+                const isVirtualOrLoopback = (label: string) => {
+                    const l = label.toLowerCase();
+                    return (
+                        l.includes("cable") ||
+                        l.includes("voicemeeter") ||
+                        l.includes("stereo mix") ||
+                        l.includes("stereo karışımı") ||
+                        l.includes("what u hear") ||
+                        l.includes("wave out")
+                    );
+                };
+
+                const physicalMic = inputs.find((d) => !isVirtualOrLoopback(d.label));
 
                 if (
                     physicalMic &&
@@ -365,11 +373,10 @@ export function AudioRoutingView({
                                         !routingConfig.dualOutputEnabled,
                                 })
                             }
-                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                                routingConfig.dualOutputEnabled
+                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${routingConfig.dualOutputEnabled
                                     ? "bg-white justify-end"
                                     : "bg-zinc-800 justify-start"
-                            }`}
+                                }`}
                         >
                             <div
                                 className={`w-4 h-4 rounded-full ${routingConfig.dualOutputEnabled ? "bg-black" : "bg-zinc-400"}`}
@@ -411,6 +418,19 @@ export function AudioRoutingView({
                                     </option>
                                 ))}
                             </select>
+
+                            {/* Same device anti-echo alert */}
+                            {(routingConfig.primaryDeviceId === routingConfig.secondaryDeviceId ||
+                                ((!routingConfig.primaryDeviceId || routingConfig.primaryDeviceId === "default") &&
+                                    (!routingConfig.secondaryDeviceId || routingConfig.secondaryDeviceId === "default"))) && (
+                                    <div className="mt-1 p-2 rounded bg-amber-950/40 border border-amber-800/80 text-[10px] text-amber-300 flex items-start gap-1.5 leading-relaxed">
+                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
+                                        <span>
+                                            <strong>Yankı Koruması:</strong> Birincil çıkış ile Kulaklık aynı aygıtta.
+                                            Seslerin çift çalıp yankı (flanger/delay) yapmaması için tek kanaldan iletilir. Discord'a ses vermek için Birincil Çıkış olarak <strong>CABLE Input</strong> seçilmelidir.
+                                        </span>
+                                    </div>
+                                )}
                         </div>
                     )}
                 </div>
@@ -425,11 +445,10 @@ export function AudioRoutingView({
                             </h2>
                         </div>
                         <span
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                                routingConfig.micPassThrough
+                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${routingConfig.micPassThrough
                                     ? "border-emerald-700 bg-emerald-950 text-emerald-300"
                                     : "border-zinc-800 bg-zinc-950 text-zinc-500"
-                            }`}
+                                }`}
                         >
                             {routingConfig.micPassThrough
                                 ? "MİKROFON AKTİF"
@@ -488,7 +507,7 @@ export function AudioRoutingView({
                                     } else {
                                         setMicError(
                                             res.error ||
-                                                "Mikrofona erişilemedi.",
+                                            "Mikrofona erişilemedi.",
                                         );
                                     }
                                 } else {
@@ -502,11 +521,10 @@ export function AudioRoutingView({
                                     });
                                 }
                             }}
-                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                                routingConfig.micPassThrough
+                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${routingConfig.micPassThrough
                                     ? "bg-emerald-500 justify-end"
                                     : "bg-zinc-800 justify-start"
-                            }`}
+                                }`}
                         >
                             <div className="w-4 h-4 rounded-full bg-black" />
                         </button>
@@ -604,7 +622,7 @@ export function AudioRoutingView({
                                             if (!res.success) {
                                                 setMicError(
                                                     res.error ||
-                                                        "Mikrofona bağlanılamadı. Windows mikrofon izinlerini kontrol edin.",
+                                                    "Mikrofona bağlanılamadı. Windows mikrofon izinlerini kontrol edin.",
                                                 );
                                             }
                                         }}
@@ -628,6 +646,66 @@ export function AudioRoutingView({
                             </div>
                         </div>
                     )}
+
+                    {/* Microphone Volume Slider */}
+                    {routingConfig.micPassThrough && (
+                        <div className="flex flex-col gap-1.5 pt-2 border-t border-zinc-800/60">
+                            <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-zinc-400">Mikrofon Geçiş Düzeyi:</span>
+                                <span className="font-mono text-emerald-400 font-semibold">
+                                    %{Math.round((routingConfig.micVolume ?? 1.0) * 100)}
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0"
+                                max="1.5"
+                                step="0.05"
+                                value={routingConfig.micVolume ?? 1.0}
+                                onChange={(e) => {
+                                    const vol = parseFloat(e.target.value);
+                                    onRoutingConfigChange({
+                                        ...routingConfig,
+                                        micVolume: vol,
+                                    });
+                                    audioEngine.setMicrophonePassThrough(
+                                        true,
+                                        routingConfig.micDeviceId,
+                                        vol,
+                                    );
+                                }}
+                                className="w-full accent-emerald-400 bg-zinc-800 h-1.5 rounded cursor-pointer"
+                            />
+                        </div>
+                    )}
+
+                    {/* Anti-Echo Mic Ducking Toggle */}
+                    <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
+                        <div className="flex flex-col pr-2">
+                            <span className="text-xs font-medium text-zinc-200">
+                                Ses Çalarken Mikrofonu Sustur (Akustik Yankı Önleyici)
+                            </span>
+                            <span className="text-[11px] text-zinc-500 leading-tight">
+                                Kulaklıktan veya hoparlörden mikrofona sızan sesin karşı tarafa çift (yankılı) gitmesini engeller
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const nextVal = routingConfig.muteMicOnPlay === false;
+                                onRoutingConfigChange({
+                                    ...routingConfig,
+                                    muteMicOnPlay: nextVal,
+                                });
+                                audioEngine.setMuteMicOnPlay(nextVal);
+                            }}
+                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${routingConfig.muteMicOnPlay !== false
+                                    ? "bg-emerald-500 justify-end"
+                                    : "bg-zinc-800 justify-start"
+                                }`}
+                        >
+                            <div className="w-4 h-4 rounded-full bg-black" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -648,49 +726,34 @@ export function AudioRoutingView({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-zinc-400">
                     <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
-                            1. Lir Ayarı
+                            1. Lir Ayarları
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>Ses çıkış ayarları</strong>
-                            <strong>Birincil Çıkış:</strong> CABLE Input seçin.
-                            <br />
-                            <strong>Mikrofon Geçişi:</strong> AÇIK yapıp kendi
-                            mikrofonunuzu (örn. Fuxi-H3) seçin.
+                            • <strong>Birincil Çıkış:</strong> CABLE Input seçin.
+                            <br />• <strong>Mikrofon Geçişi:</strong> AÇIK yapıp kendi mikrofonunuzu seçin (Stereo Karışımı değil).
+                            <br />• <strong>Yankı Önleyici:</strong> AÇIK tutun (Ses çalarken mikrofonu susturarak akustik sızıntıyı engeller).
                         </p>
                     </div>
 
                     <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
-                            2. Discord Ayarı (Çokomelli!)
+                            2. Discord Ayarı (Yankı & Bozuk Sesi Önleme)
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>Ses giriş ayarları</strong>•{" "}
-                            <strong>Giriş Aygıtı:</strong>{" "}
-                            <span className="text-white">
-                                VB-Audio Virtual Cable (CABLE Output)
-                            </span>
-                            <br />• <strong>Giriş Sesi:</strong> %100'e getirin.
-                            <br />• <strong>
-                                Gürültü Azaltma (Krisp):
-                            </strong>{" "}
-                            <span className="text-amber-300 font-semibold">
-                                Devre Dışı / Kapalı
-                            </span>{" "}
-                            yapın (Krisp sesleri gürültü sanıp aşırı kısar!).
-                            <br />• <strong>Yankı Engelleme:</strong> Kapatın.
-                            <br />• <strong>Giriş Hassasiyeti:</strong>{" "}
-                            Otomatiği kapatıp seviyeyi sola (-60 dB) çekin.
+                            • <strong>Giriş Aygıtı:</strong> Sadece <span className="text-white font-medium">CABLE Output</span> (Kendi mikrofonunuzu seçmeyin!).
+                            <br />• <strong>Yankı Engelleme:</strong> <span className="text-amber-300 font-semibold">KAPATIN</span> (Discord'un yankı filtresi robotik/boğuk sese neden olur).
+                            <br />• <strong>Gürültü Azaltma (Krisp):</strong> <span className="text-amber-300 font-semibold">KAPALI</span> yapın.
+                            <br />• <strong>Giriş Hassasiyeti:</strong> Otomatiği kapatıp sola çekin.
                         </p>
                     </div>
 
                     <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
-                            3. Kulaklık Durumu
+                            3. Yankı & Cızırtı Çözümleri
                         </span>
                         <p className="text-[11px] leading-relaxed">
-                            <strong>Çift Çıkış</strong> açıkken bastığınız
-                            sesleri siz de duyarsınız; kapatırsanız sadece
-                            Discord'dakiler duyar.
+                            • <strong>Karşıya Çift Ses Gitmesi:</strong> Kulaklıktan sızan ses mikrofona girmesin diye "Ses Çalarken Mikrofonu Sustur" açık olmalıdır.
+                            <br />• <strong>Dahili Limiter:</strong> Lir, ses patlamasını (clipping) önleyen dahili kompresör ile sesi tertemiz iletir.
                         </p>
                     </div>
                 </div>

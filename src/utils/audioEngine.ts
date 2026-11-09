@@ -13,6 +13,7 @@ class AudioEngine {
   // Both Soundboard SFX AND the User's Microphone mix together here and output directly to VB-CABLE!
   private cableCtx: AudioContext | null = null;
   private cableMasterBus: GainNode | null = null;
+  private cableLimiter: DynamicsCompressorNode | null = null;
   private cableEffectsGain: GainNode | null = null;
   private micGainNode: GainNode | null = null;
   private micSourceNode: MediaStreamAudioSourceNode | null = null;
@@ -23,6 +24,7 @@ class AudioEngine {
   // ONLY Soundboard SFX plays here (User's own voice NEVER plays in headphones to prevent annoying echo)
   private monitorCtx: AudioContext | null = null;
   private monitorEffectsGain: GainNode | null = null;
+  private monitorLimiter: DynamicsCompressorNode | null = null;
 
   // Visualizer analyser for Soundboard SFX
   private sfxAnalyser: AnalyserNode | null = null;
@@ -32,6 +34,7 @@ class AudioEngine {
   private isMicEnabled: boolean = false;
   private currentMicVolume: number = 1.0;
   private isMicConnecting: boolean = false;
+  private muteMicOnPlay: boolean = true; // Auto-duck microphone during SFX playback to eliminate acoustic bleed / echo
 
   // Active playing sources & concurrency protection
   private activeSources: Map<string, AudioBufferSourceNode[]> = new Map();
@@ -48,9 +51,9 @@ class AudioEngine {
   private dualOutputEnabled: boolean = true;
   private masterVolume: number = 0.85;
 
-  // Boost multipliers for streaming
-  private readonly SFX_BOOST = 1.6;
-  private readonly MIC_BOOST = 1.5;
+  // Unity gain multipliers (prevents digital clipping/distortion)
+  private readonly SFX_BOOST = 1.0;
+  private readonly MIC_BOOST = 1.0;
 
   private initContexts() {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -62,11 +65,21 @@ class AudioEngine {
       // Master output bus going directly to VB-CABLE Input (Hardware Sink)
       this.cableMasterBus = this.cableCtx.createGain();
       this.cableMasterBus.gain.setValueAtTime(1.0, this.cableCtx.currentTime);
-      this.cableMasterBus.connect(this.cableCtx.destination);
+
+      // Studio-grade Brickwall Limiter to prevent ANY digital clipping, distortion or harsh popping
+      this.cableLimiter = this.cableCtx.createDynamicsCompressor();
+      this.cableLimiter.threshold.setValueAtTime(-1.0, this.cableCtx.currentTime); // -1 dBFS ceiling
+      this.cableLimiter.knee.setValueAtTime(3.0, this.cableCtx.currentTime);
+      this.cableLimiter.ratio.setValueAtTime(20.0, this.cableCtx.currentTime); // Strong limiting
+      this.cableLimiter.attack.setValueAtTime(0.002, this.cableCtx.currentTime); // 2ms fast transient catch
+      this.cableLimiter.release.setValueAtTime(0.05, this.cableCtx.currentTime); // 50ms smooth release
+
+      this.cableMasterBus.connect(this.cableLimiter);
+      this.cableLimiter.connect(this.cableCtx.destination);
 
       // Effects sub-bus
       this.cableEffectsGain = this.cableCtx.createGain();
-      const sfxVol = Math.min(2.5, this.masterVolume * this.SFX_BOOST);
+      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
       this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
       this.cableEffectsGain.connect(this.cableMasterBus);
 
@@ -89,7 +102,17 @@ class AudioEngine {
       this.monitorEffectsGain = this.monitorCtx.createGain();
       const initialMonitorVol = this.dualOutputEnabled ? this.masterVolume : 0;
       this.monitorEffectsGain.gain.setValueAtTime(initialMonitorVol, this.monitorCtx.currentTime);
-      this.monitorEffectsGain.connect(this.monitorCtx.destination);
+
+      // Monitor Limiter to protect user's ears from high peaks
+      this.monitorLimiter = this.monitorCtx.createDynamicsCompressor();
+      this.monitorLimiter.threshold.setValueAtTime(-1.0, this.monitorCtx.currentTime);
+      this.monitorLimiter.knee.setValueAtTime(3.0, this.monitorCtx.currentTime);
+      this.monitorLimiter.ratio.setValueAtTime(20.0, this.monitorCtx.currentTime);
+      this.monitorLimiter.attack.setValueAtTime(0.002, this.monitorCtx.currentTime);
+      this.monitorLimiter.release.setValueAtTime(0.05, this.monitorCtx.currentTime);
+
+      this.monitorEffectsGain.connect(this.monitorLimiter);
+      this.monitorLimiter.connect(this.monitorCtx.destination);
     }
 
     this.resumeContexts();
@@ -98,10 +121,10 @@ class AudioEngine {
 
   public resumeContexts() {
     if (this.cableCtx && this.cableCtx.state === 'suspended') {
-      this.cableCtx.resume().catch(() => {});
+      this.cableCtx.resume().catch(() => { });
     }
     if (this.monitorCtx && this.monitorCtx.state === 'suspended') {
-      this.monitorCtx.resume().catch(() => {});
+      this.monitorCtx.resume().catch(() => { });
     }
   }
 
@@ -109,17 +132,28 @@ class AudioEngine {
     primaryId: string,
     secondaryId: string,
     dualOutput: boolean,
-    volume: number
+    volume: number,
+    muteMicOnPlay?: boolean
   ) {
-    this.primaryDeviceId = primaryId || 'default';
-    this.secondaryDeviceId = secondaryId || 'default';
-    this.dualOutputEnabled = dualOutput;
-    this.masterVolume = Math.max(0, Math.min(1, volume));
+    const nextPrimary = primaryId || 'default';
+    const nextSecondary = secondaryId || 'default';
+    const nextDual = dualOutput;
+    const nextVol = Math.max(0, Math.min(1, volume));
+    if (muteMicOnPlay !== undefined) {
+      this.muteMicOnPlay = muteMicOnPlay;
+    }
+
+    const deviceChanged = this.primaryDeviceId !== nextPrimary || this.secondaryDeviceId !== nextSecondary;
+
+    this.primaryDeviceId = nextPrimary;
+    this.secondaryDeviceId = nextSecondary;
+    this.dualOutputEnabled = nextDual;
+    this.masterVolume = nextVol;
 
     this.initContexts();
 
     if (this.cableEffectsGain && this.cableCtx) {
-      const sfxVol = Math.min(2.5, this.masterVolume * this.SFX_BOOST);
+      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
       this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
     }
 
@@ -128,7 +162,14 @@ class AudioEngine {
       this.monitorEffectsGain.gain.setValueAtTime(monitorVol, this.monitorCtx.currentTime);
     }
 
-    this.updateSinkIds();
+    if (deviceChanged) {
+      this.updateSinkIds();
+    }
+  }
+
+  public setMuteMicOnPlay(enabled: boolean) {
+    this.muteMicOnPlay = enabled;
+    this.checkAndApplyMicDucking();
   }
 
   private async updateSinkIds() {
@@ -157,6 +198,28 @@ class AudioEngine {
     }
   }
 
+  // Smooth microphone ducking to completely eradicate acoustic echo / headset bleed into the microphone
+  private updateMicGain(isDucked: boolean = false) {
+    if (!this.micGainNode || !this.cableCtx) return;
+    const targetVolume = isDucked ? 0.0 : this.currentMicVolume * this.MIC_BOOST;
+    try {
+      this.micGainNode.gain.cancelScheduledValues(this.cableCtx.currentTime);
+      this.micGainNode.gain.setTargetAtTime(targetVolume, this.cableCtx.currentTime, 0.015);
+    } catch {
+      this.micGainNode.gain.setValueAtTime(targetVolume, this.cableCtx.currentTime);
+    }
+  }
+
+  private checkAndApplyMicDucking() {
+    if (!this.isMicEnabled || !this.micGainNode) return;
+    const hasActiveSFX = this.allLiveSources.size > 0;
+    if (this.muteMicOnPlay && hasActiveSFX) {
+      this.updateMicGain(true);
+    } else {
+      this.updateMicGain(false);
+    }
+  }
+
   // Real-time microphone mixing into VB-CABLE Input (Hardware Passthrough)
   public async setMicrophonePassThrough(
     enabled: boolean,
@@ -175,12 +238,9 @@ class AudioEngine {
       return { success: true };
     }
 
-    // If already active on the same device, update volume
+    // If already active on the same device, update volume smoothly
     if (this.isMicEnabled && this.micStream && this.micStream.active && this.currentMicDeviceId === targetDeviceId) {
-      if (this.micGainNode && this.cableCtx) {
-        const targetVol = volume * this.MIC_BOOST;
-        this.micGainNode.gain.setValueAtTime(targetVol, this.cableCtx.currentTime);
-      }
+      this.checkAndApplyMicDucking();
       return { success: true };
     }
 
@@ -193,35 +253,68 @@ class AudioEngine {
     this.isMicEnabled = true;
     this.currentMicDeviceId = targetDeviceId;
 
+    // Studio-grade clean audio constraints:
+    // Disabling Chromium's internal AEC, AGC, and Noise Suppression is CRITICAL!
+    // When left enabled, Chromium applies double-filtering on top of Discord, causing
+    // robotic, underwater, muffled, and out-of-phase "weird" audio with high buffer latency.
+    const cleanAudioConstraints: MediaTrackConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: { ideal: 2 },
+      sampleRate: { ideal: 48000 },
+      latency: { ideal: 0 },
+      // Chromium internal WebRTC flags to fully bypass DSP distortion
+      ...({
+        googEchoCancellation: false,
+        googAutoGainControl: false,
+        googNoiseSuppression: false,
+        googHighpassFilter: false,
+        googTypingNoiseDetection: false,
+        googAudioMirroring: false,
+      } as Record<string, unknown>),
+    };
+
     try {
       let stream: MediaStream | null = null;
 
-      // 1. Request target microphone with exact matching
+      // 1. Request target microphone with exact matching and clean audio constraints
       if (targetDeviceId && targetDeviceId !== 'default') {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: { deviceId: { exact: targetDeviceId } }
+            audio: {
+              ...cleanAudioConstraints,
+              deviceId: { exact: targetDeviceId },
+            },
           });
         } catch (e1) {
           console.warn('Exact deviceId match failed, trying direct deviceId:', e1);
           try {
             stream = await navigator.mediaDevices.getUserMedia({
-              audio: { deviceId: targetDeviceId }
+              audio: {
+                ...cleanAudioConstraints,
+                deviceId: targetDeviceId,
+              },
             });
           } catch (e2) {
             console.warn('Direct deviceId failed, trying ideal:', e2);
             try {
               stream = await navigator.mediaDevices.getUserMedia({
-                audio: { deviceId: { ideal: targetDeviceId } }
+                audio: {
+                  ...cleanAudioConstraints,
+                  deviceId: { ideal: targetDeviceId },
+                },
               });
-            } catch (e3) {}
+            } catch (e3) { }
           }
         }
       }
 
       // 2. Fallback to system default audio if deviceId was default or unavailable
       if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: cleanAudioConstraints,
+        });
       }
 
       if (!stream) {
@@ -242,7 +335,7 @@ class AudioEngine {
 
       // Ensure AudioContext is fully running
       if (this.cableCtx.state === 'suspended') {
-        await this.cableCtx.resume().catch(() => {});
+        await this.cableCtx.resume().catch(() => { });
       }
 
       // Create Microphone Source Node
@@ -251,8 +344,7 @@ class AudioEngine {
 
       // Create Microphone Gain Node
       this.micGainNode = this.cableCtx.createGain();
-      const boostedMicVol = volume * this.MIC_BOOST;
-      this.micGainNode.gain.setValueAtTime(boostedMicVol, this.cableCtx.currentTime);
+      this.updateMicGain(false);
 
       // Connect mic to Gain
       this.micSourceNode.connect(this.micGainNode);
@@ -262,11 +354,12 @@ class AudioEngine {
         this.micGainNode.connect(this.micAnalyser);
       }
 
-      // MIX MIC INTO THE CABLE MASTER BUS (Goes straight to Discord via VB-CABLE!)
+      // MIX MIC INTO THE CABLE MASTER BUS (Direct to VB-CABLE Input, bypassing local headphones!)
       this.micGainNode.connect(this.cableMasterBus);
 
       this.resumeContexts();
       this.isMicConnecting = false;
+      this.checkAndApplyMicDucking();
       return { success: true };
     } catch (err) {
       console.error('Microphone passthrough error:', err);
@@ -284,14 +377,14 @@ class AudioEngine {
     if (this.micSourceNode) {
       try {
         this.micSourceNode.disconnect();
-      } catch (e) {}
+      } catch (e) { }
       this.micSourceNode = null;
       window.__lir_active_mic_source = null;
     }
     if (this.micGainNode) {
       try {
         this.micGainNode.disconnect();
-      } catch (e) {}
+      } catch (e) { }
       this.micGainNode = null;
     }
     if (this.micStream) {
@@ -299,7 +392,7 @@ class AudioEngine {
         this.micStream.getTracks().forEach((track) => {
           track.stop();
         });
-      } catch (e) {}
+      } catch (e) { }
       this.micStream = null;
       window.__lir_active_mic_stream = null;
     }
@@ -329,7 +422,7 @@ class AudioEngine {
     }
 
     if (this.cableCtx && this.cableCtx.state === 'suspended') {
-      this.cableCtx.resume().catch(() => {});
+      this.cableCtx.resume().catch(() => { });
     }
 
     // Time-domain RMS signal
@@ -367,7 +460,7 @@ class AudioEngine {
     this.initContexts();
 
     if (this.cableEffectsGain && this.cableCtx) {
-      const sfxVol = Math.min(2.5, this.masterVolume * this.SFX_BOOST);
+      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
       this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
     }
     if (this.monitorEffectsGain && this.monitorCtx) {
@@ -476,59 +569,73 @@ class AudioEngine {
     this.allLiveSources.add(cableSource);
 
     // 2. Play on Monitor Context if dual output is enabled (User's Headphones)
+    // CRITICAL ANTI-ECHO GUARD:
+    // If primary and secondary outputs point to the same physical device (e.g. both 'default'),
+    // never play a duplicate buffer on monitorCtx. Playing the same sound across two AudioContexts
+    // into the exact same audio endpoint creates an unbearable double-trigger flanger/echo effect.
+    const isSameTargetDevice =
+      this.primaryDeviceId === this.secondaryDeviceId ||
+      ((!this.primaryDeviceId || this.primaryDeviceId === 'default') &&
+        (!this.secondaryDeviceId || this.secondaryDeviceId === 'default'));
+
     let monitorSource: AudioBufferSourceNode | null = null;
-    if (this.dualOutputEnabled && this.monitorCtx && this.monitorEffectsGain) {
-      monitorSource = this.monitorCtx.createBufferSource();
-      monitorSource.buffer = buffer;
-      monitorSource.loop = !!sound.loop;
+      if (this.dualOutputEnabled && !isSameTargetDevice && this.monitorCtx && this.monitorEffectsGain) {
+        monitorSource = this.monitorCtx.createBufferSource();
+        monitorSource.buffer = buffer;
+        monitorSource.loop = !!sound.loop;
 
-      const monitorSoundGain = this.monitorCtx.createGain();
-      monitorSoundGain.gain.setValueAtTime(soundVolume, this.monitorCtx.currentTime);
+        const monitorSoundGain = this.monitorCtx.createGain();
+        monitorSoundGain.gain.setValueAtTime(soundVolume, this.monitorCtx.currentTime);
 
-      monitorSource.connect(monitorSoundGain);
-      monitorSoundGain.connect(this.monitorEffectsGain);
+        monitorSource.connect(monitorSoundGain);
+        monitorSoundGain.connect(this.monitorEffectsGain);
 
-      sourcesToTrack.push(monitorSource);
-      this.allLiveSources.add(monitorSource);
+        sourcesToTrack.push(monitorSource);
+        this.allLiveSources.add(monitorSource);
 
-      monitorSource.onended = () => {
-        if (monitorSource) {
-          this.allLiveSources.delete(monitorSource);
+        monitorSource.onended = () => {
+          if (monitorSource) {
+            this.allLiveSources.delete(monitorSource);
+            this.checkAndApplyMicDucking();
+          }
+        };
+      }
+
+      cableSource.onended = () => {
+        this.allLiveSources.delete(cableSource);
+        // Only remove playing state if this exact instance is the active one!
+        if (this.currentPlayInstance.get(sound.id) === instanceId) {
+          this.activeSources.delete(sound.id);
+          this.currentlyPlaying.delete(sound.id);
+          this.currentPlayInstance.delete(sound.id);
+          if (this.onPlaybackStateChange) {
+            this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+          }
         }
+        this.checkAndApplyMicDucking();
       };
-    }
 
-    cableSource.onended = () => {
-      this.allLiveSources.delete(cableSource);
-      // Only remove playing state if this exact instance is the active one!
-      if (this.currentPlayInstance.get(sound.id) === instanceId) {
-        this.activeSources.delete(sound.id);
-        this.currentlyPlaying.delete(sound.id);
-        this.currentPlayInstance.delete(sound.id);
-        if (this.onPlaybackStateChange) {
-          this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+      this.activeSources.set(sound.id, sourcesToTrack);
+      this.currentPlayInstance.set(sound.id, instanceId);
+      this.currentlyPlaying.add(sound.id);
+
+      // Apply mic ducking immediately when playback starts to eradicate acoustic echo
+      this.checkAndApplyMicDucking();
+
+      if (this.onPlaybackStateChange) {
+        this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+      }
+
+      try {
+        cableSource.start(0);
+        if (monitorSource) {
+          monitorSource.start(0);
         }
+      } catch (e) {
+        console.warn('Audio playback start error:', e);
+        this.stopSound(sound.id);
       }
-    };
-
-    this.activeSources.set(sound.id, sourcesToTrack);
-    this.currentPlayInstance.set(sound.id, instanceId);
-    this.currentlyPlaying.add(sound.id);
-
-    if (this.onPlaybackStateChange) {
-      this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
     }
-
-    try {
-      cableSource.start(0);
-      if (monitorSource) {
-        monitorSource.start(0);
-      }
-    } catch (e) {
-      console.warn('Audio playback start error:', e);
-      this.stopSound(sound.id);
-    }
-  }
 
   public stopSound(soundId: string) {
     this.pendingTokens.delete(soundId);
@@ -542,11 +649,12 @@ class AudioEngine {
           source.onended = null;
           source.stop();
           source.disconnect();
-        } catch (e) {}
+        } catch (e) { }
       });
       this.activeSources.delete(soundId);
     }
     this.currentlyPlaying.delete(soundId);
+    this.checkAndApplyMicDucking();
     if (this.onPlaybackStateChange) {
       this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
     }
@@ -562,7 +670,7 @@ class AudioEngine {
           source.onended = null;
           source.stop();
           source.disconnect();
-        } catch (e) {}
+        } catch (e) { }
       });
     });
     this.activeSources.clear();
@@ -573,11 +681,12 @@ class AudioEngine {
         source.onended = null;
         source.stop();
         source.disconnect();
-      } catch (e) {}
+      } catch (e) { }
     });
     this.allLiveSources.clear();
 
     this.currentlyPlaying.clear();
+    this.checkAndApplyMicDucking();
     if (this.onPlaybackStateChange) {
       this.onPlaybackStateChange([]);
     }

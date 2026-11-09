@@ -66,6 +66,7 @@ const DEFAULT_CONFIG: AudioRoutingConfig = {
     micDeviceId: "default",
     micDeviceLabel: "Varsayılan Mikrofon",
     micVolume: 1.0,
+    muteMicOnPlay: true,
     playbackMode: "overlap",
     stopAllHotkey: "CTRL+SHIFT+X",
     discordRpcEnabled: true,
@@ -230,6 +231,7 @@ export default function App() {
                     return {
                         ...DEFAULT_CONFIG,
                         ...parsed,
+                        muteMicOnPlay: parsed.muteMicOnPlay ?? true,
                         stopAllHotkey:
                             typeof parsed.stopAllHotkey === "string" &&
                             parsed.stopAllHotkey.trim() !== "" &&
@@ -399,6 +401,7 @@ export default function App() {
             routingConfig.secondaryDeviceId,
             routingConfig.dualOutputEnabled,
             routingConfig.masterVolume,
+            routingConfig.muteMicOnPlay,
         );
         audioEngine.setMicrophonePassThrough(
             routingConfig.micPassThrough,
@@ -406,6 +409,70 @@ export default function App() {
             routingConfig.micVolume,
         );
     }, [routingConfig]);
+
+    // Initial background audio device scan to auto-assign VB-CABLE and physical mic if not configured
+    useEffect(() => {
+        let isMounted = true;
+        const autoDetectDevices = async () => {
+            try {
+                if (!navigator.mediaDevices?.enumerateDevices) return;
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                if (!isMounted) return;
+
+                const outputs = devices.filter((d) => d.kind === "audiooutput");
+                const inputs = devices.filter((d) => d.kind === "audioinput");
+
+                setRoutingConfig((prev) => {
+                    let changed = false;
+                    const next = { ...prev };
+
+                    // Auto-detect VB-CABLE Output if primary device is unconfigured or default
+                    if (next.primaryDeviceId === "default" || !next.primaryDeviceId) {
+                        const vbCable = outputs.find(
+                            (d) =>
+                                d.label.toLowerCase().includes("cable input") ||
+                                d.label.toLowerCase().includes("vb-audio"),
+                        );
+                        if (vbCable) {
+                            next.primaryDeviceId = vbCable.deviceId;
+                            next.primaryDeviceLabel = vbCable.label;
+                            changed = true;
+                        }
+                    }
+
+                    // Auto-detect physical mic, filtering out virtual cable and loopback devices
+                    if (next.micDeviceId === "default" || !next.micDeviceId) {
+                        const isVirtualOrLoopback = (label: string) => {
+                            const l = label.toLowerCase();
+                            return (
+                                l.includes("cable") ||
+                                l.includes("voicemeeter") ||
+                                l.includes("stereo mix") ||
+                                l.includes("stereo karışımı") ||
+                                l.includes("what u hear") ||
+                                l.includes("wave out")
+                            );
+                        };
+                        const physicalMic = inputs.find((d) => !isVirtualOrLoopback(d.label));
+                        if (physicalMic) {
+                            next.micDeviceId = physicalMic.deviceId;
+                            next.micDeviceLabel = physicalMic.label;
+                            changed = true;
+                        }
+                    }
+
+                    return changed ? next : prev;
+                });
+            } catch (err) {
+                console.warn("Initial audio device detection error:", err);
+            }
+        };
+
+        void autoDetectDevices();
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     useEffect(() => {
         audioEngine.setPlaybackListener((playingIds) => {

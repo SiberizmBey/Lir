@@ -88,6 +88,7 @@ export interface AudioRoutingConfig {
   micDeviceId: string;
   micDeviceLabel: string;
   micVolume: number;
+  muteMicOnPlay?: boolean; // Mute/duck microphone while sound effect plays to eliminate acoustic echo
   playbackMode: 'overlap' | 'cutoff'; // Play multiple sounds together or stop previous
   stopAllHotkey: string;
   discordRpcEnabled: boolean;
