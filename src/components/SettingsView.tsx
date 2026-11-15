@@ -25,6 +25,10 @@ import {
     Image as ImageIcon,
     Upload,
     Trash2,
+    Github,
+    Instagram,
+    FlaskConical,
+    History,
 } from "lucide-react";
 import {
     AudioRoutingConfig,
@@ -56,6 +60,29 @@ interface SettingsViewProps {
 
 const MAX_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_BACKGROUND_DATA_SIZE = 1.5 * 1024 * 1024;
+const ANTIC_VALLEY_ASSETS = "https://labs.anticvalley.com.tr/assets/img";
+const ANTIC_VALLEY_PROJECTS = [
+    {
+        name: "Koza",
+        description: "Güvenli kasa ve parola yönetimi",
+        image: "koza.png",
+    },
+    {
+        name: "Kirpi",
+        description: "ERP & MES Platformu",
+        image: "kirpi.png",
+    },
+    {
+        name: "Kirpi: SG",
+        description: "Endüstriyel Akıllı Üretim",
+        image: "kirpifab.png",
+    },
+    {
+        name: "Yonga (Eski Adıyla: MFGI)",
+        description: "Operasyonel Altyapı",
+        image: "mfgi.png",
+    },
+];
 
 async function prepareBackgroundImage(file: File): Promise<string> {
     if (!file.type.startsWith("image/")) {
@@ -95,7 +122,10 @@ async function prepareBackgroundImage(file: File): Promise<string> {
         throw new Error("Görsel işlemek için canvas başlatılamadı.");
     }
 
-    let scale = Math.min(1, 1920 / Math.max(image.naturalWidth, image.naturalHeight));
+    let scale = Math.min(
+        1,
+        1920 / Math.max(image.naturalWidth, image.naturalHeight),
+    );
     let quality = 0.82;
     let compressed = "";
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -132,14 +162,17 @@ export function SettingsView({
     onAppearanceChange,
 }: SettingsViewProps) {
     const [spotifyState, setSpotifyState] = useState<SpotifyAuthState>(() =>
-        spotifyService.getState()
+        spotifyService.getState(),
     );
-    const [clientIdInput, setClientIdInput] = useState(spotifyState.clientId || "");
+    const [clientIdInput, setClientIdInput] = useState(
+        spotifyState.clientId || "",
+    );
     const [clientSecretInput, setClientSecretInput] = useState(
-        spotifyState.clientSecret || ""
+        spotifyState.clientSecret || "",
     );
     const [redirectUriInput, setRedirectUriInput] = useState(
-        spotifyState.redirectUri || "https://lir.anticvalley.com.tr/auth/callback"
+        spotifyState.redirectUri ||
+            "https://lir.anticvalley.com.tr/auth/callback",
     );
     const [isConnecting, setIsConnecting] = useState(false);
     const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
@@ -192,7 +225,11 @@ export function SettingsView({
 
         window.addEventListener("keydown", handleStopHotkeyCapture, true);
         return () => {
-            window.removeEventListener("keydown", handleStopHotkeyCapture, true);
+            window.removeEventListener(
+                "keydown",
+                handleStopHotkeyCapture,
+                true,
+            );
         };
     }, [
         isCapturingStopHotkey,
@@ -357,17 +394,20 @@ export function SettingsView({
 
     const getDeviceIcon = (type: string) => {
         const lower = type.toLowerCase();
-        if (lower.includes("phone") || lower.includes("mobile")) return Smartphone;
+        if (lower.includes("phone") || lower.includes("mobile"))
+            return Smartphone;
         if (lower.includes("speaker") || lower.includes("cast")) return Speaker;
         return Laptop;
     };
 
     return (
         <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-            <section className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+            <section className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
                     <Sliders className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-xs font-semibold text-white">Görünüm</h2>
+                    <h2 className="text-xs font-semibold text-white">
+                        Görünüm
+                    </h2>
                 </div>
                 <div>
                     <p className="text-xs font-medium text-white">Tema</p>
@@ -382,7 +422,7 @@ export function SettingsView({
                         {(
                             [
                                 ["amoled", "AMOLED", "Tam siyah arka plan"],
-                                ["dark", "Karanlık", "Mor vurgulu koyu tema"],
+                                ["dark", "Karanlık", "Yeşil vurgulu koyu tema"],
                                 ["light", "Aydınlık", "Açık ve ferah görünüm"],
                             ] as const
                         ).map(([value, label, description]) => (
@@ -415,7 +455,8 @@ export function SettingsView({
                                 Arka plan görseli
                             </p>
                             <p className="mt-1 text-[11px] text-zinc-500">
-                                Görsel uygulamanın tamamında kullanılır ve okunabilirlik için hafifçe karartılır.
+                                Görsel uygulamanın tamamında kullanılır ve
+                                okunabilirlik için hafifçe karartılır.
                             </p>
                         </div>
                         {appearance.backgroundImage && (
@@ -476,7 +517,9 @@ export function SettingsView({
                                     onChange={(event) =>
                                         void updateAppearance({
                                             ...appearance,
-                                            backgroundBlur: Number(event.target.value),
+                                            backgroundBlur: Number(
+                                                event.target.value,
+                                            ),
                                         })
                                     }
                                     aria-label="Arka plan bulanıklığı"
@@ -484,7 +527,10 @@ export function SettingsView({
                             </label>
                             {(
                                 [
-                                    ["sidebarTransparency", "Sidebar saydamlığı"],
+                                    [
+                                        "sidebarTransparency",
+                                        "Sidebar saydamlığı",
+                                    ],
                                     ["cardTransparency", "Card saydamlığı"],
                                     ["headerTransparency", "Header saydamlığı"],
                                 ] as const
@@ -508,7 +554,9 @@ export function SettingsView({
                                         onChange={(event) =>
                                             void updateAppearance({
                                                 ...appearance,
-                                                [key]: Number(event.target.value),
+                                                [key]: Number(
+                                                    event.target.value,
+                                                ),
                                             })
                                         }
                                         aria-label={label}
@@ -531,7 +579,9 @@ export function SettingsView({
                     </span>
                 </div>
                 <p className="text-xs text-zinc-400">
-                    Spotify hesabınızı bağlayarak şarkıları doğrudan Soundpad&apos;e entegre edin ve kısayol tuşlarıyla anında çalın.
+                    Spotify hesabınızı bağlayarak şarkıları doğrudan
+                    Soundpad&apos;e entegre edin ve kısayol tuşlarıyla anında
+                    çalın.
                 </p>
             </div>
 
@@ -566,7 +616,7 @@ export function SettingsView({
             )}
 
             {/* 1. SPOTIFY INTEGRATION SECTION */}
-            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5">
+            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5">
                 {/* Section title & connection pill */}
                 <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
                     <div className="flex items-center gap-2.5">
@@ -587,7 +637,8 @@ export function SettingsView({
                                 )}
                             </h2>
                             <p className="text-[11px] text-zinc-400">
-                                Şarkıları arayıp Soundpad kartlarına ekleyin ve oyun içi kısayollarla Spotify&apos;da yürütün.
+                                Şarkıları arayıp Soundpad kartlarına ekleyin ve
+                                oyun içi kısayollarla Spotify&apos;da yürütün.
                             </p>
                         </div>
                     </div>
@@ -609,7 +660,8 @@ export function SettingsView({
                         {/* Profile banner */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
                             <div className="flex items-center gap-3">
-                                {spotifyState.user.images && spotifyState.user.images[0] ? (
+                                {spotifyState.user.images &&
+                                spotifyState.user.images[0] ? (
                                     <img
                                         src={spotifyState.user.images[0].url}
                                         alt={spotifyState.user.display_name}
@@ -617,7 +669,9 @@ export function SettingsView({
                                     />
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 font-semibold text-sm">
-                                        {spotifyState.user.display_name?.charAt(0) || "S"}
+                                        {spotifyState.user.display_name?.charAt(
+                                            0,
+                                        ) || "S"}
                                     </div>
                                 )}
                                 <div>
@@ -626,11 +680,13 @@ export function SettingsView({
                                             {spotifyState.user.display_name}
                                         </span>
                                         <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1db954]/10 border border-[#1db954]/30 text-[#1db954] uppercase">
-                                            {spotifyState.user.product || "Premium"}
+                                            {spotifyState.user.product ||
+                                                "Premium"}
                                         </span>
                                     </div>
                                     <p className="text-xs text-zinc-400">
-                                        {spotifyState.user.email || `Spotify ID: ${spotifyState.user.id}`}
+                                        {spotifyState.user.email ||
+                                            `Spotify ID: ${spotifyState.user.id}`}
                                     </p>
                                 </div>
                             </div>
@@ -682,50 +738,67 @@ export function SettingsView({
                             </div>
 
                             <p className="text-[11px] text-zinc-400">
-                                Kısayola bastığınızda şarkının çalınacağı Spotify cihazı (Masaüstü Spotify uygulaması açık olmalıdır):
+                                Kısayola bastığınızda şarkının çalınacağı
+                                Spotify cihazı (Masaüstü Spotify uygulaması açık
+                                olmalıdır):
                             </p>
 
                             {spotifyState.devices.length > 0 ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-1">
-                                    {spotifyState.devices.map((device: SpotifyDevice) => {
-                                        const DeviceIcon = getDeviceIcon(device.type);
-                                        const isSelected =
-                                            spotifyState.activeDeviceId === device.id ||
-                                            (!spotifyState.activeDeviceId && device.is_active);
-                                        return (
-                                            <button
-                                                key={device.id}
-                                                onClick={() => handleSelectDevice(device.id)}
-                                                className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                                                    isSelected
-                                                        ? "bg-[#1db954]/10 border-[#1db954]/60 text-white"
-                                                        : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-850"
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <DeviceIcon
-                                                        className={`w-4 h-4 shrink-0 ${isSelected ? "text-[#1db954]" : "text-zinc-500"}`}
-                                                    />
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs font-medium truncate">
-                                                            {device.name}
-                                                        </p>
-                                                        <p className="text-[10px] text-zinc-500 capitalize">
-                                                            {device.type} {device.is_active && "· Aktif"}
-                                                        </p>
+                                    {spotifyState.devices.map(
+                                        (device: SpotifyDevice) => {
+                                            const DeviceIcon = getDeviceIcon(
+                                                device.type,
+                                            );
+                                            const isSelected =
+                                                spotifyState.activeDeviceId ===
+                                                    device.id ||
+                                                (!spotifyState.activeDeviceId &&
+                                                    device.is_active);
+                                            return (
+                                                <button
+                                                    key={device.id}
+                                                    onClick={() =>
+                                                        handleSelectDevice(
+                                                            device.id,
+                                                        )
+                                                    }
+                                                    className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                                        isSelected
+                                                            ? "bg-[#1db954]/10 border-[#1db954]/60 text-white"
+                                                            : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-850"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <DeviceIcon
+                                                            className={`w-4 h-4 shrink-0 ${isSelected ? "text-[#1db954]" : "text-zinc-500"}`}
+                                                        />
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-medium truncate">
+                                                                {device.name}
+                                                            </p>
+                                                            <p className="text-[10px] text-zinc-500 capitalize">
+                                                                {device.type}{" "}
+                                                                {device.is_active &&
+                                                                    "· Aktif"}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                {isSelected && (
-                                                    <Check className="w-3.5 h-3.5 text-[#1db954] shrink-0 ml-1.5" />
-                                                )}
-                                            </button>
-                                        );
-                                    })}
+                                                    {isSelected && (
+                                                        <Check className="w-3.5 h-3.5 text-[#1db954] shrink-0 ml-1.5" />
+                                                    )}
+                                                </button>
+                                            );
+                                        },
+                                    )}
                                 </div>
                             ) : (
                                 <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between">
                                     <span>
-                                        Şu anda açık bir Spotify cihazı algılanmadı. Bilgisayarınızda veya telefonunuzda Spotify uygulamasını açıp bir şarkı başlatın.
+                                        Şu anda açık bir Spotify cihazı
+                                        algılanmadı. Bilgisayarınızda veya
+                                        telefonunuzda Spotify uygulamasını açıp
+                                        bir şarkı başlatın.
                                     </span>
                                     <button
                                         onClick={handleRefreshDevices}
@@ -746,7 +819,8 @@ export function SettingsView({
                                 <div className="flex items-center gap-2">
                                     <Globe className="w-4 h-4 text-[#1db954]" />
                                     <span className="text-xs font-semibold text-white">
-                                        Özel Alan Adı Redirect URI (lir.anticvalley.com.tr)
+                                        Özel Alan Adı Redirect URI
+                                        (lir.anticvalley.com.tr)
                                     </span>
                                 </div>
                                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#1db954]/10 border border-[#1db954]/40 text-[#1db954]">
@@ -755,7 +829,8 @@ export function SettingsView({
                             </div>
 
                             <p className="text-xs text-zinc-300 leading-relaxed">
-                                Spotify Developer paneline eklenecek birincil callback adresiniz:
+                                Spotify Developer paneline eklenecek birincil
+                                callback adresiniz:
                             </p>
 
                             <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black border border-zinc-700 text-xs font-mono">
@@ -763,7 +838,9 @@ export function SettingsView({
                                     {primaryCustomUrl}
                                 </span>
                                 <button
-                                    onClick={() => handleCopy(primaryCustomUrl, "custom")}
+                                    onClick={() =>
+                                        handleCopy(primaryCustomUrl, "custom")
+                                    }
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-semibold shrink-0 transition-colors cursor-pointer"
                                 >
                                     {copiedIndex === "custom" ? (
@@ -785,7 +862,9 @@ export function SettingsView({
                         <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800/80 flex flex-col gap-3">
                             <div className="flex items-center gap-2 text-xs font-semibold text-white">
                                 <Key className="w-3.5 h-3.5 text-[#1db954]" />
-                                <span>Spotify Developer Dashboard Kurulumu</span>
+                                <span>
+                                    Spotify Developer Dashboard Kurulumu
+                                </span>
                             </div>
 
                             <ol className="text-xs text-zinc-400 flex flex-col gap-2 list-decimal list-inside leading-relaxed">
@@ -799,13 +878,26 @@ export function SettingsView({
                                         Spotify Developer Dashboard
                                         <ExternalLink className="w-3 h-3" />
                                     </a>{" "}
-                                    paneline giriş yapıp uygulamanızı seçin veya yeni bir app oluşturun.
+                                    paneline giriş yapıp uygulamanızı seçin veya
+                                    yeni bir app oluşturun.
                                 </li>
                                 <li>
-                                    Uygulama ayarlarındaki <strong>&quot;Redirect URIs&quot;</strong> bölümüne <code>https://lir.anticvalley.com.tr/auth/callback</code> adresini ekleyip kaydedin.
+                                    Uygulama ayarlarındaki{" "}
+                                    <strong>&quot;Redirect URIs&quot;</strong>{" "}
+                                    bölümüne{" "}
+                                    <code>
+                                        https://lir.anticvalley.com.tr/auth/callback
+                                    </code>{" "}
+                                    adresini ekleyip kaydedin.
                                 </li>
                                 <li>
-                                    Panelden aldığınız <strong>Client ID</strong> değerini aşağıdaki alana yapıştırıp <strong>&quot;Spotify ile Bağlan&quot;</strong> butonuna tıklayın.
+                                    Panelden aldığınız{" "}
+                                    <strong>Client ID</strong> değerini
+                                    aşağıdaki alana yapıştırıp{" "}
+                                    <strong>
+                                        &quot;Spotify ile Bağlan&quot;
+                                    </strong>{" "}
+                                    butonuna tıklayın.
                                 </li>
                             </ol>
                         </div>
@@ -814,7 +906,10 @@ export function SettingsView({
                         <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800/80 flex flex-col gap-2.5">
                             <div className="flex items-center gap-2 text-xs font-semibold text-white">
                                 <Server className="w-3.5 h-3.5 text-blue-400" />
-                                <span>Domaininizde (lir.anticvalley.com.tr) Yapılması Gerekenler:</span>
+                                <span>
+                                    Domaininizde (lir.anticvalley.com.tr)
+                                    Yapılması Gerekenler:
+                                </span>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs text-zinc-400 mt-1">
@@ -824,7 +919,10 @@ export function SettingsView({
                                         1. DNS Kaydı
                                     </strong>
                                     <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Domain DNS yönetiminizde <code>lir.anticvalley.com.tr</code> için CNAME kaydını bu uygulamanın sunucu adresine yönlendirin.
+                                        Domain DNS yönetiminizde{" "}
+                                        <code>lir.anticvalley.com.tr</code> için
+                                        CNAME kaydını bu uygulamanın sunucu
+                                        adresine yönlendirin.
                                     </p>
                                 </div>
 
@@ -834,7 +932,10 @@ export function SettingsView({
                                         2. SSL / HTTPS
                                     </strong>
                                     <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Spotify OAuth güvenliği için HTTPS zorunludur. Cloudflare veya Let&apos;s Encrypt ile SSL sertifikasını aktif edin.
+                                        Spotify OAuth güvenliği için HTTPS
+                                        zorunludur. Cloudflare veya Let&apos;s
+                                        Encrypt ile SSL sertifikasını aktif
+                                        edin.
                                     </p>
                                 </div>
 
@@ -844,7 +945,9 @@ export function SettingsView({
                                         3. Reverse Proxy
                                     </strong>
                                     <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Nginx veya Caddy kullanıyorsanız gelen istekleri port 3000&apos;e <code>proxy_pass</code> ile iletin.
+                                        Nginx veya Caddy kullanıyorsanız gelen
+                                        istekleri port 3000&apos;e{" "}
+                                        <code>proxy_pass</code> ile iletin.
                                     </p>
                                 </div>
                             </div>
@@ -854,12 +957,15 @@ export function SettingsView({
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium text-zinc-300">
-                                    Spotify Client ID <span className="text-rose-400">*</span>
+                                    Spotify Client ID{" "}
+                                    <span className="text-rose-400">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={clientIdInput}
-                                    onChange={(e) => setClientIdInput(e.target.value)}
+                                    onChange={(e) =>
+                                        setClientIdInput(e.target.value)
+                                    }
                                     placeholder="Spotify Developer Client ID"
                                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
                                 />
@@ -867,12 +973,17 @@ export function SettingsView({
 
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium text-zinc-300">
-                                    Spotify Client Secret <span className="text-zinc-500">(İsteğe bağlı)</span>
+                                    Spotify Client Secret{" "}
+                                    <span className="text-zinc-500">
+                                        (İsteğe bağlı)
+                                    </span>
                                 </label>
                                 <input
                                     type="password"
                                     value={clientSecretInput}
-                                    onChange={(e) => setClientSecretInput(e.target.value)}
+                                    onChange={(e) =>
+                                        setClientSecretInput(e.target.value)
+                                    }
                                     placeholder="••••••••••••••••••••••••••••••••"
                                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
                                 />
@@ -885,7 +996,9 @@ export function SettingsView({
                                 <input
                                     type="text"
                                     value={redirectUriInput}
-                                    onChange={(e) => setRedirectUriInput(e.target.value)}
+                                    onChange={(e) =>
+                                        setRedirectUriInput(e.target.value)
+                                    }
                                     placeholder="https://lir.anticvalley.com.tr/auth/callback"
                                     className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
                                 />
@@ -907,7 +1020,11 @@ export function SettingsView({
                                 className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#1db954] hover:bg-[#1ed760] disabled:opacity-50 text-black text-xs font-semibold transition-all cursor-pointer"
                             >
                                 <Sparkles className="w-3.5 h-3.5 fill-current" />
-                                <span>{isConnecting ? "Bağlanılıyor..." : "Spotify ile Bağlan"}</span>
+                                <span>
+                                    {isConnecting
+                                        ? "Bağlanılıyor..."
+                                        : "Spotify ile Bağlan"}
+                                </span>
                             </button>
                         </div>
                     </div>
@@ -915,10 +1032,12 @@ export function SettingsView({
             </div>
 
             {/* 2. GENERAL SOUNDPAD AUDIO SETTINGS */}
-            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
                     <Sliders className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-xs font-semibold text-white">Genel Soundpad Ayarları</h2>
+                    <h2 className="text-xs font-semibold text-white">
+                        Genel Soundpad Ayarları
+                    </h2>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -962,9 +1081,12 @@ export function SettingsView({
 
                     {/* Playback Mode */}
                     <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-                        <label className="text-xs font-medium text-white">Çalma Modu</label>
+                        <label className="text-xs font-medium text-white">
+                            Çalma Modu
+                        </label>
                         <p className="text-[11px] text-zinc-500">
-                            Yeni bir ses veya Spotify şarkısı tetiklendiğinde önceki sesin davranışı:
+                            Yeni bir ses veya Spotify şarkısı tetiklendiğinde
+                            önceki sesin davranışı:
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                             <button
@@ -1003,7 +1125,9 @@ export function SettingsView({
                     {/* Master Volume */}
                     <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-white">Genel Ses Seviyesi</label>
+                            <label className="text-xs font-medium text-white">
+                                Genel Ses Seviyesi
+                            </label>
                             <span className="text-xs font-mono text-zinc-300">
                                 %{Math.round(routingConfig.masterVolume * 100)}
                             </span>
@@ -1023,7 +1147,8 @@ export function SettingsView({
                             className="w-full mt-2 accent-white cursor-pointer"
                         />
                         <p className="text-[11px] text-zinc-500">
-                            Tüm yerel ses efektleri ve önizlemeler bu seviyede çalınır.
+                            Tüm yerel ses efektleri ve önizlemeler bu seviyede
+                            çalınır.
                         </p>
                     </div>
                 </div>
@@ -1031,9 +1156,12 @@ export function SettingsView({
                 {/* Reset to Defaults */}
                 <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
                     <div>
-                        <p className="text-xs font-medium text-white">Fabrika Ayarlarına Sıfırla</p>
+                        <p className="text-xs font-medium text-white">
+                            Fabrika Ayarlarına Sıfırla
+                        </p>
                         <p className="text-[11px] text-zinc-500">
-                            Tüm sesleri ve kısayolları başlangıç durumuna döndürür.
+                            Tüm sesleri ve kısayolları başlangıç durumuna
+                            döndürür.
                         </p>
                     </div>
                     <button
@@ -1045,7 +1173,7 @@ export function SettingsView({
                 </div>
             </div>
 
-            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
                     <Bot className="w-4 h-4 text-indigo-400" />
                     <h2 className="text-xs font-semibold text-white">
@@ -1112,9 +1240,116 @@ export function SettingsView({
                         </button>
                     </div>
                 </div>
+
+                <footer className="mt-2 rounded-3xl border border-zinc-800/90 bg-[#141418] p-5 sm:p-6">
+                    <div className="flex flex-col gap-5">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <a
+                                href="https://labs.anticvalley.com.tr/"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-3"
+                            >
+                                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-[#17171c] p-2">
+                                    <img
+                                        src={`${ANTIC_VALLEY_ASSETS}/anticvalley.png`}
+                                        alt="Antic Valley"
+                                        className="h-full w-full object-contain"
+                                    />
+                                </span>
+                                <span>
+                                    <span className="block text-sm font-semibold text-zinc-100">
+                                        Antic Valley
+                                    </span>
+                                    <span className="block text-[11px] text-zinc-500">
+                                        Antic Valley tarafından geliştirildi.
+                                    </span>
+                                </span>
+                            </a>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                <a
+                                    href="https://labs.anticvalley.com.tr/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-2 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                >
+                                    <FlaskConical className="h-3.5 w-3.5" />
+                                    Projeler
+                                </a>
+                                <a
+                                    href="https://labs.anticvalley.com.tr/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-2 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                >
+                                    <History className="h-3.5 w-3.5" />
+                                    Günlük gelişmeler
+                                </a>
+                                <a
+                                    href="https://github.com/SiberizmBey"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label="Antic Valley GitHub"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                >
+                                    <Github className="h-3.5 w-3.5" />
+                                </a>
+                                <a
+                                    href="https://instagram.com/ahmetinzmsec"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label="Antic Valley Instagram"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                                >
+                                    <Instagram className="h-3.5 w-3.5" />
+                                </a>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="mb-2.5 text-[10px] font-semibold tracking-wider text-zinc-500">
+                                EKOSİSTEMİMİZLE TANIŞIN
+                            </h3>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                {ANTIC_VALLEY_PROJECTS.map((project) => (
+                                    <a
+                                        key={project.name}
+                                        href="https://labs.anticvalley.com.tr/"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex min-w-0 items-center gap-3 rounded-2xl border border-zinc-800/90 bg-[#151519] p-2.5 transition-colors hover:border-zinc-700 hover:bg-zinc-900/80"
+                                    >
+                                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-[#17171c] p-2">
+                                            <img
+                                                src={`${ANTIC_VALLEY_ASSETS}/${project.image}`}
+                                                alt=""
+                                                className="h-full w-full object-contain"
+                                                loading="lazy"
+                                            />
+                                        </span>
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-xs font-semibold text-zinc-200">
+                                                {project.name}
+                                            </span>
+                                            <span className="mt-0.5 block truncate text-[10px] text-zinc-500">
+                                                {project.description}
+                                            </span>
+                                        </span>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+
+                        <p className="text-center text-[10px] text-zinc-500">
+                            © {new Date().getFullYear()} Antic Valley - Tüm
+                            Hakları Saklıdır.
+                        </p>
+                    </div>
+                </footer>
             </div>
 
-            <div className="app-card rounded-xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
+            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
                     <RefreshCw className="w-4 h-4 text-zinc-400" />
                     <h2 className="text-xs font-semibold text-white">
@@ -1127,7 +1362,11 @@ export function SettingsView({
                             Lir güncellemelerini kontrol et
                         </p>
                         <p
-                            role={updateCheckStatus === "error" ? "alert" : "status"}
+                            role={
+                                updateCheckStatus === "error"
+                                    ? "alert"
+                                    : "status"
+                            }
                             className={`mt-1 text-[11px] ${
                                 updateCheckStatus === "error"
                                     ? "text-amber-300"
@@ -1164,7 +1403,9 @@ export function SettingsView({
                     </div>
                     <button
                         onClick={() => void onCheckForUpdates()}
-                        disabled={!isElectron || updateCheckStatus === "checking"}
+                        disabled={
+                            !isElectron || updateCheckStatus === "checking"
+                        }
                         className="flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <RefreshCw

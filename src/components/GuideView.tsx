@@ -49,7 +49,7 @@ export function GuideView() {
 
             {/* Architecture Deep Dive */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
+                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs font-semibold text-white">
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
                         <span>Global Shortcuts (Arka Plan Kancası)</span>
@@ -64,7 +64,7 @@ export function GuideView() {
                     </p>
                 </div>
 
-                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
+                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-xs font-semibold text-white">
                         <Sliders className="w-4 h-4 text-zinc-400" />
                         <span>Sanal Ses Kablosu & Dual Output</span>
@@ -84,7 +84,7 @@ export function GuideView() {
             </div>
 
             {/* Discord / Game Setup Steps */}
-            <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <h2 className="text-xs font-semibold text-white">
                     Discord & Oyun Ayarları
                 </h2>

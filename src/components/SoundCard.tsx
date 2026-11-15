@@ -50,7 +50,7 @@ export function SoundCard({
   return (
     <div
       onMouseLeave={() => setShowMenu(false)}
-      className={`app-card group relative flex flex-col justify-between p-3.5 rounded-xl transition-all border ${
+      className={`app-card group relative flex flex-col justify-between p-3.5 rounded-2xl transition-all border ${
         isPlaying
           ? isSpotify
             ? 'bg-[#0f1f14] border-[#1db954]/70'

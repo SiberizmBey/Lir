@@ -1,4 +1,3 @@
-import lirIcon from "../assets/icon.png";
 import {
     Volume2,
     Sliders,
@@ -107,7 +106,7 @@ export function Sidebar({
                             {/* Lir App Logo */}
                             <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-zinc-800/80 bg-zinc-950">
                                 <img
-                                    src={lirIcon}
+                                    src={`${import.meta.env.BASE_URL}assets/img/icon.png?v=1.3`}
                                     alt="Lir Logo"
                                     className="w-full h-full object-contain p-0.5"
                                 />
@@ -118,10 +117,6 @@ export function Sidebar({
                                 </span>
                             </div>
                         </div>
-
-                        <span className="text-[10px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 rounded">
-                            v1.0.4
-                        </span>
                     </div>
 
                     {/* Navigation list */}

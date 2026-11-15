@@ -262,7 +262,7 @@ export function AddSoundModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-xl bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-xl bg-[#0a0a0a] border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
         {/* Header & Mode Switcher */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
           <div className="flex items-center gap-1.5 p-0.5 rounded-lg bg-zinc-950 border border-zinc-800">

@@ -220,7 +220,7 @@ export function AudioRoutingView({
             </div>
 
             {/* Pipeline Diagram */}
-            <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
                     {/* Node 1: Sources */}
                     <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col items-center text-center gap-1.5 relative">
@@ -292,7 +292,7 @@ export function AudioRoutingView({
             {/* Main Grid: Device Configuration */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Output Routing Box */}
-                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Radio className="w-3.5 h-3.5 text-zinc-400" />
@@ -436,7 +436,7 @@ export function AudioRoutingView({
                 </div>
 
                 {/* Microphone Pass-Through Box (CRITICAL FIX FOR USER'S VOICE CUTTING OFF) */}
-                <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Mic className="w-3.5 h-3.5 text-zinc-400" />
@@ -710,7 +710,7 @@ export function AudioRoutingView({
             </div>
 
             {/* Discord Quick Configuration Guide */}
-            <div className="app-card p-4 rounded-xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <HelpCircle className="w-4 h-4 text-zinc-400" />
@@ -724,7 +724,7 @@ export function AudioRoutingView({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-zinc-400">
-                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             1. Lir Ayarları
                         </span>
@@ -735,7 +735,7 @@ export function AudioRoutingView({
                         </p>
                     </div>
 
-                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             2. Discord Ayarı (Yankı & Bozuk Sesi Önleme)
                         </span>
@@ -747,7 +747,7 @@ export function AudioRoutingView({
                         </p>
                     </div>
 
-                    <div className="app-card p-3 rounded-lg bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
+                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
                         <span className="font-mono text-zinc-300 font-bold">
                             3. Yankı & Cızırtı Çözümleri
                         </span>

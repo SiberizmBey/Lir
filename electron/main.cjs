@@ -162,9 +162,7 @@ function registerSubtitleOverlayShortcut() {
         setSubtitleOverlayVisible(!subtitleOverlayVisible);
     });
     if (!registered) {
-        console.warn(
-            "Altyazı penceresi kısayolu kaydedilemedi: Ctrl+Shift+Y",
-        );
+        console.warn("Altyazı penceresi kısayolu kaydedilemedi: Ctrl+Shift+Y");
     }
 }
 
@@ -527,8 +525,8 @@ app.whenReady().then(() => {
             !mainWindow ||
             event.sender !== mainWindow.webContents ||
             !settings ||
-            !["x", "y", "width", "height", "fontSize"].every(
-                (key) => Number.isFinite(settings[key]),
+            !["x", "y", "width", "height", "fontSize"].every((key) =>
+                Number.isFinite(settings[key]),
             )
         ) {
             return false;

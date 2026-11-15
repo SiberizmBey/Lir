@@ -926,7 +926,7 @@ export default function App() {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="app-card flex-1 flex flex-col items-center justify-center p-12 text-center rounded-xl bg-[#0a0a0a] border border-zinc-800/80 my-6">
+                                <div className="app-card flex-1 flex flex-col items-center justify-center p-12 text-center rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 my-6">
                                     <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-2.5 text-zinc-400">
                                         <Music className="w-5 h-5" />
                                     </div>
@@ -1109,7 +1109,7 @@ export default function App() {
 
             {isResetConfirmOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-sm bg-[#0a0a0a] border border-zinc-800 rounded-xl p-5 flex flex-col gap-4">
+                    <div className="w-full max-w-sm bg-[#0a0a0a] border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
                         <div className="flex items-center gap-2 text-rose-400">
                             <RotateCcw className="w-4 h-4" />
                             <h3 className="text-xs font-semibold text-white">

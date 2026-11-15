@@ -793,7 +793,7 @@ export function SubtitleTranslatorView() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">
-                <section className="app-card flex min-h-72 flex-col gap-3 rounded-xl border border-zinc-800 bg-[#090909] p-4">
+                <section className="app-card flex min-h-72 flex-col gap-3 rounded-2xl border border-zinc-800 bg-[#090909] p-4">
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-xs font-medium text-zinc-200">
                             <Monitor className="h-4 w-4 text-zinc-400" />
@@ -851,7 +851,7 @@ export function SubtitleTranslatorView() {
                     )}
                 </section>
 
-                <section className="app-card flex flex-col gap-4 rounded-xl border border-zinc-800 bg-[#090909] p-4">
+                <section className="app-card flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-[#090909] p-4">
                     <div className="flex flex-col gap-1">
                         <label
                             htmlFor="subtitle-source-language"
