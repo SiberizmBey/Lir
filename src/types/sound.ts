@@ -1,5 +1,7 @@
-export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel' | 'Spotify';
-export type AppTheme = 'amoled' | 'dark' | 'light';
+export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel';
+export type ResolvedTheme = 'amoled' | 'dark' | 'light';
+export type AppTheme = 'system' | ResolvedTheme;
+export type UIStyle = 'gama' | 'win11' | 'win10';
 
 export interface AppearanceSettings {
   backgroundImage: string | null;
@@ -23,58 +25,55 @@ export interface SoundItem {
   dataUrl?: string; // base64 or object URL or generated identifier
   synthPreset?: string; // name of synthesizer preset if generated
   addedAt: number;
-  // Spotify integration fields
-  spotifyUri?: string;
-  spotifyTrackId?: string;
-  spotifyArtist?: string;
-  spotifyAlbumCover?: string;
-  spotifyPreviewUrl?: string;
 }
 
-export interface SpotifyTrack {
+export type VoicePresetId =
+  | 'natural'
+  | 'studio'
+  | 'anime'
+  | 'reporter'
+  | 'radio'
+  | 'phone'
+  | 'megaphone'
+  | 'robot'
+  | 'cave'
+  | 'demon';
+
+export interface VoiceChangerConfig {
+  enabled: boolean;
+  preset: VoicePresetId;
+  pitchSemitones: number;
+  highpassHz: number;
+  lowpassHz: number;
+  bassBoostDb: number;
+  clarityBoostDb: number;
+  distortionAmount: number;
+  ringModHz: number;
+  ringModMix: number;
+  echoDelayMs: number;
+  echoFeedback: number;
+  echoMix: number;
+  reverbMix: number;
+  wetMix: number;
+  selfMonitor: boolean;
+  presetHotkeys?: Partial<Record<VoicePresetId, string>>;
+  toggleHotkey?: string;
+}
+
+export type HotkeyTarget =
+  | { kind: 'sound'; id: string; title: string; hotkey: string }
+  | { kind: 'voice-preset'; presetId: VoicePresetId; title: string; hotkey: string }
+  | { kind: 'voice-toggle'; title: string; hotkey: string };
+
+export interface SavedRecording {
   id: string;
-  name: string;
-  uri: string;
-  duration_ms: number;
-  preview_url: string | null;
-  artists: Array<{ name: string; id: string }>;
-  album: {
-    name: string;
-    images: Array<{ url: string; height?: number; width?: number }>;
-  };
-}
-
-export interface SpotifyUser {
-  id: string;
-  display_name: string;
-  email?: string;
-  product?: string; // 'premium' | 'free' | 'open'
-  images?: Array<{ url: string }>;
-  country?: string;
-}
-
-export interface SpotifyDevice {
-  id: string;
-  name: string;
-  type: string; // 'Computer' | 'Smartphone' | 'Speaker' etc.
-  is_active: boolean;
-  is_restricted: boolean;
-  volume_percent: number | null;
-}
-
-export interface SpotifyAuthState {
-  isConnected: boolean;
-  accessToken: string | null;
-  refreshToken: string | null;
-  expiresAt: number | null;
-  user: SpotifyUser | null;
-  devices: SpotifyDevice[];
-  activeDeviceId: string | null;
-  clientId: string;
-  clientSecret: string;
-  redirectUri?: string;
-  preferConnect: boolean;
-  error: string | null;
+  title: string;
+  hotkey: string;
+  duration: number;
+  createdAt: number;
+  dataUrl: string;
+  effectName?: string;
+  addedToSoundboard?: boolean;
 }
 
 export interface AudioRoutingConfig {
@@ -92,13 +91,6 @@ export interface AudioRoutingConfig {
   playbackMode: 'overlap' | 'cutoff'; // Play multiple sounds together or stop previous
   stopAllHotkey: string;
   discordRpcEnabled: boolean;
-}
-
-export interface UpdateInfo {
-  version: string;
-  title: string;
-  notes: string;
-  url: string;
 }
 
 export interface DiscordActivity {
@@ -150,8 +142,6 @@ export interface ElectronAPI {
   isMaximized: () => Promise<boolean>;
   getPlatform: () => string;
   getAppVersion: () => Promise<string>;
-  checkForUpdates: () => Promise<UpdateInfo | null>;
-  openUpdateRelease: (url: string) => void;
   openExternal: (url: string) => void;
   setSubtitleOverlayVisible: (visible: boolean) => Promise<boolean>;
   setSubtitleOverlaySettings: (settings: SubtitleOverlaySettings) => Promise<boolean>;

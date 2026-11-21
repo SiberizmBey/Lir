@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { 
-  Play, 
-  Square, 
-  Repeat, 
-  Heart, 
-  Trash2, 
-  Keyboard, 
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Play,
+  Square,
+  Repeat,
+  Heart,
+  Trash2,
+  Keyboard,
   MoreHorizontal,
   Volume2,
-  Music2,
-  ExternalLink
+  AudioLines,
 } from 'lucide-react';
 import { SoundItem } from '../types/sound';
 
@@ -34,11 +34,9 @@ export function SoundCard({
   onToggleLoop,
   onVolumeChange,
   onDelete,
-  onOpenHotkeyModal
+  onOpenHotkeyModal,
 }: SoundCardProps) {
   const [showMenu, setShowMenu] = useState(false);
-
-  const isSpotify = sound.category === 'Spotify' || Boolean(sound.spotifyUri);
 
   const formatDuration = (seconds: number) => {
     if (!seconds || seconds <= 0) return '0:01';
@@ -48,168 +46,206 @@ export function SoundCard({
   };
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.92, y: -6 }}
+      whileHover={{ y: -2 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
       onMouseLeave={() => setShowMenu(false)}
-      className={`app-card group relative flex flex-col justify-between p-3.5 rounded-2xl transition-all border ${
+      className={`app-card ui-card card-ambient-glow group relative flex flex-col justify-between gap-3.5 p-4 transition-colors border ${
         isPlaying
-          ? isSpotify
-            ? 'bg-[#0f1f14] border-[#1db954]/70'
-            : 'bg-[#121212] border-zinc-600'
-          : 'bg-[#0a0a0a] hover:bg-[#111111] border-zinc-800/80 hover:border-zinc-700'
+          ? 'border-[var(--accent)] ring-1 ring-[var(--accent-border)]'
+          : 'border-[var(--border-card)] hover:border-[var(--border-hover)]'
       }`}
     >
-      {/* Top row: Hotkey Badge & Quick Actions */}
-      <div className="flex items-center justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-1.5">
-          {/* Hotkey Kbd badge */}
-          <button
-            onClick={() => onOpenHotkeyModal(sound)}
-            title="Kısayolu Değiştir"
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono font-medium transition-colors cursor-pointer ${
-              isSpotify
-                ? 'border-[#1db954]/40 bg-zinc-950 text-[#1db954] hover:border-[#1db954]'
-                : 'border-zinc-700 bg-zinc-900 hover:border-zinc-500 text-zinc-300'
+      {/* Top Row: Icon + Title + Actions */}
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <motion.div
+            animate={isPlaying ? { scale: [1, 1.07, 1] } : { scale: 1 }}
+            transition={
+              isPlaying
+                ? { repeat: Infinity, duration: 1.4, ease: 'easeInOut' }
+                : { duration: 0.2 }
+            }
+            className={`w-10 h-10 ui-input border flex items-center justify-center shrink-0 transition-colors ${
+              isPlaying
+                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]'
+                : 'bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] group-hover:text-[var(--accent-text)]'
             }`}
           >
-            <kbd>{sound.hotkey || 'Tuş Ata'}</kbd>
-          </button>
+            <AudioLines className="w-5 h-5" />
+          </motion.div>
 
-          {isSpotify && (
-            <span
-              title="Spotify Şarkısı"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#1db954]/10 border border-[#1db954]/30 text-[#1db954]"
+          <div className="min-w-0">
+            <h3
+              className="text-sm font-semibold text-[var(--text-primary)] truncate"
+              title={sound.title}
             >
-              <Music2 className="w-2.5 h-2.5" />
-              <span>Spotify</span>
-            </span>
-          )}
+              {sound.title}
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
+              {sound.category}
+            </p>
+          </div>
         </div>
 
-        {/* Action icons */}
-        <div className="flex items-center gap-0.5">
-          <button
+        {/* Quick Action Icons */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.82 }}
             onClick={() => onToggleFavorite(sound.id)}
             title={sound.isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
-            className={`p-1.5 rounded-md hover:bg-zinc-900 transition-colors ${
-              sound.isFavorite ? 'text-rose-400' : 'text-zinc-500 hover:text-zinc-300'
+            className={`p-1.5 ui-control hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer ${
+              sound.isFavorite
+                ? 'text-rose-400'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <Heart className={`w-3.5 h-3.5 ${sound.isFavorite ? 'fill-current' : ''}`} />
-          </button>
+            <Heart className={`w-4 h-4 ${sound.isFavorite ? 'fill-current' : ''}`} />
+          </motion.button>
 
-          {!isSpotify && (
-            <button
-              onClick={() => onToggleLoop(sound.id)}
-              title={sound.loop ? 'Döngü Açık' : 'Döngü Kapalı'}
-              className={`p-1.5 rounded-md hover:bg-zinc-900 transition-colors ${
-                sound.loop ? 'text-white bg-zinc-900' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              <Repeat className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.82, rotate: 90 }}
+            onClick={() => onToggleLoop(sound.id)}
+            title={sound.loop ? 'Döngü Açık' : 'Döngü Kapalı'}
+            className={`p-1.5 ui-control hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer ${
+              sound.loop
+                ? 'text-[var(--accent-text)] bg-[var(--accent-subtle)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Repeat className="w-4 h-4" />
+          </motion.button>
 
           <div className="relative">
-            <button
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.85 }}
               onClick={() => setShowMenu(!showMenu)}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors"
+              aria-label="Ses menüsü"
+              className="p-1.5 ui-control text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
             >
-              <MoreHorizontal className="w-3.5 h-3.5" />
-            </button>
+              <MoreHorizontal className="w-4 h-4" />
+            </motion.button>
 
-            {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-36 py-1 bg-[#121212] border border-zinc-800 rounded-md z-30">
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    onOpenHotkeyModal(sound);
-                  }}
-                  className="w-full px-2.5 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 flex items-center gap-2"
+            <AnimatePresence>
+              {showMenu && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.92, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                  transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute right-0 top-full mt-1 w-40 py-1.5 bg-[var(--bg-modal)] border border-[var(--border-hover)] ui-inner z-30 origin-top-right"
                 >
-                  <Keyboard className="w-3 h-3 text-zinc-400" />
-                  <span>Kısayol Ata</span>
-                </button>
-
-                {sound.spotifyUri && (
                   <button
+                    type="button"
                     onClick={() => {
                       setShowMenu(false);
-                      window.open(sound.spotifyUri, '_blank');
+                      onOpenHotkeyModal(sound);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-xs text-[#1db954] hover:bg-zinc-800 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] flex items-center gap-2 cursor-pointer"
                   >
-                    <ExternalLink className="w-3 h-3" />
-                    <span>Spotify&apos;da Aç</span>
+                    <Keyboard className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                    <span>Kısayol Ata</span>
                   </button>
-                )}
 
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    onDelete(sound.id);
-                  }}
-                  className="w-full px-2.5 py-1.5 text-left text-xs text-rose-400 hover:bg-zinc-800 flex items-center gap-2"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Sesi Sil</span>
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onDelete(sound.id);
+                    }}
+                    className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-[var(--bg-card-hover)] flex items-center gap-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Sesi Sil</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
 
-      {/* Middle row: Album cover / Title & Metadata */}
-      <div className="flex items-center gap-2.5 mb-3">
-        {sound.spotifyAlbumCover ? (
-          <img
-            src={sound.spotifyAlbumCover}
-            alt={sound.title}
-            className="w-10 h-10 rounded-md object-cover border border-zinc-800 shrink-0"
-          />
-        ) : isSpotify ? (
-          <div className="w-10 h-10 rounded-md bg-[#1db954]/10 border border-[#1db954]/20 flex items-center justify-center shrink-0 text-[#1db954]">
-            <Music2 className="w-5 h-5" />
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <h3
-            className="text-xs font-medium text-zinc-200 truncate group-hover:text-white transition-colors"
-            title={sound.title}
+      {/* Middle Inner Info Box */}
+      <div className="ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] px-3.5 py-2.5 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.94 }}
+            onClick={() => onOpenHotkeyModal(sound)}
+            title="Kısayolu Değiştir"
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 ui-control border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)] text-xs font-mono font-semibold hover:brightness-110 transition-all cursor-pointer"
           >
-            {sound.title}
-          </h3>
+            <Keyboard className="w-3 h-3" />
+            <kbd>{sound.hotkey || 'Tuş Ata'}</kbd>
+          </motion.button>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 truncate">
-            {sound.spotifyArtist ? (
-              <span className="text-zinc-400 truncate">{sound.spotifyArtist}</span>
-            ) : (
-              <span>{sound.category}</span>
-            )}
-            <span aria-hidden="true" className="text-zinc-700">·</span>
-            <span className="font-mono tabular-nums">{formatDuration(sound.duration)}</span>
+          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] font-mono tabular-nums">
             {sound.loop && (
-              <>
-                <span aria-hidden="true" className="text-zinc-700">·</span>
-                <span className="text-zinc-300">Döngü</span>
-              </>
+              <span className="text-[11px] font-sans font-medium text-[var(--accent-text)]">
+                Döngü
+              </span>
             )}
+            <span>{formatDuration(sound.duration)}</span>
           </div>
+        </div>
+
+        {/* Volume Slider */}
+        <div className="flex items-center gap-2.5">
+          <Volume2 className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={sound.volume}
+            onChange={(e) => onVolumeChange(sound.id, parseFloat(e.target.value))}
+            className="w-full"
+            title={`Ses Seviyesi: %${Math.round(sound.volume * 100)}`}
+          />
+          <span className="text-xs font-mono tabular-nums text-[var(--text-secondary)] w-9 text-right shrink-0">
+            %{Math.round(sound.volume * 100)}
+          </span>
         </div>
       </div>
 
-      {/* Bottom row: Play/Stop & Volume */}
-      <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-3">
-        {/* Play/Stop Button */}
-        <button
+      {/* Bottom Footer Row: Status + Play/Stop Pill */}
+      <div className="flex items-center justify-between gap-3 pt-0.5">
+        <div className="flex items-center gap-1.5 text-xs font-medium">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isPlaying
+                ? 'bg-[var(--accent)] animate-pulse'
+                : 'bg-[var(--accent)] opacity-60'
+            }`}
+          />
+          <span
+            className={
+              isPlaying
+                ? 'text-[var(--accent-text)] font-semibold'
+                : 'text-[var(--text-secondary)]'
+            }
+          >
+            {isPlaying ? 'Çalınıyor' : 'Hazır'}
+          </span>
+        </div>
+
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: 'spring', stiffness: 460, damping: 28 }}
           onClick={() => (isPlaying ? onStop(sound.id) : onPlay(sound))}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-4 py-1.5 ui-control text-xs font-semibold transition-colors cursor-pointer ${
             isPlaying
               ? 'bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200'
-              : isSpotify
-                ? 'bg-[#1db954] hover:bg-[#1ed760] text-black'
-                : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-white'
+              : 'btn-accent'
           }`}
         >
           {isPlaying ? (
@@ -220,29 +256,11 @@ export function SoundCard({
           ) : (
             <>
               <Play className="w-3 h-3 fill-current" />
-              <span>{isSpotify ? 'Spotify\'da Çal' : 'Çal'}</span>
+              <span>Çal</span>
             </>
           )}
-        </button>
-
-        {/* Volume */}
-        <div className="flex items-center gap-1.5">
-          <Volume2 className="w-3 h-3 text-zinc-600" />
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={sound.volume}
-            onChange={(e) => onVolumeChange(sound.id, parseFloat(e.target.value))}
-            className="w-14"
-            title={`Ses Seviyesi: %${Math.round(sound.volume * 100)}`}
-          />
-          <span className="text-[10px] font-mono tabular-nums text-zinc-500 w-5 text-right">
-            %{Math.round(sound.volume * 100)}
-          </span>
-        </div>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 }

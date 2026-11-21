@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
-import { handleSpotifyApi } from './server/spotifyApi';
+import { handleSpotifyApi } from './server/spotifyApi.ts';
 
 dotenv.config();
 

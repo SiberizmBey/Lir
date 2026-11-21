@@ -22,6 +22,10 @@ export function AudioVisualizer({ isPlaying, height = 24 }: AudioVisualizerProps
       const h = canvas.height;
       ctx.clearRect(0, 0, width, h);
 
+      const computedStyle = getComputedStyle(document.documentElement);
+      const accentColor = computedStyle.getPropertyValue('--accent').trim() || '#22c55e';
+      const mutedColor = computedStyle.getPropertyValue('--text-muted').trim() || '#71717a';
+
       const freqData = audioEngine.getAnalyserData();
       const barCount = 14;
       const barWidth = 2;
@@ -34,15 +38,16 @@ export function AudioVisualizer({ isPlaying, height = 24 }: AudioVisualizerProps
           const raw = freqData[i % freqData.length];
           barHeight = Math.max(3, (raw / 255) * h);
         } else {
-          barHeight = 2 + Math.sin(Date.now() * 0.004 + i * 0.5) * 1;
+          barHeight = 2.5 + Math.sin(Date.now() * 0.004 + i * 0.5) * 1.2;
         }
 
         const y = h - barHeight;
 
-        // Vercel monochrome precision styling
-        ctx.fillStyle = isPlaying ? '#ffffff' : '#3f3f46';
+        ctx.fillStyle = isPlaying ? accentColor : mutedColor;
+        ctx.globalAlpha = isPlaying ? 1 : 0.45;
         ctx.fillRect(x, y, barWidth, barHeight);
       }
+      ctx.globalAlpha = 1;
 
       animId = requestAnimationFrame(render);
     };
@@ -57,7 +62,7 @@ export function AudioVisualizer({ isPlaying, height = 24 }: AudioVisualizerProps
   return (
     <canvas
       ref={canvasRef}
-      width={64}
+      width={60}
       height={height}
       className="shrink-0 pointer-events-none"
     />

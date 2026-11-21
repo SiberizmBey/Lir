@@ -1,45 +1,36 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
-    Check,
-    Copy,
-    ExternalLink,
-    Music2,
     RefreshCw,
     Sliders,
-    Volume2,
     AlertCircle,
-    Laptop,
-    Smartphone,
-    Speaker,
-    Radio,
-    Play,
-    Square,
-    LogOut,
-    Key,
-    Shield,
-    Sparkles,
-    Globe,
-    HelpCircle,
-    Server,
     Bot,
     Image as ImageIcon,
     Upload,
     Trash2,
-    Github,
-    Instagram,
-    FlaskConical,
-    History,
+    Settings,
+    Palette,
+    Layers,
+    AppWindow,
+    Square,
+    Check,
+    Monitor,
+    Sparkles,
+    Moon,
+    Sun,
 } from "lucide-react";
 import {
     AudioRoutingConfig,
     AppearanceSettings,
     AppTheme,
+    UIStyle,
     DiscordStatus,
-    SpotifyAuthState,
-    SpotifyDevice,
-    UpdateInfo,
 } from "../types/sound";
-import { spotifyService } from "../utils/spotifyService";
+import {
+    ACCENT_PRESETS,
+    DEFAULT_ACCENT_COLOR,
+    normalizeHexColor,
+} from "../utils/accentColors";
 
 interface SettingsViewProps {
     routingConfig: AudioRoutingConfig;
@@ -49,40 +40,19 @@ interface SettingsViewProps {
     isElectron: boolean;
     discordStatus: DiscordStatus;
     onReconnectDiscord: () => Promise<void>;
-    updateInfo: UpdateInfo | null;
-    updateCheckStatus: "idle" | "checking" | "error" | "current" | "available";
-    onCheckForUpdates: () => Promise<void>;
     theme: AppTheme;
+    systemPrefersDark: boolean;
     onThemeChange: (theme: AppTheme) => void;
+    accentColor: string;
+    onAccentColorChange: (color: string) => void;
+    uiStyle: UIStyle;
+    onUiStyleChange: (style: UIStyle) => void;
     appearance: AppearanceSettings;
     onAppearanceChange: (appearance: AppearanceSettings) => Promise<boolean>;
 }
 
 const MAX_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_BACKGROUND_DATA_SIZE = 1.5 * 1024 * 1024;
-const ANTIC_VALLEY_ASSETS = "https://labs.anticvalley.com.tr/assets/img";
-const ANTIC_VALLEY_PROJECTS = [
-    {
-        name: "Koza",
-        description: "Güvenli kasa ve parola yönetimi",
-        image: "koza.png",
-    },
-    {
-        name: "Kirpi",
-        description: "ERP & MES Platformu",
-        image: "kirpi.png",
-    },
-    {
-        name: "Kirpi: SG",
-        description: "Endüstriyel Akıllı Üretim",
-        image: "kirpifab.png",
-    },
-    {
-        name: "Yonga (Eski Adıyla: MFGI)",
-        description: "Operasyonel Altyapı",
-        image: "mfgi.png",
-    },
-];
 
 async function prepareBackgroundImage(file: File): Promise<string> {
     if (!file.type.startsWith("image/")) {
@@ -153,31 +123,16 @@ export function SettingsView({
     isElectron,
     discordStatus,
     onReconnectDiscord,
-    updateInfo,
-    updateCheckStatus,
-    onCheckForUpdates,
     theme,
+    systemPrefersDark,
     onThemeChange,
+    accentColor,
+    onAccentColorChange,
+    uiStyle,
+    onUiStyleChange,
     appearance,
     onAppearanceChange,
 }: SettingsViewProps) {
-    const [spotifyState, setSpotifyState] = useState<SpotifyAuthState>(() =>
-        spotifyService.getState(),
-    );
-    const [clientIdInput, setClientIdInput] = useState(
-        spotifyState.clientId || "",
-    );
-    const [clientSecretInput, setClientSecretInput] = useState(
-        spotifyState.clientSecret || "",
-    );
-    const [redirectUriInput, setRedirectUriInput] = useState(
-        spotifyState.redirectUri ||
-            "https://lir.anticvalley.com.tr/auth/callback",
-    );
-    const [isConnecting, setIsConnecting] = useState(false);
-    const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
-    const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
-    const [testPlayStatus, setTestPlayStatus] = useState<string | null>(null);
     const [feedbackMessage, setFeedbackMessage] = useState<{
         type: "success" | "error" | "info";
         text: string;
@@ -274,213 +229,393 @@ export function SettingsView({
         }
     };
 
-    // Synchronize spotify state
-    useEffect(() => {
-        const unsub = spotifyService.subscribe((newState) => {
-            setSpotifyState(newState);
-            if (newState.clientId && !clientIdInput) {
-                setClientIdInput(newState.clientId);
-            }
-            if (newState.clientSecret && !clientSecretInput) {
-                setClientSecretInput(newState.clientSecret);
-            }
-            if (newState.redirectUri) {
-                setRedirectUriInput(newState.redirectUri);
-            }
-        });
-        return () => unsub();
-    }, []);
+    const designLanguages: Array<{
+        id: UIStyle;
+        title: string;
+        description: string;
+        icon: typeof Layers;
+        iconClass: string;
+    }> = [
+        {
+            id: "gama",
+            title: "Gama (Varsayılan)",
+            description:
+                "Antic Valley Gama UI: Yüzen 3 kapsül ada, ultra yumuşak köşeler ve akıcı mimari.",
+            icon: Layers,
+            iconClass: "text-[var(--accent-text)]",
+        },
+        {
+            id: "win11",
+            title: "Windows 11",
+            description:
+                "Windows 11 tarzı yumuşatılmış köşeler ve yüzen ada tasarımı.",
+            icon: AppWindow,
+            iconClass: "text-sky-400",
+        },
+        {
+            id: "win10",
+            title: "Windows 10",
+            description:
+                "Sert köşeler ve yüzen adasız yapı (Keskin & kenetli düzen).",
+            icon: Square,
+            iconClass: "text-[var(--text-secondary)]",
+        },
+    ];
 
-    const primaryCustomUrl = "https://lir.anticvalley.com.tr/auth/callback";
-
-    // Specified test track: Kanye West - Flashing Lights
-    const TEST_TRACK_URI = "spotify:track:5GOyyufqny38BvNu99ts2z";
-    const TEST_TRACK_NAME = "Flashing Lights (Kanye West)";
-
-    const handleCopy = (text: string, id: string) => {
-        navigator.clipboard.writeText(text);
-        setCopiedIndex(id);
-        setTimeout(() => setCopiedIndex(null), 2000);
-    };
-
-    const handleSaveCredentials = () => {
-        spotifyService.updateState({
-            clientId: clientIdInput.trim(),
-            clientSecret: clientSecretInput.trim(),
-            redirectUri: redirectUriInput.trim() || primaryCustomUrl,
-        });
-        setFeedbackMessage({
-            type: "success",
-            text: "Spotify Client ID ve Redirect URI ayarları başarıyla kaydedildi.",
-        });
-        setTimeout(() => setFeedbackMessage(null), 4000);
-    };
-
-    const handleConnectSpotify = async () => {
-        setFeedbackMessage(null);
-        if (!clientIdInput.trim()) {
-            setFeedbackMessage({
-                type: "error",
-                text: "Lütfen önce Spotify Developer Dashboard'dan aldığınız Client ID'yi girin.",
-            });
-            return;
-        }
-
-        // Save current settings before popup
-        spotifyService.updateState({
-            clientId: clientIdInput.trim(),
-            clientSecret: clientSecretInput.trim(),
-            redirectUri: redirectUriInput.trim() || primaryCustomUrl,
-        });
-
-        setIsConnecting(true);
-        try {
-            await spotifyService.initiateLogin();
-            setFeedbackMessage({
-                type: "info",
-                text: "Yetkilendirme penceresi açıldı. Spotify hesabınızla giriş yapıp onay verin.",
-            });
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            setFeedbackMessage({
-                type: "error",
-                text: msg,
-            });
-        } finally {
-            setIsConnecting(false);
-        }
-    };
-
-    const handleRefreshDevices = async () => {
-        setIsRefreshingDevices(true);
-        try {
-            await spotifyService.refreshUserData();
-            setFeedbackMessage({
-                type: "success",
-                text: "Cihaz listesi güncellendi.",
-            });
-            setTimeout(() => setFeedbackMessage(null), 3000);
-        } catch {
-            setFeedbackMessage({
-                type: "error",
-                text: "Cihazlar listelenirken hata oluştu.",
-            });
-        } finally {
-            setIsRefreshingDevices(false);
-        }
-    };
-
-    const handleSelectDevice = (deviceId: string) => {
-        spotifyService.updateState({ activeDeviceId: deviceId });
-    };
-
-    const handleTestPlay = async () => {
-        setTestPlayStatus("playing");
-        try {
-            const res = await spotifyService.playTrack(TEST_TRACK_URI);
-            if (res.message) {
-                setFeedbackMessage({ type: "info", text: res.message });
-            }
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            setFeedbackMessage({ type: "error", text: msg });
-        }
-    };
-
-    const handleTestStop = async () => {
-        setTestPlayStatus(null);
-        await spotifyService.pauseTrack();
-    };
-
-    const getDeviceIcon = (type: string) => {
-        const lower = type.toLowerCase();
-        if (lower.includes("phone") || lower.includes("mobile"))
-            return Smartphone;
-        if (lower.includes("speaker") || lower.includes("cast")) return Speaker;
-        return Laptop;
-    };
+    const sectionTransition = (delay: number) => ({
+        initial: { opacity: 0, y: 12 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.25, delay, ease: [0.22, 1, 0.36, 1] as const },
+    });
 
     return (
-        <div className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-            <section className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-                    <Sliders className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-xs font-semibold text-white">
-                        Görünüm
-                    </h2>
+        <div className="flex-1 flex flex-col gap-6 w-full">
+            {/* Page Header */}
+            <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                    <Settings className="w-5 h-5" />
                 </div>
                 <div>
-                    <p className="text-xs font-medium text-white">Tema</p>
-                    <p className="mt-1 text-[11px] text-zinc-500">
-                        Uygulamanın renk görünümünü seçin.
+                    <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
+                        Ayarlar
+                    </h1>
+                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
+                        Tasarım dili, tema, arka plan saydamlığı, genel kısayollar ve Discord Rich Presence tercihlerinizi yönetin.
+                    </p>
+                </div>
+            </div>
+
+            <AnimatePresence>
+                {feedbackMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        className={`p-3.5 ui-inner border text-xs flex items-center justify-between gap-3 ${
+                            feedbackMessage.type === "success"
+                                ? "bg-emerald-950/40 border-emerald-700/80 text-emerald-200"
+                                : feedbackMessage.type === "error"
+                                  ? "bg-rose-950/40 border-rose-700/80 text-rose-200"
+                                  : "bg-blue-950/40 border-blue-700/80 text-blue-200"
+                        }`}
+                    >
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{feedbackMessage.text}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setFeedbackMessage(null)}
+                            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs px-1.5 cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* 1. DESIGN LANGUAGE & UI THEME */}
+            <motion.section
+                {...sectionTransition(0.02)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-4"
+            >
+                <div>
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                        Tasarım Dili ve Arayüz Teması
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                        Gama mimarisi veya Windows tasarım standartlarına göre pencere ve ada düzenini özelleştirin.
+                    </p>
+                </div>
+
+                <div
+                    className="grid grid-cols-1 md:grid-cols-3 gap-2.5"
+                    role="radiogroup"
+                    aria-label="Tasarım dili"
+                >
+                    {designLanguages.map((item) => {
+                        const Icon = item.icon;
+                        const isSelected = uiStyle === item.id;
+                        return (
+                            <motion.button
+                                key={item.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={isSelected}
+                                whileHover={{ y: -2 }}
+                                whileTap={{ scale: 0.985 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 30,
+                                }}
+                                onClick={() => onUiStyleChange(item.id)}
+                                className={`relative ui-inner border p-4 text-left transition-colors cursor-pointer flex flex-col gap-1.5 ${
+                                    isSelected
+                                        ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                                        : "border-[var(--border-subtle)] bg-[var(--bg-inner)] hover:border-[var(--border-hover)]"
+                                }`}
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                                        <Icon
+                                            className={`w-4 h-4 shrink-0 ${item.iconClass}`}
+                                        />
+                                        <span>{item.title}</span>
+                                    </span>
+                                    <AnimatePresence>
+                                        {isSelected && (
+                                            <motion.span
+                                                initial={{ scale: 0.5, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                exit={{ scale: 0.5, opacity: 0 }}
+                                                transition={{
+                                                    type: "spring",
+                                                    stiffness: 500,
+                                                    damping: 26,
+                                                }}
+                                            >
+                                                <Check className="w-4 h-4 text-[var(--accent-text)] shrink-0" />
+                                            </motion.span>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                                <span className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                                    {item.description}
+                                </span>
+                            </motion.button>
+                        );
+                    })}
+                </div>
+            </motion.section>
+
+            {/* 2. APPEARANCE SETTINGS */}
+            <motion.section
+                {...sectionTransition(0.06)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-5"
+            >
+                <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
+                    <Palette className="w-4 h-4 text-[var(--accent-text)]" />
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                        Görünüm &amp; Tema
+                    </h2>
+                </div>
+
+                <div>
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                        Arayüz Renk Teması
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                        Sistem, Amoled, Koyu veya Açık renk düzenleri arasında geçiş yapın.
                     </p>
                     <div
-                        className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2"
+                        className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5"
                         role="radiogroup"
                         aria-label="Uygulama teması"
                     >
                         {(
                             [
-                                ["amoled", "AMOLED", "Tam siyah arka plan"],
-                                ["dark", "Karanlık", "Yeşil vurgulu koyu tema"],
-                                ["light", "Aydınlık", "Açık ve ferah görünüm"],
+                                {
+                                    value: "system",
+                                    label: "Sistem Teması",
+                                    description: `İşletim sistemi (${systemPrefersDark ? "Koyu" : "Açık"})`,
+                                    icon: Monitor,
+                                    iconClass: "text-fuchsia-400",
+                                },
+                                {
+                                    value: "amoled",
+                                    label: "Amoled (Saf Siyah)",
+                                    description: "#000000 Saf siyah arka plan",
+                                    icon: Sparkles,
+                                    iconClass: "text-purple-400",
+                                },
+                                {
+                                    value: "dark",
+                                    label: "Koyu Tema (Dark)",
+                                    description: "#0c0c0e Koyu füme tonlar",
+                                    icon: Moon,
+                                    iconClass: "text-sky-400",
+                                },
+                                {
+                                    value: "light",
+                                    label: "Açık Tema (Light)",
+                                    description: "#f4f4f5 Ferah ve aydınlık",
+                                    icon: Sun,
+                                    iconClass: "text-amber-400",
+                                },
                             ] as const
-                        ).map(([value, label, description]) => (
-                            <button
-                                key={value}
-                                type="button"
-                                role="radio"
-                                aria-checked={theme === value}
-                                onClick={() => onThemeChange(value)}
-                                className={`rounded-lg border p-3 text-left transition-colors ${
-                                    theme === value
-                                        ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
-                                        : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
-                                }`}
-                            >
-                                <span className="block text-xs font-semibold text-white">
-                                    {label}
-                                </span>
-                                <span className="mt-1 block text-[11px] text-zinc-500">
-                                    {description}
-                                </span>
-                            </button>
-                        ))}
+                        ).map((item) => {
+                            const Icon = item.icon;
+                            const isSelected = theme === item.value;
+                            return (
+                                <motion.button
+                                    key={item.value}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={isSelected}
+                                    whileHover={{ y: -2 }}
+                                    whileTap={{ scale: 0.985 }}
+                                    transition={{
+                                        type: "spring",
+                                        stiffness: 420,
+                                        damping: 30,
+                                    }}
+                                    onClick={() => onThemeChange(item.value)}
+                                    className={`ui-inner border p-3.5 text-left transition-colors cursor-pointer flex flex-col gap-1 ${
+                                        isSelected
+                                            ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                                            : "border-[var(--border-subtle)] bg-[var(--bg-inner)] hover:border-[var(--border-hover)]"
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                                            <Icon className={`w-4 h-4 shrink-0 ${item.iconClass}`} />
+                                            <span>{item.label}</span>
+                                        </span>
+                                        <AnimatePresence>
+                                            {isSelected && (
+                                                <motion.span
+                                                    initial={{ scale: 0.5, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    exit={{ scale: 0.5, opacity: 0 }}
+                                                    transition={{
+                                                        type: "spring",
+                                                        stiffness: 500,
+                                                        damping: 26,
+                                                    }}
+                                                >
+                                                    <Check className="w-4 h-4 text-[var(--accent-text)] shrink-0" />
+                                                </motion.span>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                    <span className="text-xs text-[var(--text-secondary)]">
+                                        {item.description}
+                                    </span>
+                                </motion.button>
+                            );
+                        })}
                     </div>
                 </div>
-                <div className="flex flex-col gap-3 border-t border-zinc-800/80 pt-4">
+
+                {/* Accent Color Picker */}
+                <div className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                Aksan Rengi (Özelleştirme)
+                            </p>
+                            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                                Uygulamanın buton, vurgu ve simgelerinde kullanılacak aksan rengini belirleyin.
+                            </p>
+                        </div>
+
+                        <label
+                            className="flex items-center gap-2 px-3 py-1.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] hover:border-[var(--accent-border)] text-xs font-medium text-[var(--text-primary)] transition-colors cursor-pointer"
+                            title="Özel aksan rengi seç"
+                        >
+                            <span
+                                className="w-4 h-4 rounded-full border border-white/20 shrink-0"
+                                style={{ backgroundColor: accentColor }}
+                            />
+                            <span>Özel Renk</span>
+                            <span className="font-mono text-[11px] text-[var(--text-muted)] uppercase">
+                                {normalizeHexColor(accentColor) ?? DEFAULT_ACCENT_COLOR}
+                            </span>
+                            <input
+                                type="color"
+                                value={normalizeHexColor(accentColor) ?? DEFAULT_ACCENT_COLOR}
+                                onChange={(e) => onAccentColorChange(e.target.value)}
+                                className="sr-only"
+                            />
+                        </label>
+                    </div>
+
+                    <div
+                        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9 gap-2.5"
+                        role="radiogroup"
+                        aria-label="Aksan rengi"
+                    >
+                        {ACCENT_PRESETS.map((preset) => {
+                            const isSelected =
+                                (normalizeHexColor(accentColor) ?? DEFAULT_ACCENT_COLOR) ===
+                                preset.hex;
+                            return (
+                                <motion.button
+                                    key={preset.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={isSelected}
+                                    whileHover={{ y: -2 }}
+                                    whileTap={{ scale: 0.97 }}
+                                    transition={{
+                                        type: "spring",
+                                        stiffness: 420,
+                                        damping: 30,
+                                    }}
+                                    onClick={() => onAccentColorChange(preset.hex)}
+                                    className={`ui-inner border px-3 py-2.5 text-left transition-colors cursor-pointer flex items-center gap-2.5 ${
+                                        isSelected
+                                            ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                                            : "border-[var(--border-subtle)] bg-[var(--bg-inner)] hover:border-[var(--border-hover)]"
+                                    }`}
+                                >
+                                    <span
+                                        className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center border border-white/15"
+                                        style={{ backgroundColor: preset.hex }}
+                                    >
+                                        {isSelected && (
+                                            <Check className="w-3.5 h-3.5 text-white" />
+                                        )}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-xs font-semibold text-[var(--text-primary)]">
+                                            {preset.name}
+                                        </span>
+                                        <span className="block font-mono text-[11px] text-[var(--text-muted)]">
+                                            {preset.hex}
+                                        </span>
+                                    </span>
+                                </motion.button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3.5 border-t border-[var(--border-subtle)] pt-4">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className="text-xs font-medium text-white">
-                                Arka plan görseli
+                            <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                Arka Plan Görseli
                             </p>
-                            <p className="mt-1 text-[11px] text-zinc-500">
-                                Görsel uygulamanın tamamında kullanılır ve
-                                okunabilirlik için hafifçe karartılır.
+                            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                                Görsel uygulamanın tamamında kullanılır ve okunabilirlik için hafifçe karartılır.
                             </p>
                         </div>
                         {appearance.backgroundImage && (
-                            <button
+                            <motion.button
                                 type="button"
+                                whileTap={{ scale: 0.95 }}
                                 onClick={() => {
                                     void updateAppearance({
                                         ...appearance,
                                         backgroundImage: null,
                                     });
                                 }}
-                                className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-rose-800 hover:text-rose-300"
+                                className="flex shrink-0 items-center gap-1.5 ui-control border border-[var(--border-subtle)] bg-[var(--bg-inner)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-rose-800 hover:text-rose-300 cursor-pointer"
                             >
                                 <Trash2 className="h-3.5 w-3.5" />
                                 Kaldır
-                            </button>
+                            </motion.button>
                         )}
                     </div>
-                    <div className="flex items-center gap-3">
-                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-500">
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex cursor-pointer items-center gap-2 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-4 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--accent-border)]">
                             {appearance.backgroundImage ? (
-                                <ImageIcon className="h-3.5 w-3.5" />
+                                <ImageIcon className="h-4 w-4 text-[var(--accent-text)]" />
                             ) : (
-                                <Upload className="h-3.5 w-3.5" />
+                                <Upload className="h-4 w-4 text-[var(--accent-text)]" />
                             )}
                             {isPreparingBackground
                                 ? "Görsel hazırlanıyor..."
@@ -495,563 +630,112 @@ export function SettingsView({
                                 className="sr-only"
                             />
                         </label>
-                        <span className="text-[11px] text-zinc-500">
+                        <span className="text-xs text-[var(--text-muted)]">
                             JPG, PNG, WebP veya hareketli GIF · en fazla 20 MB
                         </span>
                     </div>
-                    {appearance.backgroundImage && (
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <label className="flex flex-col gap-1.5 text-[11px] text-zinc-400">
-                                <span className="flex justify-between">
-                                    <span>Arka plan bulanıklığı</span>
-                                    <span className="font-mono">
-                                        {appearance.backgroundBlur}px
-                                    </span>
-                                </span>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="20"
-                                    step="1"
-                                    value={appearance.backgroundBlur}
-                                    onChange={(event) =>
-                                        void updateAppearance({
-                                            ...appearance,
-                                            backgroundBlur: Number(
-                                                event.target.value,
-                                            ),
-                                        })
-                                    }
-                                    aria-label="Arka plan bulanıklığı"
-                                />
-                            </label>
-                            {(
-                                [
-                                    [
-                                        "sidebarTransparency",
-                                        "Sidebar saydamlığı",
-                                    ],
-                                    ["cardTransparency", "Card saydamlığı"],
-                                    ["headerTransparency", "Header saydamlığı"],
-                                ] as const
-                            ).map(([key, label]) => (
-                                <label
-                                    key={key}
-                                    className="flex flex-col gap-1.5 text-[11px] text-zinc-400"
-                                >
+
+                    <AnimatePresence>
+                        {appearance.backgroundImage && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 overflow-hidden"
+                            >
+                                <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
                                     <span className="flex justify-between">
-                                        <span>{label}</span>
-                                        <span className="font-mono">
-                                            %{appearance[key]}
+                                        <span>Arka plan bulanıklığı</span>
+                                        <span className="font-mono text-[var(--text-primary)]">
+                                            {appearance.backgroundBlur}px
                                         </span>
                                     </span>
                                     <input
                                         type="range"
                                         min="0"
-                                        max="90"
-                                        step="5"
-                                        value={appearance[key]}
+                                        max="20"
+                                        step="1"
+                                        value={appearance.backgroundBlur}
                                         onChange={(event) =>
                                             void updateAppearance({
                                                 ...appearance,
-                                                [key]: Number(
+                                                backgroundBlur: Number(
                                                     event.target.value,
                                                 ),
                                             })
                                         }
-                                        aria-label={label}
+                                        aria-label="Arka plan bulanıklığı"
                                     />
                                 </label>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            {/* Header */}
-            <div className="flex flex-col gap-1 pb-3 border-b border-zinc-800/80">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-base font-semibold text-white tracking-tight">
-                        Ayarlar & Spotify Köprüsü
-                    </h1>
-                    <span className="text-[11px] font-mono border border-zinc-800 bg-zinc-950 text-zinc-400 px-1.5 py-0.2 rounded">
-                        SETTINGS
-                    </span>
-                </div>
-                <p className="text-xs text-zinc-400">
-                    Spotify hesabınızı bağlayarak şarkıları doğrudan
-                    Soundpad&apos;e entegre edin ve kısayol tuşlarıyla anında
-                    çalın.
-                </p>
-            </div>
-
-            {feedbackMessage && (
-                <div
-                    className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-3 ${
-                        feedbackMessage.type === "success"
-                            ? "bg-emerald-950/40 border-emerald-700/80 text-emerald-200"
-                            : feedbackMessage.type === "error"
-                              ? "bg-rose-950/40 border-rose-700/80 text-rose-200"
-                              : "bg-blue-950/40 border-blue-700/80 text-blue-200"
-                    }`}
-                >
-                    <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>{feedbackMessage.text}</span>
-                    </div>
-                    <button
-                        onClick={() => setFeedbackMessage(null)}
-                        className="text-zinc-400 hover:text-white text-xs px-1"
-                    >
-                        ✕
-                    </button>
-                </div>
-            )}
-
-            {spotifyState.error && (
-                <div className="flex items-center gap-2 p-3 rounded-lg border bg-rose-950/40 border-rose-700/80 text-rose-200 text-xs">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{spotifyState.error}</span>
-                </div>
-            )}
-
-            {/* 1. SPOTIFY INTEGRATION SECTION */}
-            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-5">
-                {/* Section title & connection pill */}
-                <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-[#1db954]/10 border border-[#1db954]/30 flex items-center justify-center text-[#1db954]">
-                            <Music2 className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                                <span>Spotify Köprüsü</span>
-                                {spotifyState.isConnected ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950 border border-emerald-700 text-emerald-300">
-                                        Bağlandı
-                                    </span>
-                                ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-zinc-900 border border-zinc-800 text-zinc-400">
-                                        Bağlı Değil
-                                    </span>
-                                )}
-                            </h2>
-                            <p className="text-[11px] text-zinc-400">
-                                Şarkıları arayıp Soundpad kartlarına ekleyin ve
-                                oyun içi kısayollarla Spotify&apos;da yürütün.
-                            </p>
-                        </div>
-                    </div>
-
-                    {spotifyState.isConnected && (
-                        <button
-                            onClick={() => spotifyService.logout()}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-rose-300 transition-colors cursor-pointer"
-                        >
-                            <LogOut className="w-3 h-3" />
-                            <span>Bağlantıyı Kes</span>
-                        </button>
-                    )}
-                </div>
-
-                {/* If Connected: Show User Profile, Test Track, & Active Devices */}
-                {spotifyState.isConnected && spotifyState.user ? (
-                    <div className="flex flex-col gap-4">
-                        {/* Profile banner */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-                            <div className="flex items-center gap-3">
-                                {spotifyState.user.images &&
-                                spotifyState.user.images[0] ? (
-                                    <img
-                                        src={spotifyState.user.images[0].url}
-                                        alt={spotifyState.user.display_name}
-                                        className="w-10 h-10 rounded-full border border-zinc-700 object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 font-semibold text-sm">
-                                        {spotifyState.user.display_name?.charAt(
-                                            0,
-                                        ) || "S"}
-                                    </div>
-                                )}
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-semibold text-white">
-                                            {spotifyState.user.display_name}
+                                {(
+                                    [
+                                        [
+                                            "sidebarTransparency",
+                                            "Sidebar saydamlığı",
+                                        ],
+                                        ["cardTransparency", "Kart saydamlığı"],
+                                        ["headerTransparency", "Üst bar saydamlığı"],
+                                    ] as const
+                                ).map(([key, label]) => (
+                                    <label
+                                        key={key}
+                                        className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]"
+                                    >
+                                        <span className="flex justify-between">
+                                            <span>{label}</span>
+                                            <span className="font-mono text-[var(--text-primary)]">
+                                                %{appearance[key]}
+                                            </span>
                                         </span>
-                                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1db954]/10 border border-[#1db954]/30 text-[#1db954] uppercase">
-                                            {spotifyState.user.product ||
-                                                "Premium"}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-zinc-400">
-                                        {spotifyState.user.email ||
-                                            `Spotify ID: ${spotifyState.user.id}`}
-                                    </p>
-                                </div>
-                            </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="90"
+                                            step="5"
+                                            value={appearance[key]}
+                                            onChange={(event) =>
+                                                void updateAppearance({
+                                                    ...appearance,
+                                                    [key]: Number(
+                                                        event.target.value,
+                                                    ),
+                                                })
+                                            }
+                                            aria-label={label}
+                                        />
+                                    </label>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </motion.section>
 
-                            {/* Quick Test Playback Buttons with User's requested track */}
-                            <div className="flex flex-col sm:items-end gap-1">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handleTestPlay}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-semibold transition-colors cursor-pointer"
-                                        title={`Test Şarkısı: ${TEST_TRACK_NAME}`}
-                                    >
-                                        <Play className="w-3 h-3 fill-current" />
-                                        <span>Test Şarkısını Çal</span>
-                                    </button>
-                                    <button
-                                        onClick={handleTestStop}
-                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-medium transition-colors cursor-pointer"
-                                    >
-                                        <Square className="w-3 h-3" />
-                                        <span>Durdur</span>
-                                    </button>
-                                </div>
-                                <span className="text-[10px] font-mono text-zinc-500">
-                                    Şarkı: {TEST_TRACK_NAME}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Connected Devices */}
-                        <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Radio className="w-3.5 h-3.5 text-[#1db954]" />
-                                    <span className="text-xs font-semibold text-white">
-                                        Aktif Çalma Cihazı (Spotify Connect)
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={handleRefreshDevices}
-                                    disabled={isRefreshingDevices}
-                                    className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
-                                >
-                                    <RefreshCw
-                                        className={`w-3 h-3 ${isRefreshingDevices ? "animate-spin" : ""}`}
-                                    />
-                                    <span>Cihazları Tara</span>
-                                </button>
-                            </div>
-
-                            <p className="text-[11px] text-zinc-400">
-                                Kısayola bastığınızda şarkının çalınacağı
-                                Spotify cihazı (Masaüstü Spotify uygulaması açık
-                                olmalıdır):
-                            </p>
-
-                            {spotifyState.devices.length > 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-1">
-                                    {spotifyState.devices.map(
-                                        (device: SpotifyDevice) => {
-                                            const DeviceIcon = getDeviceIcon(
-                                                device.type,
-                                            );
-                                            const isSelected =
-                                                spotifyState.activeDeviceId ===
-                                                    device.id ||
-                                                (!spotifyState.activeDeviceId &&
-                                                    device.is_active);
-                                            return (
-                                                <button
-                                                    key={device.id}
-                                                    onClick={() =>
-                                                        handleSelectDevice(
-                                                            device.id,
-                                                        )
-                                                    }
-                                                    className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                                                        isSelected
-                                                            ? "bg-[#1db954]/10 border-[#1db954]/60 text-white"
-                                                            : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-850"
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <DeviceIcon
-                                                            className={`w-4 h-4 shrink-0 ${isSelected ? "text-[#1db954]" : "text-zinc-500"}`}
-                                                        />
-                                                        <div className="min-w-0">
-                                                            <p className="text-xs font-medium truncate">
-                                                                {device.name}
-                                                            </p>
-                                                            <p className="text-[10px] text-zinc-500 capitalize">
-                                                                {device.type}{" "}
-                                                                {device.is_active &&
-                                                                    "· Aktif"}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {isSelected && (
-                                                        <Check className="w-3.5 h-3.5 text-[#1db954] shrink-0 ml-1.5" />
-                                                    )}
-                                                </button>
-                                            );
-                                        },
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="p-3 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between">
-                                    <span>
-                                        Şu anda açık bir Spotify cihazı
-                                        algılanmadı. Bilgisayarınızda veya
-                                        telefonunuzda Spotify uygulamasını açıp
-                                        bir şarkı başlatın.
-                                    </span>
-                                    <button
-                                        onClick={handleRefreshDevices}
-                                        className="text-[11px] font-semibold text-[#1db954] hover:underline shrink-0 ml-2"
-                                    >
-                                        Yeniden Dene
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    /* Connection Setup Instructions & Credentials Form */
-                    <div className="flex flex-col gap-4">
-                        {/* Custom Domain Callback URL Banner */}
-                        <div className="p-4 rounded-lg bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-zinc-700/80 flex flex-col gap-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                    <Globe className="w-4 h-4 text-[#1db954]" />
-                                    <span className="text-xs font-semibold text-white">
-                                        Özel Alan Adı Redirect URI
-                                        (lir.anticvalley.com.tr)
-                                    </span>
-                                </div>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#1db954]/10 border border-[#1db954]/40 text-[#1db954]">
-                                    ÖNERİLEN
-                                </span>
-                            </div>
-
-                            <p className="text-xs text-zinc-300 leading-relaxed">
-                                Spotify Developer paneline eklenecek birincil
-                                callback adresiniz:
-                            </p>
-
-                            <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black border border-zinc-700 text-xs font-mono">
-                                <span className="text-emerald-400 font-semibold truncate">
-                                    {primaryCustomUrl}
-                                </span>
-                                <button
-                                    onClick={() =>
-                                        handleCopy(primaryCustomUrl, "custom")
-                                    }
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-semibold shrink-0 transition-colors cursor-pointer"
-                                >
-                                    {copiedIndex === "custom" ? (
-                                        <>
-                                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                            <span>Kopyalandı</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy className="w-3.5 h-3.5" />
-                                            <span>Adresi Kopyala</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Step-by-step setup cards */}
-                        <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800/80 flex flex-col gap-3">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                                <Key className="w-3.5 h-3.5 text-[#1db954]" />
-                                <span>
-                                    Spotify Developer Dashboard Kurulumu
-                                </span>
-                            </div>
-
-                            <ol className="text-xs text-zinc-400 flex flex-col gap-2 list-decimal list-inside leading-relaxed">
-                                <li>
-                                    <a
-                                        href="https://developer.spotify.com/dashboard"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-[#1db954] hover:underline inline-flex items-center gap-1 font-medium"
-                                    >
-                                        Spotify Developer Dashboard
-                                        <ExternalLink className="w-3 h-3" />
-                                    </a>{" "}
-                                    paneline giriş yapıp uygulamanızı seçin veya
-                                    yeni bir app oluşturun.
-                                </li>
-                                <li>
-                                    Uygulama ayarlarındaki{" "}
-                                    <strong>&quot;Redirect URIs&quot;</strong>{" "}
-                                    bölümüne{" "}
-                                    <code>
-                                        https://lir.anticvalley.com.tr/auth/callback
-                                    </code>{" "}
-                                    adresini ekleyip kaydedin.
-                                </li>
-                                <li>
-                                    Panelden aldığınız{" "}
-                                    <strong>Client ID</strong> değerini
-                                    aşağıdaki alana yapıştırıp{" "}
-                                    <strong>
-                                        &quot;Spotify ile Bağlan&quot;
-                                    </strong>{" "}
-                                    butonuna tıklayın.
-                                </li>
-                            </ol>
-                        </div>
-
-                        {/* Domain & Hosting Checklist Box */}
-                        <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800/80 flex flex-col gap-2.5">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                                <Server className="w-3.5 h-3.5 text-blue-400" />
-                                <span>
-                                    Domaininizde (lir.anticvalley.com.tr)
-                                    Yapılması Gerekenler:
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs text-zinc-400 mt-1">
-                                <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1">
-                                    <strong className="text-white text-[11px] flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                        1. DNS Kaydı
-                                    </strong>
-                                    <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Domain DNS yönetiminizde{" "}
-                                        <code>lir.anticvalley.com.tr</code> için
-                                        CNAME kaydını bu uygulamanın sunucu
-                                        adresine yönlendirin.
-                                    </p>
-                                </div>
-
-                                <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1">
-                                    <strong className="text-white text-[11px] flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                        2. SSL / HTTPS
-                                    </strong>
-                                    <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Spotify OAuth güvenliği için HTTPS
-                                        zorunludur. Cloudflare veya Let&apos;s
-                                        Encrypt ile SSL sertifikasını aktif
-                                        edin.
-                                    </p>
-                                </div>
-
-                                <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1">
-                                    <strong className="text-white text-[11px] flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                        3. Reverse Proxy
-                                    </strong>
-                                    <p className="text-[11px] text-zinc-500 leading-normal">
-                                        Nginx veya Caddy kullanıyorsanız gelen
-                                        istekleri port 3000&apos;e{" "}
-                                        <code>proxy_pass</code> ile iletin.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Client ID, Secret, and Redirect URI Inputs */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-zinc-300">
-                                    Spotify Client ID{" "}
-                                    <span className="text-rose-400">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={clientIdInput}
-                                    onChange={(e) =>
-                                        setClientIdInput(e.target.value)
-                                    }
-                                    placeholder="Spotify Developer Client ID"
-                                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-zinc-300">
-                                    Spotify Client Secret{" "}
-                                    <span className="text-zinc-500">
-                                        (İsteğe bağlı)
-                                    </span>
-                                </label>
-                                <input
-                                    type="password"
-                                    value={clientSecretInput}
-                                    onChange={(e) =>
-                                        setClientSecretInput(e.target.value)
-                                    }
-                                    placeholder="••••••••••••••••••••••••••••••••"
-                                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-zinc-300">
-                                    Aktif Redirect URI
-                                </label>
-                                <input
-                                    type="text"
-                                    value={redirectUriInput}
-                                    onChange={(e) =>
-                                        setRedirectUriInput(e.target.value)
-                                    }
-                                    placeholder="https://lir.anticvalley.com.tr/auth/callback"
-                                    className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-600 font-mono focus:outline-none focus:border-[#1db954]"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                            <button
-                                onClick={handleSaveCredentials}
-                                className="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
-                            >
-                                Bilgileri Kaydet
-                            </button>
-
-                            <button
-                                onClick={handleConnectSpotify}
-                                disabled={isConnecting || !clientIdInput.trim()}
-                                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#1db954] hover:bg-[#1ed760] disabled:opacity-50 text-black text-xs font-semibold transition-all cursor-pointer"
-                            >
-                                <Sparkles className="w-3.5 h-3.5 fill-current" />
-                                <span>
-                                    {isConnecting
-                                        ? "Bağlanılıyor..."
-                                        : "Spotify ile Bağlan"}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* 2. GENERAL SOUNDPAD AUDIO SETTINGS */}
-            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-                    <Sliders className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-xs font-semibold text-white">
+            {/* 3. GENERAL SOUNDPAD AUDIO SETTINGS */}
+            <motion.section
+                {...sectionTransition(0.1)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-5"
+            >
+                <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
+                    <Sliders className="w-4 h-4 text-[var(--accent-text)]" />
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                         Genel Soundpad Ayarları
                     </h2>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Stop All Hotkey */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-                        <label className="text-xs font-medium text-white">
+                    <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                             Tüm Sesleri Durdur Kısayolu
                         </label>
-                        <p className="text-[11px] text-zinc-500">
-                            Oyunlarda ESC’nin etkilenmemesi için bir tuş veya
-                            kombinasyon belirleyin.
+                        <p className="text-xs text-[var(--text-secondary)]">
+                            Oyunlarda ESC’nin etkilenmemesi için bir tuş veya kombinasyon belirleyin.
                         </p>
-                        <button
+                        <motion.button
                             type="button"
+                            whileTap={{ scale: 0.985 }}
                             onClick={() => {
                                 const next = !isCapturingStopHotkey;
                                 if (!next) {
@@ -1071,64 +755,67 @@ export function SettingsView({
                                         });
                                     });
                             }}
-                            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left font-mono text-xs text-zinc-200 transition-colors hover:border-zinc-600"
+                            className="mt-1 w-full ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3.5 py-2.5 text-left font-mono text-xs font-semibold text-[var(--accent-text)] transition-colors hover:border-[var(--accent-border)] cursor-pointer"
                         >
                             {isCapturingStopHotkey
                                 ? "Bir tuşa basın... (iptal için tekrar tıklayın)"
                                 : routingConfig.stopAllHotkey || "Tuş ata"}
-                        </button>
+                        </motion.button>
                     </div>
 
                     {/* Playback Mode */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-                        <label className="text-xs font-medium text-white">
+                    <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                             Çalma Modu
                         </label>
-                        <p className="text-[11px] text-zinc-500">
-                            Yeni bir ses veya Spotify şarkısı tetiklendiğinde
-                            önceki sesin davranışı:
+                        <p className="text-xs text-[var(--text-secondary)]">
+                            Yeni bir ses tetiklendiğinde önceki sesin davranışı:
                         </p>
                         <div className="flex items-center gap-2 mt-1">
-                            <button
+                            <motion.button
+                                type="button"
+                                whileTap={{ scale: 0.96 }}
                                 onClick={() =>
                                     onRoutingConfigChange({
                                         ...routingConfig,
                                         playbackMode: "overlap",
                                     })
                                 }
-                                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium border text-center transition-colors cursor-pointer ${
+                                className={`flex-1 py-2 px-3 ui-input text-xs font-medium border text-center transition-colors cursor-pointer ${
                                     routingConfig.playbackMode === "overlap"
-                                        ? "bg-zinc-800 border-zinc-700 text-white"
-                                        : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white"
+                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold"
+                                        : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                 }`}
                             >
                                 Üst Üste Bindir (Overlap)
-                            </button>
-                            <button
+                            </motion.button>
+                            <motion.button
+                                type="button"
+                                whileTap={{ scale: 0.96 }}
                                 onClick={() =>
                                     onRoutingConfigChange({
                                         ...routingConfig,
                                         playbackMode: "cutoff",
                                     })
                                 }
-                                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium border text-center transition-colors cursor-pointer ${
+                                className={`flex-1 py-2 px-3 ui-input text-xs font-medium border text-center transition-colors cursor-pointer ${
                                     routingConfig.playbackMode === "cutoff"
-                                        ? "bg-zinc-800 border-zinc-700 text-white"
-                                        : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white"
+                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold"
+                                        : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                 }`}
                             >
                                 Öncekini Kes (Cutoff)
-                            </button>
+                            </motion.button>
                         </div>
                     </div>
 
                     {/* Master Volume */}
-                    <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                    <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] md:col-span-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-white">
+                            <label className="text-xs font-semibold text-[var(--text-primary)]">
                                 Genel Ses Seviyesi
                             </label>
-                            <span className="text-xs font-mono text-zinc-300">
+                            <span className="text-xs font-mono font-semibold text-[var(--accent-text)]">
                                 %{Math.round(routingConfig.masterVolume * 100)}
                             </span>
                         </div>
@@ -1144,52 +831,56 @@ export function SettingsView({
                                     masterVolume: parseFloat(e.target.value),
                                 })
                             }
-                            className="w-full mt-2 accent-white cursor-pointer"
+                            className="w-full mt-1 cursor-pointer"
                         />
-                        <p className="text-[11px] text-zinc-500">
-                            Tüm yerel ses efektleri ve önizlemeler bu seviyede
-                            çalınır.
+                        <p className="text-xs text-[var(--text-secondary)]">
+                            Tüm ses efektleri ve önizlemeler bu ana ses seviyesinde çalınır.
                         </p>
                     </div>
                 </div>
 
                 {/* Reset to Defaults */}
-                <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-[var(--border-subtle)]">
                     <div>
-                        <p className="text-xs font-medium text-white">
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">
                             Fabrika Ayarlarına Sıfırla
                         </p>
-                        <p className="text-[11px] text-zinc-500">
-                            Tüm sesleri ve kısayolları başlangıç durumuna
-                            döndürür.
+                        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                            Tüm sesleri ve kısayolları başlangıç durumuna döndürür.
                         </p>
                     </div>
-                    <button
+                    <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={onResetToDefaults}
-                        className="px-3 py-1.5 rounded-md bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800 text-rose-300 text-xs font-medium transition-colors cursor-pointer"
+                        className="px-4 py-2 ui-control bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800 text-rose-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
                     >
                         Sesleri Sıfırla
-                    </button>
+                    </motion.button>
                 </div>
-            </div>
+            </motion.section>
 
-            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-                    <Bot className="w-4 h-4 text-indigo-400" />
-                    <h2 className="text-xs font-semibold text-white">
+            {/* 4. DISCORD RICH PRESENCE */}
+            <motion.section
+                {...sectionTransition(0.14)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-4"
+            >
+                <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
+                    <Bot className="w-4 h-4 text-[var(--accent-text)]" />
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                         Discord Rich Presence (RPC)
                     </h2>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <p className="text-xs font-medium text-white">
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">
                             Discord etkinliğini göster
                         </p>
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                            Lir’de çalan sesleri ve uygulama durumunu Discord
-                            profilinizde isteğe bağlı olarak gösterir.
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                            Lir’de çalan sesleri ve uygulama durumunu Discord profilinizde isteğe bağlı olarak gösterir.
                         </p>
-                        <p className="mt-2 text-[11px] text-zinc-400">
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">
                             {!isElectron
                                 ? "Discord RPC masaüstü uygulamasında kullanılabilir."
                                 : !routingConfig.discordRpcEnabled
@@ -1199,17 +890,19 @@ export function SettingsView({
                                     : "Açık; Discord istemcisi bekleniyor."}
                         </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                         {routingConfig.discordRpcEnabled &&
                             isElectron &&
                             !discordStatus.connected && (
-                                <button
+                                <motion.button
+                                    type="button"
+                                    whileTap={{ scale: 0.95 }}
                                     onClick={() => void onReconnectDiscord()}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs transition-colors"
+                                    className="flex items-center gap-1.5 px-3.5 py-2 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-medium transition-colors cursor-pointer"
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
                                     Yeniden bağlan
-                                </button>
+                                </motion.button>
                             )}
                         <button
                             type="button"
@@ -1224,201 +917,25 @@ export function SettingsView({
                                         !routingConfig.discordRpcEnabled,
                                 })
                             }
-                            className={`relative h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            className={`relative h-6 w-11 p-0.5 flex items-center ui-control transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
                                 routingConfig.discordRpcEnabled
-                                    ? "bg-indigo-600"
-                                    : "bg-zinc-700"
+                                    ? "bg-[var(--accent)] justify-end"
+                                    : "bg-zinc-700 justify-start"
                             }`}
                         >
-                            <span
-                                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                                    routingConfig.discordRpcEnabled
-                                        ? "translate-x-5"
-                                        : "translate-x-0.5"
-                                }`}
+                            <motion.span
+                                layout
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 500,
+                                    damping: 32,
+                                }}
+                                className="h-5 w-5 ui-control bg-white"
                             />
                         </button>
                     </div>
                 </div>
-
-                <footer className="mt-2 rounded-3xl border border-zinc-800/90 bg-[#141418] p-5 sm:p-6">
-                    <div className="flex flex-col gap-5">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <a
-                                href="https://labs.anticvalley.com.tr/"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-3"
-                            >
-                                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-[#17171c] p-2">
-                                    <img
-                                        src={`${ANTIC_VALLEY_ASSETS}/anticvalley.png`}
-                                        alt="Antic Valley"
-                                        className="h-full w-full object-contain"
-                                    />
-                                </span>
-                                <span>
-                                    <span className="block text-sm font-semibold text-zinc-100">
-                                        Antic Valley
-                                    </span>
-                                    <span className="block text-[11px] text-zinc-500">
-                                        Antic Valley tarafından geliştirildi.
-                                    </span>
-                                </span>
-                            </a>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                                <a
-                                    href="https://labs.anticvalley.com.tr/"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-2 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                >
-                                    <FlaskConical className="h-3.5 w-3.5" />
-                                    Projeler
-                                </a>
-                                <a
-                                    href="https://labs.anticvalley.com.tr/"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-2 rounded-full border border-zinc-800 px-3 py-2 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                >
-                                    <History className="h-3.5 w-3.5" />
-                                    Günlük gelişmeler
-                                </a>
-                                <a
-                                    href="https://github.com/SiberizmBey"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    aria-label="Antic Valley GitHub"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                >
-                                    <Github className="h-3.5 w-3.5" />
-                                </a>
-                                <a
-                                    href="https://instagram.com/ahmetinzmsec"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    aria-label="Antic Valley Instagram"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                                >
-                                    <Instagram className="h-3.5 w-3.5" />
-                                </a>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="mb-2.5 text-[10px] font-semibold tracking-wider text-zinc-500">
-                                EKOSİSTEMİMİZLE TANIŞIN
-                            </h3>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                {ANTIC_VALLEY_PROJECTS.map((project) => (
-                                    <a
-                                        key={project.name}
-                                        href="https://labs.anticvalley.com.tr/"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex min-w-0 items-center gap-3 rounded-2xl border border-zinc-800/90 bg-[#151519] p-2.5 transition-colors hover:border-zinc-700 hover:bg-zinc-900/80"
-                                    >
-                                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-[#17171c] p-2">
-                                            <img
-                                                src={`${ANTIC_VALLEY_ASSETS}/${project.image}`}
-                                                alt=""
-                                                className="h-full w-full object-contain"
-                                                loading="lazy"
-                                            />
-                                        </span>
-                                        <span className="min-w-0">
-                                            <span className="block truncate text-xs font-semibold text-zinc-200">
-                                                {project.name}
-                                            </span>
-                                            <span className="mt-0.5 block truncate text-[10px] text-zinc-500">
-                                                {project.description}
-                                            </span>
-                                        </span>
-                                    </a>
-                                ))}
-                            </div>
-                        </div>
-
-                        <p className="text-center text-[10px] text-zinc-500">
-                            © {new Date().getFullYear()} Antic Valley - Tüm
-                            Hakları Saklıdır.
-                        </p>
-                    </div>
-                </footer>
-            </div>
-
-            <div className="app-card rounded-2xl bg-[#0a0a0a] border border-zinc-800 p-5 flex flex-col gap-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-                    <RefreshCw className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-xs font-semibold text-white">
-                        Güncellemeler
-                    </h2>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="text-xs font-medium text-white">
-                            Lir güncellemelerini kontrol et
-                        </p>
-                        <p
-                            role={
-                                updateCheckStatus === "error"
-                                    ? "alert"
-                                    : "status"
-                            }
-                            className={`mt-1 text-[11px] ${
-                                updateCheckStatus === "error"
-                                    ? "text-amber-300"
-                                    : updateCheckStatus === "available"
-                                      ? "text-emerald-300"
-                                      : "text-zinc-500"
-                            }`}
-                        >
-                            {!isElectron
-                                ? "Güncelleme kontrolü masaüstü uygulamasında kullanılabilir."
-                                : updateCheckStatus === "checking"
-                                  ? "GitHub üzerinde güncellemeler aranıyor..."
-                                  : updateCheckStatus === "error"
-                                    ? "Kontrol başarısız oldu. Bağlantınızı kontrol edip yeniden deneyin."
-                                    : updateInfo
-                                      ? `${updateInfo.title} (${updateInfo.version}) kullanılabilir.`
-                                      : updateCheckStatus === "current"
-                                        ? "Uygulamanız güncel."
-                                        : "En son sürümü kontrol edin."}
-                        </p>
-                        {updateInfo && (
-                            <button
-                                onClick={() =>
-                                    window.electronAPI?.openUpdateRelease(
-                                        updateInfo.url,
-                                    )
-                                }
-                                className="mt-2 flex items-center gap-1 text-[11px] text-zinc-300 hover:text-white"
-                            >
-                                <ExternalLink className="w-3 h-3" />
-                                GitHub sürümünü aç
-                            </button>
-                        )}
-                    </div>
-                    <button
-                        onClick={() => void onCheckForUpdates()}
-                        disabled={
-                            !isElectron || updateCheckStatus === "checking"
-                        }
-                        className="flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <RefreshCw
-                            className={`w-3.5 h-3.5 ${
-                                updateCheckStatus === "checking"
-                                    ? "animate-spin"
-                                    : ""
-                            }`}
-                        />
-                        Güncellemeleri denetle
-                    </button>
-                </div>
-            </div>
+            </motion.section>
         </div>
     );
 }

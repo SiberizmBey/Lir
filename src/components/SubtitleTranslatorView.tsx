@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
     AlertCircle,
     Languages,
@@ -774,53 +775,63 @@ export function SubtitleTranslatorView() {
         selection !== null && selection.width >= 20 && selection.height >= 12;
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-            <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-base font-semibold tracking-tight text-white">
-                        Oyun Altyazı Çevirisi
-                    </h1>
-                    <span className="rounded border border-emerald-900/80 bg-emerald-950/40 px-1.5 py-0.5 text-[10px] font-mono text-emerald-300">
-                        OCR · CANLI
-                    </span>
+        <div className="flex w-full flex-col gap-6">
+            <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                    <ScanText className="w-5 h-5" />
                 </div>
-                <p className="text-xs text-zinc-400">
-                    Ekranda bir alan seçin; altyazılar cihazınızda okunup Türkçeye çevrilsin.
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                    Altyazı alanındaki her değişiklikte OCR hazır olur olmaz başlar; çeviri istekleri sırayla tamamlanır.
-                </p>
+                <div>
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
+                            Oyun Altyazı Çevirisi
+                        </h1>
+                        <span className="ui-control border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2.5 py-0.5 text-xs font-mono font-semibold text-[var(--accent-text)]">
+                            OCR · CANLI
+                        </span>
+                    </div>
+                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
+                        Ekranda bir alan seçin; altyazılar cihazınızda okunup Türkçeye çevrilsin.
+                    </p>
+                </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">
-                <section className="app-card flex min-h-72 flex-col gap-3 rounded-2xl border border-zinc-800 bg-[#090909] p-4">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }}
+                    className="app-card ui-card flex min-h-72 flex-col gap-3.5 border border-[var(--border-card)] p-5"
+                >
                     <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-200">
-                            <Monitor className="h-4 w-4 text-zinc-400" />
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                            <Monitor className="h-4 w-4 text-[var(--accent-text)]" />
                             Ekran alanı
                         </div>
                         {stream ? (
-                            <button
+                            <motion.button
                                 type="button"
+                                whileTap={{ scale: 0.94 }}
                                 onClick={stopCapture}
-                                className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"
+                                className="flex items-center gap-1.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
                             >
                                 <Square className="h-3 w-3" />
                                 Ekran paylaşımını durdur
-                            </button>
+                            </motion.button>
                         ) : (
-                            <button
+                            <motion.button
                                 type="button"
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.94 }}
                                 onClick={() => void startCapture()}
-                                className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-zinc-200"
+                                className="btn-accent flex items-center gap-1.5 ui-control px-4 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
                             >
                                 <Monitor className="h-3.5 w-3.5" />
                                 Ekran seç
-                            </button>
+                            </motion.button>
                         )}
                     </div>
 
-                    <div className="flex min-h-56 flex-1 items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-black">
+                    <div className="flex min-h-60 flex-1 items-center justify-center overflow-hidden ui-inner border border-[var(--border-subtle)] bg-[var(--bg-inner)]">
                         {stream ? (
                             <canvas
                                 ref={canvasRef}
@@ -833,9 +844,9 @@ export function SubtitleTranslatorView() {
                                 style={{ width: "100%", height: "auto" }}
                             />
                         ) : (
-                            <div className="flex max-w-xs flex-col items-center gap-2 p-6 text-center">
-                                <Monitor className="h-7 w-7 text-zinc-600" />
-                                <p className="text-xs text-zinc-400">
+                            <div className="flex max-w-xs flex-col items-center gap-2.5 p-6 text-center">
+                                <Monitor className="h-8 w-8 text-[var(--text-muted)]" />
+                                <p className="text-xs sm:text-[13px] text-[var(--text-secondary)]">
                                     Ekran paylaşımını başlatın, ardından altyazıların bulunduğu alanı sürükleyerek seçin.
                                 </p>
                             </div>
@@ -843,19 +854,24 @@ export function SubtitleTranslatorView() {
                     </div>
                     <video ref={videoRef} className="hidden" muted playsInline />
                     {stream && (
-                        <p className="text-[11px] text-zinc-500">
+                        <p className="text-xs text-[var(--text-secondary)]">
                             {hasValidSelection
                                 ? "Altyazı alanı seçildi."
                                 : "Altyazıların etrafında bir dikdörtgen çizerek alanı seçin."}
                         </p>
                     )}
-                </section>
+                </motion.section>
 
-                <section className="app-card flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-[#090909] p-4">
-                    <div className="flex flex-col gap-1">
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.24, delay: 0.06, ease: [0.22, 1, 0.36, 1] as const }}
+                    className="app-card ui-card flex flex-col gap-4 border border-[var(--border-card)] p-5"
+                >
+                    <div className="flex flex-col gap-1.5">
                         <label
                             htmlFor="subtitle-source-language"
-                            className="text-xs font-medium text-zinc-200"
+                            className="text-xs font-semibold text-[var(--text-primary)]"
                         >
                             Altyazı dili
                         </label>
@@ -867,7 +883,7 @@ export function SubtitleTranslatorView() {
                                 setLanguage(event.target.value as OcrLanguage);
                                 lastTranslatedTextRef.current = "";
                             }}
-                            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white outline-none focus:border-zinc-500 disabled:opacity-50"
+                            className="ui-input border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2.5 text-xs sm:text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] disabled:opacity-50"
                         >
                             {Object.entries(OCR_LANGUAGES).map(([code, item]) => (
                                 <option key={code} value={code}>
@@ -878,17 +894,20 @@ export function SubtitleTranslatorView() {
                     </div>
 
                     {isTranslating ? (
-                        <button
+                        <motion.button
                             type="button"
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => setIsTranslating(false)}
-                            className="flex items-center justify-center gap-2 rounded-lg border border-rose-900/80 bg-rose-950/40 px-3 py-2 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-950"
+                            className="flex items-center justify-center gap-2 ui-control border border-rose-900/80 bg-rose-950/40 px-4 py-2.5 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-950 cursor-pointer"
                         >
                             <Square className="h-3.5 w-3.5" />
                             Çeviriyi durdur
-                        </button>
+                        </motion.button>
                     ) : (
-                        <button
+                        <motion.button
                             type="button"
+                            whileHover={!stream || !hasValidSelection || isLoadingOcr ? undefined : { scale: 1.02 }}
+                            whileTap={!stream || !hasValidSelection || isLoadingOcr ? undefined : { scale: 0.95 }}
                             disabled={!stream || !hasValidSelection || isLoadingOcr}
                             onClick={() => {
                                 setRecognizedText("");
@@ -900,7 +919,7 @@ export function SubtitleTranslatorView() {
                                 void setOverlayVisibility(true);
                                 setIsTranslating(true);
                             }}
-                            className="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                            className="btn-accent flex items-center justify-center gap-2 ui-control px-4 py-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
                         >
                             {isLoadingOcr ? (
                                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -908,77 +927,97 @@ export function SubtitleTranslatorView() {
                                 <ScanText className="h-3.5 w-3.5" />
                             )}
                             Canlı çeviriyi başlat
-                        </button>
+                        </motion.button>
                     )}
 
-                    {isLoadingOcr && (
-                        <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                            OCR motoru ve dil modeli yükleniyor…
-                        </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                        {isLoadingOcr && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+                            >
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin text-[var(--accent-text)]" />
+                                OCR motoru ve dil modeli yükleniyor…
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    {isTranslating && !isLoadingOcr && (
-                        <div className="flex items-center gap-2 text-[11px] text-emerald-300">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                            Ekran altyazıları izleniyor · %{Math.round(progress * 100)}
-                        </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                        {isTranslating && !isLoadingOcr && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden flex items-center gap-2 text-xs text-[var(--accent-text)] font-medium"
+                            >
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
+                                Ekran altyazıları izleniyor · %{Math.round(progress * 100)}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    {error && (
-                        <div
-                            role="alert"
-                            className="flex items-start gap-2 rounded-lg border border-rose-900/70 bg-rose-950/30 p-2.5 text-xs text-rose-200"
-                        >
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                            <span>{error}</span>
-                        </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                role="alert"
+                                className="overflow-hidden flex items-start gap-2 ui-inner border border-rose-900/70 bg-rose-950/30 p-3 text-xs text-rose-200"
+                            >
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                                <span>{error}</span>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    <div className="flex min-h-24 flex-col gap-2 border-t border-zinc-800 pt-3">
-                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                            <ScanText className="h-3 w-3" />
+                    <div className="flex min-h-24 flex-col gap-2 border-t border-[var(--border-subtle)] pt-3">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
+                            <ScanText className="h-3.5 w-3.5" />
                             Algılanan altyazı
                         </div>
-                        <p className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">
+                        <p className="whitespace-pre-wrap text-xs sm:text-[13px] leading-relaxed text-[var(--text-primary)]">
                             {recognizedText || "Altyazı algılandığında burada görünür."}
                         </p>
                         {ocrConfidence !== null && ocrConfidence < 20 && (
-                            <p className="text-[10px] text-amber-300">
+                            <p className="text-xs text-amber-300">
                                 OCR metni okuyamadı (%{Math.round(ocrConfidence)} güven). Yalnızca altyazı satırını kapsayan alanı seçin.
                             </p>
                         )}
                     </div>
 
-                    <div className="flex min-h-28 flex-col gap-3 border-t border-zinc-800 pt-3">
-                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-300">
-                            <Languages className="h-3 w-3" />
+                    <div className="flex min-h-28 flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-text)]">
+                            <Languages className="h-3.5 w-3.5" />
                             Oyun üstü altyazı
                         </div>
-                        <p className="text-xs leading-relaxed text-zinc-400">
+                        <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
                             {translatedText
                                 ? "Türkçe çeviri ekranınızın sağ üst köşesindeki yapışkan notta gösteriliyor."
                                 : "Çeviri, oyun veya diğer uygulamaların üzerinde ayrı bir pencerede gösterilecek."}
                         </p>
-                        <button
+                        <motion.button
                             type="button"
+                            whileTap={{ scale: 0.96 }}
                             onClick={() =>
                                 void setOverlayVisibility(!isOverlayVisible)
                             }
-                            className="flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 transition-colors hover:bg-zinc-800"
+                            className="flex items-center justify-center gap-2 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
                         >
                             {isOverlayVisible
                                 ? "Yapışkan notu gizle"
                                 : "Yapışkan notu göster"}
-                        </button>
-                        <p className="text-[10px] text-zinc-500">
+                        </motion.button>
+                        <p className="text-xs text-[var(--text-muted)]">
                             Not tıklamaları oyuna geçirir. Ctrl + Shift + Y ile gösterip gizleyebilirsiniz.
                         </p>
                     </div>
 
-                    <div className="flex flex-col gap-3 border-t border-zinc-800 pt-3">
+                    <div className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-medium text-zinc-200">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">
                                 Yapışkan not görünümü
                             </span>
                             <button
@@ -986,13 +1025,13 @@ export function SubtitleTranslatorView() {
                                 onClick={() =>
                                     setOverlaySettings(DEFAULT_OVERLAY_SETTINGS)
                                 }
-                                className="text-[10px] text-zinc-500 transition-colors hover:text-zinc-200"
+                                className="text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
                             >
                                 Sıfırla
                             </button>
                         </div>
 
-                        <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                             Yatay konum · {overlaySettings.x}%
                             <input
                                 type="range"
@@ -1008,7 +1047,7 @@ export function SubtitleTranslatorView() {
                             />
                         </label>
 
-                        <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                             Dikey konum · {overlaySettings.y}%
                             <input
                                 type="range"
@@ -1025,7 +1064,7 @@ export function SubtitleTranslatorView() {
                         </label>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                            <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                                 Genişlik · {overlaySettings.width}px
                                 <input
                                     type="range"
@@ -1041,7 +1080,7 @@ export function SubtitleTranslatorView() {
                                     }
                                 />
                             </label>
-                            <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                            <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                                 Yükseklik · {overlaySettings.height}px
                                 <input
                                     type="range"
@@ -1059,7 +1098,7 @@ export function SubtitleTranslatorView() {
                             </label>
                         </div>
 
-                        <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
                             Yazı boyutu · {overlaySettings.fontSize}px
                             <input
                                 type="range"
@@ -1075,10 +1114,10 @@ export function SubtitleTranslatorView() {
                             />
                         </label>
                     </div>
-                </section>
+                </motion.section>
             </div>
 
-            <aside className="rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100/80">
+            <aside className="ui-inner border border-amber-900/50 bg-amber-950/20 px-4 py-3 text-xs leading-relaxed text-amber-100/80">
                 OCR cihazınızda çalışır. Dil modeli ilk kullanımda internetten indirilir; çeviri için yalnızca algılanan altyazı metni ücretsiz Google Translate endpoint’ine gönderilir. İnternet gerekir; bu anahtarsız endpoint’in kullanım koşulları ve erişilebilirliği değişebilir. Daha iyi sonuç için yalnızca altyazıları kapsayan dar bir alan seçin.
             </aside>
         </div>

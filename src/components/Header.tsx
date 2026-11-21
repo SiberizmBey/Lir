@@ -1,16 +1,27 @@
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
     Volume2,
     VolumeX,
     Plus,
     Search,
     Square,
-    Headphones,
     Minus,
     Maximize2,
     X,
+    Radio,
+    AudioWaveform,
+    ChevronDown,
+    Check,
+    Sliders,
 } from "lucide-react";
 import { AudioVisualizer } from "./AudioVisualizer";
-import { AudioRoutingConfig, DiscordStatus } from "../types/sound";
+import {
+    AudioRoutingConfig,
+    UIStyle,
+    VoiceChangerConfig,
+} from "../types/sound";
+import { VOICE_PRESETS, VoicePresetDefinition } from "../utils/voicePresets";
 
 interface HeaderProps {
     searchQuery: string;
@@ -19,11 +30,15 @@ interface HeaderProps {
     onStopAll: () => void;
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (newConfig: AudioRoutingConfig) => void;
+    voiceChangerConfig: VoiceChangerConfig;
+    onSelectVoicePreset: (preset: VoicePresetDefinition) => void;
+    onToggleVoiceChanger: () => void;
+    onOpenVoiceChangerTab: () => void;
     activePlayingCount: number;
     onOpenRoutingTab: () => void;
-    discordStatus?: DiscordStatus;
     backgroundImageEnabled: boolean;
     transparency: number;
+    uiStyle: UIStyle;
 }
 
 export function Header({
@@ -33,13 +48,47 @@ export function Header({
     onStopAll,
     routingConfig,
     onRoutingConfigChange,
+    voiceChangerConfig,
+    onSelectVoicePreset,
+    onToggleVoiceChanger,
+    onOpenVoiceChangerTab,
     activePlayingCount,
     onOpenRoutingTab,
-    discordStatus,
     backgroundImageEnabled,
     transparency,
+    uiStyle,
 }: HeaderProps) {
+    const [isVolumeExpanded, setIsVolumeExpanded] = useState(false);
+    const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
+    const voiceMenuRef = useRef<HTMLDivElement | null>(null);
     const isMuted = routingConfig.masterVolume === 0;
+
+    useEffect(() => {
+        if (!isVoiceMenuOpen) return;
+        const handleOutsideClick = (e: MouseEvent) => {
+            if (
+                voiceMenuRef.current &&
+                !voiceMenuRef.current.contains(e.target as Node)
+            ) {
+                setIsVoiceMenuOpen(false);
+            }
+        };
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setIsVoiceMenuOpen(false);
+        };
+        window.addEventListener("mousedown", handleOutsideClick);
+        window.addEventListener("keydown", handleEsc);
+        return () => {
+            window.removeEventListener("mousedown", handleOutsideClick);
+            window.removeEventListener("keydown", handleEsc);
+        };
+    }, [isVoiceMenuOpen]);
+
+    const activePreset = VOICE_PRESETS.find(
+        (p) => p.id === voiceChangerConfig.preset,
+    );
+    const isVoiceEffectRunning =
+        voiceChangerConfig.enabled && voiceChangerConfig.wetMix > 0;
 
     const handleToggleMute = () => {
         onRoutingConfigChange({
@@ -73,174 +122,371 @@ export function Header({
         }
     };
 
+    const isWin10 = uiStyle === "win10";
+    const isWin11 = uiStyle === "win11";
+
+    const islandOpacity = backgroundImageEnabled ? 100 - transparency : 82;
+    const capsuleStyle = isWin10
+        ? backgroundImageEnabled
+            ? {
+                  backgroundColor: `color-mix(in srgb, var(--bg-island) ${100 - transparency}%, transparent)`,
+              }
+            : undefined
+        : {
+              backgroundColor: `color-mix(in srgb, var(--bg-island) ${islandOpacity}%, transparent)`,
+          };
+
+    // Transparent floating overlay in Gama & Win11 so scrolled content passes visibly behind the navbar!
+    const headerClass = isWin10
+        ? "relative h-14 px-4 flex items-center justify-between gap-3 shrink-0 select-none window-drag-region border-b border-[var(--border-subtle)] bg-[var(--bg-island)] rounded-none z-30"
+        : isWin11
+          ? "absolute top-0 left-0 right-0 px-4 sm:px-6 pt-2.5 pb-2 flex items-center justify-between gap-2.5 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30"
+          : "absolute top-0 left-0 right-0 px-4 sm:px-6 pt-3 pb-2 flex items-center justify-between gap-3 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30";
+
+    const capsuleBaseClass = isWin10
+        ? "h-10 flex items-center shrink-0 window-no-drag bg-transparent border-0 rounded-none"
+        : isWin11
+          ? "pointer-events-auto h-11 flex items-center rounded-xl border border-[var(--border-subtle)] backdrop-blur-xl shrink-0 window-no-drag transition-[border-radius,border-color] duration-200"
+          : "pointer-events-auto h-11 flex items-center rounded-full border border-[var(--border-subtle)] backdrop-blur-xl shrink-0 window-no-drag transition-[border-radius,border-color] duration-200";
+
+    const searchBoxClass = isWin10
+        ? "h-9 flex-1 max-w-md px-3 flex items-center gap-2.5 rounded-[2px] border border-[var(--border-subtle)] bg-[var(--bg-input)] focus-within:border-[var(--accent-border)] transition-colors window-no-drag"
+        : isWin11
+          ? "pointer-events-auto h-11 flex-1 max-w-md px-3.5 flex items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] backdrop-blur-xl focus-within:border-[var(--accent-border)] transition-colors window-no-drag"
+          : "pointer-events-auto h-11 flex-1 max-w-md px-3.5 flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] backdrop-blur-xl focus-within:border-[var(--accent-border)] transition-colors window-no-drag";
+
+    const controlRadius = isWin10
+        ? "rounded-[2px]"
+        : isWin11
+          ? "rounded-lg"
+          : "rounded-full";
+
     return (
         <header
-            className="h-16 px-2 py-2 flex items-center justify-between gap-3 shrink-0 select-none window-drag-region"
-            style={{
-                backgroundColor: backgroundImageEnabled
-                    ? "transparent"
-                    : "var(--bg-canvas)",
-            }}
+            className={headerClass}
+            style={isWin10 ? capsuleStyle : undefined}
         >
-            {/* Floating Capsule Bar Container */}
-            <div
-                className="w-full h-11 flex items-center justify-between gap-2.5 px-3 bg-zinc-950/90 backdrop-blur-md border border-zinc-800/90 rounded-full"
-                style={{
-                    backgroundColor: backgroundImageEnabled
-                        ? `color-mix(in srgb, var(--bg-inner) ${100 - transparency}%, transparent)`
-                        : undefined,
-                }}
-            >
-                {/* Left zone: Audio Device & Equalizer Capsule */}
-                <div className="flex items-center gap-2 window-no-drag">
-                    {/* Device Routing Indicator */}
-                    {/* <button
+            {/* Left Capsule / Section: Audio Output, Live Equalizer & Quick Voice Effect Switcher */}
+            <div className="flex items-center gap-2 shrink-0">
+                <motion.div
+                    layout
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    className={`${capsuleBaseClass} ${isWin10 ? "px-0 gap-2" : "px-2.5 gap-2"}`}
+                    style={!isWin10 ? capsuleStyle : undefined}
+                >
+                    <motion.button
+                        type="button"
                         onClick={onOpenRoutingTab}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.96 }}
                         title="Ses çıkış ayarlarını düzenle"
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800/80 text-xs text-zinc-300 transition-all group cursor-pointer"
+                        className={`flex items-center gap-2 px-2.5 py-1.5 ${controlRadius} hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                     >
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="font-mono text-[11px] truncate max-w-[170px] text-zinc-200">
+                        <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                                activePlayingCount > 0
+                                    ? "bg-[var(--accent)] animate-pulse"
+                                    : "bg-[var(--accent)] opacity-80"
+                            }`}
+                        />
+                        <Radio className="w-3.5 h-3.5 text-[var(--accent-text)] shrink-0 hidden sm:block" />
+                        <span className="text-xs font-medium text-[var(--text-primary)] truncate max-w-[130px] hidden md:block">
                             {routingConfig.primaryDeviceLabel || "CABLE Input"}
                         </span>
-                        {routingConfig.dualOutputEnabled && (
-                            <div className="flex items-center gap-1 text-[10px] text-zinc-400 border border-zinc-800 bg-zinc-950 px-1.5 py-0.2 rounded-full font-mono">
-                                <Headphones className="w-2.5 h-2.5" />
-                                <span>Çift</span>
-                            </div>
-                        )}
-                    </button> */}
+                    </motion.button>
 
-                    {/* Equalizer Visualizer Capsule */}
-                    <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 bg-zinc-900/60 rounded-full border border-zinc-800/80">
+                    <div className="hidden xl:flex items-center pl-2 border-l border-[var(--border-subtle)]">
                         <AudioVisualizer
                             isPlaying={activePlayingCount > 0}
                             height={16}
                         />
                     </div>
+                </motion.div>
 
-                    {/* Discord RPC Capsule */}
-                    {/* <button
-                        onClick={onOpenRoutingTab}
-                        title={`Discord Rich Presence (Bot ID: ${discordStatus?.clientId || "1558769862053077114"}) - ${discordStatus?.connected ? "Bağlandı (Aktif)" : "Bekleniyor"}`}
-                        className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono transition-colors cursor-pointer ${
-                            discordStatus?.connected
-                                ? "bg-indigo-950/60 border-indigo-700/80 text-indigo-300 hover:bg-indigo-950/80"
-                                : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+                {/* Instant Voice Effect Quick Switcher */}
+                <div ref={voiceMenuRef} className="relative pointer-events-auto window-no-drag">
+                    <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => setIsVoiceMenuOpen((prev) => !prev)}
+                        title="Anlık ses efekti değiştir"
+                        style={!isWin10 ? capsuleStyle : undefined}
+                        className={`${
+                            isWin10
+                                ? "h-9 px-2.5 rounded-[2px] border border-[var(--border-subtle)] bg-[var(--bg-card)]"
+                                : isWin11
+                                  ? "h-11 px-3 rounded-xl border border-[var(--border-subtle)] backdrop-blur-xl"
+                                  : "h-11 px-3.5 rounded-full border border-[var(--border-subtle)] backdrop-blur-xl"
+                        } flex items-center gap-2 text-xs font-medium transition-colors cursor-pointer ${
+                            isVoiceEffectRunning
+                                ? "border-[var(--accent-border)] text-[var(--accent-text)]"
+                                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                         }`}
                     >
-                        <div
-                            className={`w-1.5 h-1.5 rounded-full ${discordStatus?.connected ? "bg-indigo-400 animate-pulse" : "bg-zinc-600"}`}
+                        <AudioWaveform className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden sm:inline truncate max-w-[115px]">
+                            {isVoiceEffectRunning
+                                ? activePreset?.name || "Özel Efekt"
+                                : "Doğal Ses"}
+                        </span>
+                        <ChevronDown
+                            className={`w-3.5 h-3.5 transition-transform ${
+                                isVoiceMenuOpen ? "rotate-180" : ""
+                            }`}
                         />
-                        <span>Discord RPC</span>
-                    </button> */}
-                </div>
+                    </motion.button>
 
-                {/* Center Zone: Capsule Search Bar */}
-                <div className="flex-1 max-w-sm relative window-no-drag">
-                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        placeholder="Ses veya kısayol ara..."
-                        className="w-full bg-zinc-900/80 text-xs text-zinc-200 placeholder-zinc-500 pl-8.5 pr-7 py-1.5 rounded-full border border-zinc-800/80 focus:outline-none focus:border-zinc-600 focus:bg-zinc-900 transition-all"
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => onSearchChange("")}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-200"
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
-
-                {/* Right Zone: Master Volume, Stop All, Yeni Ses, and Window Controls */}
-                <div className="flex items-center gap-2 window-no-drag">
-                    {/* Master Volume Capsule */}
-                    <div className="group hidden sm:flex h-9 w-10 shrink-0 items-center gap-0 overflow-hidden rounded-full border border-zinc-800/80 bg-zinc-900/80 p-1.5 transition-[width] duration-300 ease-in-out hover:w-[144px] hover:gap-2 focus-within:w-[144px] focus-within:gap-2">
-                        <button
-                            onClick={handleToggleMute}
-                            className="flex h-5 w-5 shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-200 cursor-pointer"
-                            title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
-                        >
-                            {isMuted ? (
-                                <VolumeX className="w-3.5 h-3.5 text-rose-400" />
-                            ) : (
-                                <Volume2 className="w-3.5 h-3.5 text-zinc-300" />
-                            )}
-                        </button>
-                        <div className="flex w-0 min-w-0 items-center gap-2 overflow-hidden opacity-0 transition-[width,opacity] duration-300 group-hover:w-[100px] group-hover:opacity-100 group-focus-within:w-[100px] group-focus-within:opacity-100">
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.02"
-                                value={routingConfig.masterVolume}
-                                onChange={(e) =>
-                                    handleVolumeSlider(parseFloat(e.target.value))
-                                }
-                                className="w-16 shrink-0 accent-white cursor-pointer"
-                                title={`Ana Ses: %${Math.round(routingConfig.masterVolume * 100)}`}
-                            />
-                            <span className="w-7 shrink-0 text-right text-[11px] font-mono tabular-nums text-zinc-400">
-                                %{Math.round(routingConfig.masterVolume * 100)}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Stop All Capsule */}
-                    <button
-                        onClick={onStopAll}
-                        title={`Tüm sesleri durdur (${routingConfig.stopAllHotkey})`}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
-                            activePlayingCount > 0
-                                ? "bg-rose-950/60 border-rose-700 text-rose-300 hover:bg-rose-950/80"
-                                : "bg-zinc-900/80 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850"
-                        }`}
-                    >
-                        <Square className="w-3 h-3 fill-current" />
-                    </button>
-
-                    {/* Primary Action Capsule: Yeni Ses */}
-                    <button
-                        onClick={onAddNewSound}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-zinc-200 active:bg-zinc-300 text-black text-xs font-semibold transition-all cursor-pointer whitespace-nowrap"
-                    >
-                        <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    </button>
-
-                    {/* Circular Window Controls inside capsule (Electron only) */}
-                    {window.electronAPI?.isElectron && (
-                        <div className="flex items-center pl-2 ml-0.5 border-l border-zinc-800/90 gap-0.5">
-                            <button
-                                onClick={handleMinimize}
-                                title="Simge Durumuna Küçült"
-                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+                    <AnimatePresence>
+                        {isVoiceMenuOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                                transition={{ duration: 0.14 }}
+                                className="absolute left-0 top-full mt-2 w-72 bg-[var(--bg-modal)] border border-[var(--border-card)] ui-card p-3 flex flex-col gap-2.5 z-50"
                             >
-                                <Minus className="w-3.5 h-3.5" />
-                            </button>
+                                <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+                                    <div className="flex items-center gap-2">
+                                        <AudioWaveform className="w-4 h-4 text-[var(--accent-text)]" />
+                                        <span className="text-xs font-bold text-[var(--text-primary)]">
+                                            Anlık Ses Efekti
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={onToggleVoiceChanger}
+                                        className={`px-2 py-0.5 ui-control text-[10px] font-mono font-semibold border cursor-pointer transition-colors ${
+                                            isVoiceEffectRunning
+                                                ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                                : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                                        }`}
+                                    >
+                                        {isVoiceEffectRunning ? "AÇIK" : "KAPALI"}
+                                    </button>
+                                </div>
 
-                            <button
-                                onClick={handleMaximize}
-                                title="Ekranı Kapla / Geri Yükle"
-                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
-                            >
-                                <Maximize2 className="w-3 h-3" />
-                            </button>
+                                <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-0.5">
+                                    {VOICE_PRESETS.map((preset) => {
+                                        const isCurrent =
+                                            voiceChangerConfig.preset ===
+                                                preset.id &&
+                                            (preset.id === "natural"
+                                                ? !isVoiceEffectRunning
+                                                : isVoiceEffectRunning);
+                                        const hk =
+                                            voiceChangerConfig.presetHotkeys?.[
+                                                preset.id
+                                            ];
+                                        return (
+                                            <button
+                                                key={preset.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    onSelectVoicePreset(preset);
+                                                    setIsVoiceMenuOpen(false);
+                                                }}
+                                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 ui-control text-xs border transition-colors cursor-pointer ${
+                                                    isCurrent
+                                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold"
+                                                        : "bg-transparent border-transparent hover:bg-[var(--bg-card-hover)] text-[var(--text-primary)]"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+                                                        {isCurrent && (
+                                                            <Check className="w-3.5 h-3.5" />
+                                                        )}
+                                                    </span>
+                                                    <span className="truncate">
+                                                        {preset.name}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    {hk && (
+                                                        <span className="px-1.5 py-0.5 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-[10px] font-mono text-[var(--accent-text)]">
+                                                            {hk}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                                                        {preset.badge}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
 
-                            <button
-                                onClick={handleClose}
-                                title="Kapat"
-                                className="w-7 h-7 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-rose-600 transition-colors cursor-pointer"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                    )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsVoiceMenuOpen(false);
+                                        onOpenVoiceChangerTab();
+                                    }}
+                                    className="w-full flex items-center justify-center gap-1.5 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                                >
+                                    <Sliders className="w-3 h-3" />
+                                    <span>Kısayol &amp; İnce Ayarları Aç</span>
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
             </div>
+
+            {/* Center Capsule / Section: Search Bar */}
+            <div
+                className={searchBoxClass}
+                style={!isWin10 ? capsuleStyle : undefined}
+            >
+                <Search className="w-4 h-4 text-[var(--text-muted)] shrink-0 pointer-events-none" />
+                <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    placeholder="Ses adı, kategori veya kısayol ara..."
+                    className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none"
+                />
+                <AnimatePresence>
+                    {searchQuery && (
+                        <motion.button
+                            type="button"
+                            initial={{ opacity: 0, scale: 0.6 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={{ duration: 0.14 }}
+                            onClick={() => onSearchChange("")}
+                            aria-label="Aramayı temizle"
+                            className={`p-1 ${controlRadius} text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </motion.button>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* Right Capsule / Section: Master Volume, Stop, Add Sound & Window Controls */}
+            <motion.div
+                layout
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                className={`${capsuleBaseClass} ${isWin10 ? "px-0 gap-1.5" : "px-1.5 gap-1.5"}`}
+                style={!isWin10 ? capsuleStyle : undefined}
+            >
+                {/* Master Volume Control with smooth spring expand */}
+                <motion.div
+                    onMouseEnter={() => setIsVolumeExpanded(true)}
+                    onMouseLeave={() => setIsVolumeExpanded(false)}
+                    onFocus={() => setIsVolumeExpanded(true)}
+                    onBlur={() => setIsVolumeExpanded(false)}
+                    animate={{ width: isVolumeExpanded ? 148 : 32 }}
+                    transition={{
+                        type: "spring",
+                        stiffness: 420,
+                        damping: 32,
+                    }}
+                    className={`hidden sm:flex h-8 items-center gap-2 overflow-hidden ${controlRadius} border border-[var(--border-subtle)] bg-[var(--bg-card)] px-1.5`}
+                >
+                    <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.88 }}
+                        onClick={handleToggleMute}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                        title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
+                    >
+                        {isMuted ? (
+                            <VolumeX className="w-4 h-4 text-rose-400" />
+                        ) : (
+                            <Volume2 className="w-4 h-4 text-[var(--text-primary)]" />
+                        )}
+                    </motion.button>
+                    <motion.div
+                        animate={{
+                            opacity: isVolumeExpanded ? 1 : 0,
+                        }}
+                        transition={{ duration: 0.16 }}
+                        className="flex w-[104px] shrink-0 items-center gap-2"
+                    >
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.02"
+                            value={routingConfig.masterVolume}
+                            onChange={(e) =>
+                                handleVolumeSlider(parseFloat(e.target.value))
+                            }
+                            className="w-16 shrink-0 cursor-pointer"
+                            title={`Ana Ses: %${Math.round(routingConfig.masterVolume * 100)}`}
+                        />
+                        <span className="w-8 shrink-0 text-right text-[11px] font-mono tabular-nums text-[var(--text-secondary)]">
+                            %{Math.round(routingConfig.masterVolume * 100)}
+                        </span>
+                    </motion.div>
+                </motion.div>
+
+                {/* Stop All Button */}
+                <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={onStopAll}
+                    title={`Tüm sesleri durdur (${routingConfig.stopAllHotkey})`}
+                    className={`h-8 flex items-center gap-1.5 px-3 ${controlRadius} text-xs font-medium border transition-colors cursor-pointer ${
+                        activePlayingCount > 0
+                            ? "bg-rose-950/60 border-rose-700 text-rose-300 hover:bg-rose-950/80"
+                            : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-hover)]"
+                    }`}
+                >
+                    <Square className="w-3 h-3 fill-current" />
+                    <span className="hidden xl:inline">Durdur</span>
+                </motion.button>
+
+                {/* Primary Green Accent CTA: Yeni Ses */}
+                <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={onAddNewSound}
+                    className={`btn-accent h-8 flex items-center gap-1.5 px-3.5 ${controlRadius} text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap`}
+                >
+                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span className="hidden md:inline">Yeni Ses</span>
+                </motion.button>
+
+                {/* Electron Window Controls */}
+                {window.electronAPI?.isElectron && (
+                    <div className="flex items-center pl-1.5 ml-0.5 border-l border-[var(--border-subtle)] gap-0.5">
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.88 }}
+                            onClick={handleMinimize}
+                            title="Simge Durumuna Küçült"
+                            className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
+                        >
+                            <Minus className="w-3.5 h-3.5" />
+                        </motion.button>
+
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.88 }}
+                            onClick={handleMaximize}
+                            title="Ekranı Kapla / Geri Yükle"
+                            className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
+                        >
+                            <Maximize2 className="w-3 h-3" />
+                        </motion.button>
+
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.88 }}
+                            onClick={handleClose}
+                            title="Kapat"
+                            className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-white hover:bg-rose-600 transition-colors cursor-pointer`}
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </motion.button>
+                    </div>
+                )}
+            </motion.div>
         </header>
     );
 }

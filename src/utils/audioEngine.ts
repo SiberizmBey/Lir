@@ -1,4 +1,6 @@
-import { SoundItem } from '../types/sound';
+import { SoundItem, VoiceChangerConfig } from '../types/sound';
+import { DEFAULT_VOICE_CHANGER_CONFIG } from './voicePresets';
+import { createPitchShifterNode, ensurePitchShifterWorklet } from './pitchWorklet';
 
 // Prevent Chromium V8 garbage collector from terminating active mic streams
 declare global {
@@ -20,8 +22,36 @@ class AudioEngine {
   private micAnalyser: AnalyserNode | null = null;
   private micStream: MediaStream | null = null;
 
+  // Voice Changer (Level 1 DSP Chain)
+  private voiceChangerConfig: VoiceChangerConfig = { ...DEFAULT_VOICE_CHANGER_CONFIG };
+  private micPostDspNode: GainNode | null = null;
+  private micDryGain: GainNode | null = null;
+  private micWetGain: GainNode | null = null;
+  private micHpFilter: BiquadFilterNode | null = null;
+  private micPitchNode: AudioWorkletNode | null = null;
+  private micLpFilter: BiquadFilterNode | null = null;
+  private micBassFilter: BiquadFilterNode | null = null;
+  private micPresenceFilter: BiquadFilterNode | null = null;
+  private micWaveShaper: WaveShaperNode | null = null;
+  private micRingBypassGain: GainNode | null = null;
+  private micRingModGain: GainNode | null = null;
+  private micRingOsc: OscillatorNode | null = null;
+  private micRingDepth: GainNode | null = null;
+  private micRingSumGain: GainNode | null = null;
+  private micEchoDelay: DelayNode | null = null;
+  private micEchoFeedback: GainNode | null = null;
+  private micEchoGain: GainNode | null = null;
+  private micConvolver: ConvolverNode | null = null;
+  private micReverbGain: GainNode | null = null;
+  private reverbImpulseBuffer: AudioBuffer | null = null;
+  private lastDistortionAmount: number = -1;
+  private micMonitorDest: MediaStreamAudioDestinationNode | null = null;
+  private micMonitorAudio: HTMLAudioElement | null = null;
+  private isWetChainConnected: boolean = false;
+  private micToCableConnected: boolean = false;
+
   // 2. Secondary Context: Headphones (Local Monitoring)
-  // ONLY Soundboard SFX plays here (User's own voice NEVER plays in headphones to prevent annoying echo)
+  // ONLY Soundboard SFX plays here (User's own voice NEVER plays in headphones unless selfMonitor is enabled)
   private monitorCtx: AudioContext | null = null;
   private monitorEffectsGain: GainNode | null = null;
   private monitorLimiter: DynamicsCompressorNode | null = null;
@@ -48,8 +78,12 @@ class AudioEngine {
 
   private primaryDeviceId: string = 'default';
   private secondaryDeviceId: string = 'default';
+  private resolvedSameOutputDevice: boolean = true;
+  private isPrimaryVirtualCable: boolean = false;
+  private isSecondaryVirtualCable: boolean = false;
   private dualOutputEnabled: boolean = true;
   private masterVolume: number = 0.85;
+  private activeRecDspUpdater: ((cfg: VoiceChangerConfig) => void) | null = null;
 
   // Unity gain multipliers (prevents digital clipping/distortion)
   private readonly SFX_BOOST = 1.0;
@@ -163,7 +197,7 @@ class AudioEngine {
     }
 
     if (deviceChanged) {
-      this.updateSinkIds();
+      void this.updateSinkIds();
     }
   }
 
@@ -172,7 +206,83 @@ class AudioEngine {
     this.checkAndApplyMicDucking();
   }
 
+  private isVirtualCableOutputLabel(label: string): boolean {
+    const l = label.toLowerCase();
+    return (
+      l.includes('cable input') ||
+      l.includes('vb-audio') ||
+      l.includes('voicemeeter') ||
+      l.includes('virtual audio') ||
+      l.includes('blackhole') ||
+      l.includes('soundflower')
+    );
+  }
+
+  private isLoopbackMicLabel(label: string): boolean {
+    const l = label.toLowerCase();
+    return (
+      l.includes('cable') ||
+      l.includes('voicemeeter') ||
+      l.includes('stereo mix') ||
+      l.includes('stereo karışımı') ||
+      l.includes('what u hear') ||
+      l.includes('wave out')
+    );
+  }
+
+  public isPrimaryRoutedToSpeakersOnly(): boolean {
+    return !this.isPrimaryVirtualCable && (!this.primaryDeviceId || this.primaryDeviceId === 'default');
+  }
+
+  private async resolveOutputDeviceMetadata() {
+    const primaryTarget = this.primaryDeviceId || 'default';
+    const secondaryTarget = this.secondaryDeviceId || 'default';
+
+    let sameDevice =
+      primaryTarget === secondaryTarget ||
+      ((!primaryTarget || primaryTarget === 'default') &&
+        (!secondaryTarget || secondaryTarget === 'default'));
+    let primaryVirtual = false;
+    let secondaryVirtual = false;
+
+    try {
+      if (navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outputs = devices.filter((d) => d.kind === 'audiooutput');
+        const defaultOutput = outputs.find((d) => d.deviceId === 'default');
+        const primaryOutput =
+          outputs.find((d) => d.deviceId === primaryTarget) || defaultOutput;
+        const secondaryOutput =
+          outputs.find((d) => d.deviceId === secondaryTarget) || defaultOutput;
+
+        if (primaryOutput?.label) {
+          primaryVirtual = this.isVirtualCableOutputLabel(primaryOutput.label);
+        }
+        if (secondaryOutput?.label) {
+          secondaryVirtual = this.isVirtualCableOutputLabel(secondaryOutput.label);
+        }
+        if (
+          primaryOutput &&
+          secondaryOutput &&
+          primaryOutput.groupId &&
+          secondaryOutput.groupId &&
+          primaryOutput.groupId === secondaryOutput.groupId
+        ) {
+          sameDevice = true;
+        }
+      }
+    } catch {
+      // ignore enumeration failures
+    }
+
+    this.resolvedSameOutputDevice = sameDevice;
+    this.isPrimaryVirtualCable = primaryVirtual;
+    this.isSecondaryVirtualCable = secondaryVirtual;
+  }
+
   private async updateSinkIds() {
+    await this.resolveOutputDeviceMetadata();
+
     const primaryTarget = this.primaryDeviceId || 'default';
     try {
       if (this.cableCtx && 'setSinkId' in this.cableCtx) {
@@ -196,6 +306,338 @@ class AudioEngine {
     } catch (err) {
       console.warn('monitorCtx.setSinkId error:', err);
     }
+
+    try {
+      if (this.micMonitorAudio && 'setSinkId' in this.micMonitorAudio) {
+        const setSink = (this.micMonitorAudio as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId;
+        if (typeof setSink === 'function') {
+          await setSink.call(this.micMonitorAudio, secondaryTarget);
+        }
+      }
+    } catch (err) {
+      console.warn('micMonitorAudio.setSinkId error:', err);
+    }
+
+    this.syncMicCableConnection();
+    this.syncMicMonitor();
+  }
+
+  private createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
+    const samples = 2048;
+    const buffer = new ArrayBuffer(samples * 4);
+    const curve = new Float32Array(buffer);
+    if (amount <= 0.5) {
+      for (let i = 0; i < samples; i++) {
+        curve[i] = (i * 2) / samples - 1;
+      }
+      return curve;
+    }
+
+    const k = amount * 2.2;
+    const deg = Math.PI / 180;
+    for (let i = 0; i < samples; i++) {
+      const x = (i * 2) / samples - 1;
+      curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  private getOrCreateReverbImpulse(ctx: AudioContext): AudioBuffer {
+    if (this.reverbImpulseBuffer && this.reverbImpulseBuffer.sampleRate === ctx.sampleRate) {
+      return this.reverbImpulseBuffer;
+    }
+    const duration = 1.45;
+    const length = Math.floor(ctx.sampleRate * duration);
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < length; i++) {
+        const env = Math.pow(1 - i / length, 2.6);
+        const white = Math.random() * 2 - 1;
+        lp = lp * 0.65 + white * 0.35;
+        data[i] = lp * env * 0.75;
+      }
+    }
+    this.reverbImpulseBuffer = impulse;
+    return impulse;
+  }
+
+  public setVoiceChangerConfig(config: VoiceChangerConfig) {
+    this.voiceChangerConfig = { ...config };
+    this.applyVoiceChangerParams(false);
+    this.activeRecDspUpdater?.(this.voiceChangerConfig);
+    this.syncMicMonitor();
+  }
+
+  private setParamImmediateOrRamp(
+    param: AudioParam,
+    target: number,
+    now: number,
+    immediate: boolean,
+    rampSec: number = 0.015,
+  ) {
+    param.cancelScheduledValues(now);
+    if (immediate) {
+      param.value = target;
+      param.setValueAtTime(target, now);
+    } else {
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(target, now + rampSec);
+    }
+  }
+
+  private setWetBranchConnected(connected: boolean) {
+    const targetOut = this.micPostDspNode || this.micGainNode;
+    if (!this.micSourceNode || !this.micHpFilter || !this.micWetGain || !targetOut) {
+      return;
+    }
+
+    if (connected && !this.isWetChainConnected) {
+      try {
+        this.micSourceNode.connect(this.micHpFilter);
+        this.micWetGain.connect(targetOut);
+        this.isWetChainConnected = true;
+      } catch {
+        // ignore if already connected
+      }
+    } else if (!connected && this.isWetChainConnected) {
+      try {
+        this.micSourceNode.disconnect(this.micHpFilter);
+      } catch { }
+      try {
+        this.micWetGain.disconnect(targetOut);
+      } catch { }
+      this.isWetChainConnected = false;
+    }
+  }
+
+  private applyVoiceChangerParams(immediate: boolean = false) {
+    if (!this.cableCtx || !this.micDryGain || !this.micWetGain) return;
+
+    const now = this.cableCtx.currentTime;
+    const cfg = this.voiceChangerConfig;
+    const isEffectActive = Boolean(cfg.enabled) && cfg.wetMix > 0;
+    const wasWetConnected = this.isWetChainConnected;
+
+    if (!isEffectActive) {
+      // Physically disconnect wet DSP graph so ZERO delay, filter, echo, or reverb can leak!
+      this.setWetBranchConnected(false);
+      this.setParamImmediateOrRamp(this.micDryGain.gain, 1.0, now, true);
+      this.setParamImmediateOrRamp(this.micWetGain.gain, 0.0, now, true);
+      if (this.micEchoFeedback) {
+        this.setParamImmediateOrRamp(this.micEchoFeedback.gain, 0.0, now, true);
+      }
+      if (this.micEchoGain) {
+        this.setParamImmediateOrRamp(this.micEchoGain.gain, 0.0, now, true);
+      }
+      if (this.micReverbGain) {
+        this.setParamImmediateOrRamp(this.micReverbGain.gain, 0.0, now, true);
+      }
+      if (this.micRingDepth && this.micRingBypassGain) {
+        this.setParamImmediateOrRamp(this.micRingDepth.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(this.micRingBypassGain.gain, 1.0, now, true);
+      }
+      if (this.micPitchNode) {
+        const pitchParam = this.micPitchNode.parameters.get('semitones');
+        if (pitchParam) {
+          this.setParamImmediateOrRamp(pitchParam, 0.0, now, true);
+        }
+      }
+      return;
+    }
+
+    // Transitioning from bypassed -> active: snap gains to exact initial values before connecting
+    const snapParams = immediate || !wasWetConnected;
+
+    const rawWet = Math.max(0, Math.min(1, cfg.wetMix));
+    const wet = rawWet >= 0.99 ? 1 : rawWet;
+    const dry = 1 - wet;
+
+    this.setParamImmediateOrRamp(this.micDryGain.gain, dry, now, snapParams);
+    this.setParamImmediateOrRamp(this.micWetGain.gain, wet, now, snapParams);
+
+    if (this.micHpFilter) {
+      this.setParamImmediateOrRamp(
+        this.micHpFilter.frequency,
+        Math.max(20, Math.min(1500, cfg.highpassHz)),
+        now,
+        snapParams,
+      );
+    }
+    if (this.micLpFilter) {
+      this.setParamImmediateOrRamp(
+        this.micLpFilter.frequency,
+        Math.max(600, Math.min(20000, cfg.lowpassHz)),
+        now,
+        snapParams,
+      );
+    }
+    if (this.micBassFilter) {
+      this.setParamImmediateOrRamp(
+        this.micBassFilter.gain,
+        Math.max(-14, Math.min(16, cfg.bassBoostDb)),
+        now,
+        snapParams,
+      );
+    }
+    if (this.micPresenceFilter) {
+      this.setParamImmediateOrRamp(
+        this.micPresenceFilter.gain,
+        Math.max(-10, Math.min(14, cfg.clarityBoostDb)),
+        now,
+        snapParams,
+      );
+    }
+    if (this.micPitchNode) {
+      const pitchParam = this.micPitchNode.parameters.get('semitones');
+      if (pitchParam) {
+        this.setParamImmediateOrRamp(
+          pitchParam,
+          Math.max(-12, Math.min(12, cfg.pitchSemitones ?? 0)),
+          now,
+          snapParams,
+          0.02,
+        );
+      }
+    }
+    if (this.micWaveShaper) {
+      const dist = Math.max(0, Math.min(100, cfg.distortionAmount));
+      this.micWaveShaper.oversample = dist > 0.5 ? '2x' : 'none';
+      if (Math.abs(dist - this.lastDistortionAmount) >= 0.5) {
+        this.micWaveShaper.curve = this.createDistortionCurve(dist);
+        this.lastDistortionAmount = dist;
+      }
+    }
+
+    const ringActive = cfg.ringModHz > 0 && cfg.ringModMix > 0;
+    const ringMix = ringActive ? Math.max(0, Math.min(1, cfg.ringModMix)) : 0;
+    if (this.micRingBypassGain && this.micRingDepth && this.micRingOsc) {
+      this.setParamImmediateOrRamp(this.micRingBypassGain.gain, 1 - ringMix, now, snapParams);
+      this.setParamImmediateOrRamp(this.micRingDepth.gain, ringMix, now, snapParams);
+      this.setParamImmediateOrRamp(
+        this.micRingOsc.frequency,
+        Math.max(10, Math.min(240, cfg.ringModHz || 45)),
+        now,
+        snapParams,
+      );
+    }
+
+    if (this.micEchoDelay && this.micEchoFeedback && this.micEchoGain) {
+      const echoActive = cfg.echoDelayMs > 0 && cfg.echoMix > 0;
+      this.setParamImmediateOrRamp(
+        this.micEchoDelay.delayTime,
+        Math.max(0.01, Math.min(0.6, (cfg.echoDelayMs || 100) / 1000)),
+        now,
+        snapParams,
+        0.02,
+      );
+      this.setParamImmediateOrRamp(
+        this.micEchoFeedback.gain,
+        echoActive ? Math.max(0, Math.min(0.75, cfg.echoFeedback)) : 0,
+        now,
+        snapParams,
+        0.02,
+      );
+      this.setParamImmediateOrRamp(
+        this.micEchoGain.gain,
+        echoActive ? Math.max(0, Math.min(0.9, cfg.echoMix)) : 0,
+        now,
+        snapParams,
+        0.02,
+      );
+    }
+
+    if (this.micReverbGain) {
+      this.setParamImmediateOrRamp(
+        this.micReverbGain.gain,
+        Math.max(0, Math.min(0.95, cfg.reverbMix)),
+        now,
+        snapParams,
+        0.02,
+      );
+    }
+
+    this.setWetBranchConnected(true);
+  }
+
+  private syncMicCableConnection() {
+    if (!this.micGainNode || !this.cableMasterBus) {
+      this.micToCableConnected = false;
+      return;
+    }
+
+    // Never route live microphone into "default" system speakers/headphones unless
+    // the default playback device itself is a virtual cable (prevents hearing yourself & echo loop)!
+    const shouldRouteToCable =
+      this.isMicEnabled &&
+      (this.isPrimaryVirtualCable ||
+        (Boolean(this.primaryDeviceId) && this.primaryDeviceId !== 'default'));
+
+    if (shouldRouteToCable && !this.micToCableConnected) {
+      try {
+        this.micGainNode.connect(this.cableMasterBus);
+        this.micToCableConnected = true;
+      } catch {
+        // already connected
+      }
+    } else if (!shouldRouteToCable && this.micToCableConnected) {
+      try {
+        this.micGainNode.disconnect(this.cableMasterBus);
+      } catch { }
+      this.micToCableConnected = false;
+    }
+  }
+
+  private syncMicMonitor() {
+    if (!this.cableCtx || !this.micGainNode || !this.isMicEnabled) {
+      this.teardownMicMonitor();
+      return;
+    }
+
+    // Only play mic monitor in headphones when user explicitly turns selfMonitor ON
+    // AND secondary device is not a virtual cable (never loop back into VB-CABLE).
+    if (!this.voiceChangerConfig.selfMonitor || this.isSecondaryVirtualCable) {
+      this.teardownMicMonitor();
+      return;
+    }
+
+    if (!this.micMonitorDest) {
+      this.micMonitorDest = this.cableCtx.createMediaStreamDestination();
+      this.micGainNode.connect(this.micMonitorDest);
+    }
+
+    if (!this.micMonitorAudio) {
+      const audioEl = new Audio();
+      audioEl.autoplay = true;
+      audioEl.srcObject = this.micMonitorDest.stream;
+      this.micMonitorAudio = audioEl;
+
+      const secondaryTarget = this.secondaryDeviceId || 'default';
+      if ('setSinkId' in audioEl) {
+        const setSink = (audioEl as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId;
+        if (typeof setSink === 'function') {
+          void setSink.call(audioEl, secondaryTarget).catch(() => {});
+        }
+      }
+      void audioEl.play().catch(() => {});
+    }
+  }
+
+  private teardownMicMonitor() {
+    if (this.micMonitorAudio) {
+      try {
+        this.micMonitorAudio.pause();
+        this.micMonitorAudio.srcObject = null;
+      } catch { }
+      this.micMonitorAudio = null;
+    }
+    if (this.micMonitorDest && this.micGainNode) {
+      try {
+        this.micGainNode.disconnect(this.micMonitorDest);
+      } catch { }
+    }
+    this.micMonitorDest = null;
   }
 
   // Smooth microphone ducking to completely eradicate acoustic echo / headset bleed into the microphone
@@ -253,19 +695,13 @@ class AudioEngine {
     this.isMicEnabled = true;
     this.currentMicDeviceId = targetDeviceId;
 
-    // Studio-grade clean audio constraints:
-    // Disabling Chromium's internal AEC, AGC, and Noise Suppression is CRITICAL!
-    // When left enabled, Chromium applies double-filtering on top of Discord, causing
-    // robotic, underwater, muffled, and out-of-phase "weird" audio with high buffer latency.
     const cleanAudioConstraints: MediaTrackConstraints = {
       echoCancellation: false,
       noiseSuppression: false,
       autoGainControl: false,
-      channelCount: { ideal: 2 },
       sampleRate: { ideal: 48000 },
-      latency: { ideal: 0 },
-      // Chromium internal WebRTC flags to fully bypass DSP distortion
       ...({
+        latency: { ideal: 0 },
         googEchoCancellation: false,
         googAutoGainControl: false,
         googNoiseSuppression: false,
@@ -276,50 +712,7 @@ class AudioEngine {
     };
 
     try {
-      let stream: MediaStream | null = null;
-
-      // 1. Request target microphone with exact matching and clean audio constraints
-      if (targetDeviceId && targetDeviceId !== 'default') {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              ...cleanAudioConstraints,
-              deviceId: { exact: targetDeviceId },
-            },
-          });
-        } catch (e1) {
-          console.warn('Exact deviceId match failed, trying direct deviceId:', e1);
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                ...cleanAudioConstraints,
-                deviceId: targetDeviceId,
-              },
-            });
-          } catch (e2) {
-            console.warn('Direct deviceId failed, trying ideal:', e2);
-            try {
-              stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                  ...cleanAudioConstraints,
-                  deviceId: { ideal: targetDeviceId },
-                },
-              });
-            } catch (e3) { }
-          }
-        }
-      }
-
-      // 2. Fallback to system default audio if deviceId was default or unavailable
-      if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: cleanAudioConstraints,
-        });
-      }
-
-      if (!stream) {
-        throw new Error('Mikrofon akışı alınamadı. Lütfen Windows mikrofon izinlerini kontrol edin.');
-      }
+      const stream = await this.requestCleanMicStream(targetDeviceId, cleanAudioConstraints);
 
       // Activate all audio tracks
       stream.getAudioTracks().forEach((track) => {
@@ -333,30 +726,129 @@ class AudioEngine {
         throw new Error('Ses mikseri hazır değil.');
       }
 
-      // Ensure AudioContext is fully running
+      // Ensure AudioContext is fully running, pitch worklet is loaded, and sink IDs are resolved
       if (this.cableCtx.state === 'suspended') {
         await this.cableCtx.resume().catch(() => { });
       }
+      await Promise.all([
+        this.updateSinkIds(),
+        ensurePitchShifterWorklet(this.cableCtx),
+      ]);
 
       // Create Microphone Source Node
       this.micSourceNode = this.cableCtx.createMediaStreamSource(stream);
       window.__lir_active_mic_source = this.micSourceNode;
 
-      // Create Microphone Gain Node
+      // Create Microphone Gain Node (Output into Analyser, VB-CABLE Bus, Optional Monitor)
       this.micGainNode = this.cableCtx.createGain();
+      this.micGainNode.gain.value = this.currentMicVolume * this.MIC_BOOST;
       this.updateMicGain(false);
 
-      // Connect mic to Gain
-      this.micSourceNode.connect(this.micGainNode);
+      this.micPostDspNode = this.cableCtx.createGain();
+      this.micPostDspNode.gain.value = 1.0;
+
+      // Build Level 1 DSP Voice Changer Chain between micSourceNode and micPostDspNode -> micGainNode
+      // Initialize EVERY gain to clean silent/unity defaults BEFORE connecting!
+      this.micDryGain = this.cableCtx.createGain();
+      this.micDryGain.gain.value = 1.0;
+
+      this.micWetGain = this.cableCtx.createGain();
+      this.micWetGain.gain.value = 0.0;
+
+      this.micHpFilter = this.cableCtx.createBiquadFilter();
+      this.micHpFilter.type = 'highpass';
+      this.micHpFilter.Q.value = 0.75;
+
+      this.micPitchNode = createPitchShifterNode(this.cableCtx);
+
+      this.micLpFilter = this.cableCtx.createBiquadFilter();
+      this.micLpFilter.type = 'lowpass';
+      this.micLpFilter.Q.value = 0.75;
+
+      this.micBassFilter = this.cableCtx.createBiquadFilter();
+      this.micBassFilter.type = 'lowshelf';
+      this.micBassFilter.frequency.value = 140;
+
+      this.micPresenceFilter = this.cableCtx.createBiquadFilter();
+      this.micPresenceFilter.type = 'peaking';
+      this.micPresenceFilter.frequency.value = 2400;
+      this.micPresenceFilter.Q.value = 1.35;
+
+      this.micWaveShaper = this.cableCtx.createWaveShaper();
+      this.micWaveShaper.oversample = 'none';
+      this.lastDistortionAmount = -1;
+
+      this.micRingBypassGain = this.cableCtx.createGain();
+      this.micRingBypassGain.gain.value = 1.0;
+      this.micRingModGain = this.cableCtx.createGain();
+      this.micRingModGain.gain.value = 0.0;
+      this.micRingOsc = this.cableCtx.createOscillator();
+      this.micRingOsc.type = 'sine';
+      this.micRingDepth = this.cableCtx.createGain();
+      this.micRingDepth.gain.value = 0.0;
+      this.micRingOsc.connect(this.micRingDepth);
+      this.micRingDepth.connect(this.micRingModGain.gain);
+      this.micRingOsc.start();
+      this.micRingSumGain = this.cableCtx.createGain();
+      this.micRingSumGain.gain.value = 1.0;
+
+      this.micEchoDelay = this.cableCtx.createDelay(1.0);
+      this.micEchoFeedback = this.cableCtx.createGain();
+      this.micEchoFeedback.gain.value = 0.0;
+      this.micEchoGain = this.cableCtx.createGain();
+      this.micEchoGain.gain.value = 0.0;
+
+      this.micConvolver = this.cableCtx.createConvolver();
+      this.micConvolver.buffer = this.getOrCreateReverbImpulse(this.cableCtx);
+      this.micReverbGain = this.cableCtx.createGain();
+      this.micReverbGain.gain.value = 0.0;
+
+      // Wire Dry Path (always connected, 100% pure 0-latency mic when Effect Engine is OFF)
+      this.micSourceNode.connect(this.micDryGain);
+      this.micDryGain.connect(this.micPostDspNode);
+      this.micPostDspNode.connect(this.micGainNode);
+
+      // Wire internal Wet DSP chain (source->hp and wetGain->micGainNode stay DISCONNECTED until Effect Engine is enabled!)
+      if (this.micPitchNode) {
+        this.micHpFilter.connect(this.micPitchNode);
+        this.micPitchNode.connect(this.micLpFilter);
+      } else {
+        this.micHpFilter.connect(this.micLpFilter);
+      }
+      this.micLpFilter.connect(this.micBassFilter);
+      this.micBassFilter.connect(this.micPresenceFilter);
+      this.micPresenceFilter.connect(this.micWaveShaper);
+
+      this.micWaveShaper.connect(this.micRingBypassGain);
+      this.micWaveShaper.connect(this.micRingModGain);
+      this.micRingBypassGain.connect(this.micRingSumGain);
+      this.micRingModGain.connect(this.micRingSumGain);
+
+      this.micRingSumGain.connect(this.micWetGain);
+
+      this.micRingSumGain.connect(this.micEchoDelay);
+      this.micEchoDelay.connect(this.micEchoFeedback);
+      this.micEchoFeedback.connect(this.micEchoDelay);
+      this.micEchoDelay.connect(this.micEchoGain);
+      this.micEchoGain.connect(this.micWetGain);
+
+      this.micRingSumGain.connect(this.micConvolver);
+      this.micConvolver.connect(this.micReverbGain);
+      this.micReverbGain.connect(this.micWetGain);
+
+      this.isWetChainConnected = false;
+      this.applyVoiceChangerParams(true);
 
       // Connect mic to VU Meter Analyser (Measures ONLY microphone, never soundboard!)
       if (this.micAnalyser) {
         this.micGainNode.connect(this.micAnalyser);
       }
 
-      // MIX MIC INTO THE CABLE MASTER BUS (Direct to VB-CABLE Input, bypassing local headphones!)
-      this.micGainNode.connect(this.cableMasterBus);
+      // Connect mic to VB-CABLE bus ONLY when primary output is a virtual cable or explicit non-default output
+      this.micToCableConnected = false;
+      this.syncMicCableConnection();
 
+      this.syncMicMonitor();
       this.resumeContexts();
       this.isMicConnecting = false;
       this.checkAndApplyMicDucking();
@@ -374,6 +866,63 @@ class AudioEngine {
   }
 
   private cleanupMicStream() {
+    this.teardownMicMonitor();
+    this.setWetBranchConnected(false);
+    this.micToCableConnected = false;
+    if (this.micRingOsc) {
+      try {
+        this.micRingOsc.stop();
+        this.micRingOsc.disconnect();
+      } catch (e) { }
+      this.micRingOsc = null;
+    }
+    const dspNodes: Array<AudioNode | null> = [
+      this.micPostDspNode,
+      this.micDryGain,
+      this.micWetGain,
+      this.micHpFilter,
+      this.micPitchNode,
+      this.micLpFilter,
+      this.micBassFilter,
+      this.micPresenceFilter,
+      this.micWaveShaper,
+      this.micRingBypassGain,
+      this.micRingModGain,
+      this.micRingDepth,
+      this.micRingSumGain,
+      this.micEchoDelay,
+      this.micEchoFeedback,
+      this.micEchoGain,
+      this.micConvolver,
+      this.micReverbGain,
+    ];
+    for (const node of dspNodes) {
+      if (node) {
+        try {
+          node.disconnect();
+        } catch { }
+      }
+    }
+    this.micPostDspNode = null;
+    this.micDryGain = null;
+    this.micWetGain = null;
+    this.micHpFilter = null;
+    this.micPitchNode = null;
+    this.micLpFilter = null;
+    this.micBassFilter = null;
+    this.micPresenceFilter = null;
+    this.micWaveShaper = null;
+    this.micRingBypassGain = null;
+    this.micRingModGain = null;
+    this.micRingDepth = null;
+    this.micRingSumGain = null;
+    this.micEchoDelay = null;
+    this.micEchoFeedback = null;
+    this.micEchoGain = null;
+    this.micConvolver = null;
+    this.micReverbGain = null;
+    this.lastDistortionAmount = -1;
+
     if (this.micSourceNode) {
       try {
         this.micSourceNode.disconnect();
@@ -396,6 +945,330 @@ class AudioEngine {
       this.micStream = null;
       window.__lir_active_mic_stream = null;
     }
+  }
+
+  private async requestCleanMicStream(
+    targetDeviceId: string,
+    constraints?: MediaTrackConstraints,
+  ): Promise<MediaStream> {
+    const baseConstraints: MediaTrackConstraints = constraints ?? {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: { ideal: 48000 },
+      ...({
+        latency: { ideal: 0 },
+        googEchoCancellation: false,
+        googAutoGainControl: false,
+        googNoiseSuppression: false,
+        googHighpassFilter: false,
+        googTypingNoiseDetection: false,
+        googAudioMirroring: false,
+      } as Record<string, unknown>),
+    };
+
+    let stream: MediaStream | null = null;
+    if (targetDeviceId && targetDeviceId !== 'default') {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { ...baseConstraints, deviceId: { exact: targetDeviceId } },
+        });
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { ...baseConstraints, deviceId: targetDeviceId },
+          });
+        } catch {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: { ...baseConstraints, deviceId: { ideal: targetDeviceId } },
+            });
+          } catch { }
+        }
+      }
+    }
+
+    if (!stream) {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: baseConstraints,
+      });
+    }
+
+    if (!stream) {
+      throw new Error('Mikrofon akışı alınamadı. Lütfen mikrofon izinlerini kontrol edin.');
+    }
+
+    const openedTrack = stream.getAudioTracks()[0];
+    if (openedTrack?.label && this.isLoopbackMicLabel(openedTrack.label)) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error(
+        `Sanal kablo veya Stereo Karışımı ("${openedTrack.label}") mikrofon olarak seçilemez — sonsuz ses yankısı oluşturur. Lütfen fiziksel kulaklık/masaüstü mikrofonunuzu seçin.`
+      );
+    }
+
+    return stream;
+  }
+
+  // Acquire a processed recording stream (captures active Voice Changer DSP & Pitch Shifter!)
+  public async acquireRecordingSession(
+    micDeviceId: string = 'default',
+    includeVoiceEffects: boolean = true,
+  ): Promise<{
+    stream: MediaStream;
+    analyser: AnalyserNode;
+    micLabel: string;
+    cleanup: () => void;
+  }> {
+    this.initContexts();
+    this.resumeContexts();
+
+    if (!this.cableCtx) {
+      throw new Error('Ses motoru başlatılamadı.');
+    }
+    if (this.cableCtx.state === 'suspended') {
+      await this.cableCtx.resume().catch(() => { });
+    }
+    await ensurePitchShifterWorklet(this.cableCtx);
+
+    const recAnalyser = this.cableCtx.createAnalyser();
+    recAnalyser.fftSize = 256;
+    recAnalyser.smoothingTimeConstant = 0.72;
+    const recDest = this.cableCtx.createMediaStreamDestination();
+    recAnalyser.connect(recDest);
+
+    // Case 1: Live Mic Pass-Through is already active -> tap pre-ducking processed bus directly
+    if (this.isMicEnabled && this.micSourceNode && this.micPostDspNode) {
+      const tapNode: AudioNode = includeVoiceEffects ? this.micPostDspNode : this.micSourceNode;
+      tapNode.connect(recAnalyser);
+      const trackLabel = this.micStream?.getAudioTracks()?.[0]?.label || 'Aktif Mikrofon';
+
+      return {
+        stream: recDest.stream,
+        analyser: recAnalyser,
+        micLabel: trackLabel,
+        cleanup: () => {
+          try {
+            tapNode.disconnect(recAnalyser);
+          } catch { }
+          try {
+            recAnalyser.disconnect(recDest);
+          } catch { }
+        },
+      };
+    }
+
+    // Case 2: Mic Pass-Through is OFF -> open clean mic temporarily, process via Voice Changer DSP (never routed to speakers!)
+    const tempStream = await this.requestCleanMicStream(micDeviceId);
+    const tempSource = this.cableCtx.createMediaStreamSource(tempStream);
+
+    if (!includeVoiceEffects) {
+      tempSource.connect(recAnalyser);
+      const trackLabel = tempStream.getAudioTracks()?.[0]?.label || 'Mikrofon';
+      return {
+        stream: recDest.stream,
+        analyser: recAnalyser,
+        micLabel: trackLabel,
+        cleanup: () => {
+          try {
+            tempSource.disconnect();
+          } catch { }
+          try {
+            recAnalyser.disconnect(recDest);
+          } catch { }
+          tempStream.getTracks().forEach((t) => t.stop());
+        },
+      };
+    }
+
+    const dryGain = this.cableCtx.createGain();
+    dryGain.gain.value = 1.0;
+    const wetGain = this.cableCtx.createGain();
+    wetGain.gain.value = 0.0;
+
+    const hp = this.cableCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.Q.value = 0.75;
+
+    const pitchNode = createPitchShifterNode(this.cableCtx);
+
+    const lp = this.cableCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 0.75;
+
+    const bass = this.cableCtx.createBiquadFilter();
+    bass.type = 'lowshelf';
+    bass.frequency.value = 140;
+
+    const presence = this.cableCtx.createBiquadFilter();
+    presence.type = 'peaking';
+    presence.frequency.value = 2400;
+    presence.Q.value = 1.35;
+
+    const shaper = this.cableCtx.createWaveShaper();
+    let lastRecDist = -1;
+
+    const ringBypass = this.cableCtx.createGain();
+    ringBypass.gain.value = 1.0;
+    const ringMod = this.cableCtx.createGain();
+    ringMod.gain.value = 0.0;
+    const ringOsc = this.cableCtx.createOscillator();
+    ringOsc.type = 'sine';
+    const ringDepth = this.cableCtx.createGain();
+    ringDepth.gain.value = 0.0;
+    ringOsc.connect(ringDepth);
+    ringDepth.connect(ringMod.gain);
+    ringOsc.start();
+    const ringSum = this.cableCtx.createGain();
+    ringSum.gain.value = 1.0;
+
+    const echoDelay = this.cableCtx.createDelay(1.0);
+    const echoFb = this.cableCtx.createGain();
+    echoFb.gain.value = 0.0;
+    const echoGain = this.cableCtx.createGain();
+    echoGain.gain.value = 0.0;
+
+    const convolver = this.cableCtx.createConvolver();
+    convolver.buffer = this.getOrCreateReverbImpulse(this.cableCtx);
+    const reverbGain = this.cableCtx.createGain();
+    reverbGain.gain.value = 0.0;
+
+    tempSource.connect(dryGain);
+    dryGain.connect(recAnalyser);
+
+    if (pitchNode) {
+      hp.connect(pitchNode);
+      pitchNode.connect(lp);
+    } else {
+      hp.connect(lp);
+    }
+    lp.connect(bass);
+    bass.connect(presence);
+    presence.connect(shaper);
+    shaper.connect(ringBypass);
+    shaper.connect(ringMod);
+    ringBypass.connect(ringSum);
+    ringMod.connect(ringSum);
+    ringSum.connect(wetGain);
+
+    ringSum.connect(echoDelay);
+    echoDelay.connect(echoFb);
+    echoFb.connect(echoDelay);
+    echoDelay.connect(echoGain);
+    echoGain.connect(wetGain);
+
+    ringSum.connect(convolver);
+    convolver.connect(reverbGain);
+    reverbGain.connect(wetGain);
+
+    let recWetConnected = false;
+    const setRecWetConnected = (connected: boolean) => {
+      if (connected && !recWetConnected) {
+        try {
+          tempSource.connect(hp);
+          wetGain.connect(recAnalyser);
+          recWetConnected = true;
+        } catch { }
+      } else if (!connected && recWetConnected) {
+        try {
+          tempSource.disconnect(hp);
+        } catch { }
+        try {
+          wetGain.disconnect(recAnalyser);
+        } catch { }
+        recWetConnected = false;
+      }
+    };
+
+    const applyRecParams = (nextCfg: VoiceChangerConfig, immediate: boolean = false) => {
+      if (!this.cableCtx) return;
+      const now = this.cableCtx.currentTime;
+      const active = Boolean(nextCfg.enabled) && nextCfg.wetMix > 0;
+      const wasConnected = recWetConnected;
+
+      if (!active) {
+        setRecWetConnected(false);
+        this.setParamImmediateOrRamp(dryGain.gain, 1.0, now, true);
+        this.setParamImmediateOrRamp(wetGain.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(echoFb.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(echoGain.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(reverbGain.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(ringDepth.gain, 0.0, now, true);
+        this.setParamImmediateOrRamp(ringBypass.gain, 1.0, now, true);
+        if (pitchNode) {
+          const p = pitchNode.parameters.get('semitones');
+          if (p) this.setParamImmediateOrRamp(p, 0.0, now, true);
+        }
+        return;
+      }
+
+      const snap = immediate || !wasConnected;
+      const rawWet = Math.max(0, Math.min(1, nextCfg.wetMix));
+      const wet = rawWet >= 0.99 ? 1 : rawWet;
+      const dry = 1 - wet;
+
+      this.setParamImmediateOrRamp(dryGain.gain, dry, now, snap);
+      this.setParamImmediateOrRamp(wetGain.gain, wet, now, snap);
+      this.setParamImmediateOrRamp(hp.frequency, Math.max(20, Math.min(1500, nextCfg.highpassHz)), now, snap);
+      this.setParamImmediateOrRamp(lp.frequency, Math.max(600, Math.min(20000, nextCfg.lowpassHz)), now, snap);
+      this.setParamImmediateOrRamp(bass.gain, Math.max(-14, Math.min(16, nextCfg.bassBoostDb)), now, snap);
+      this.setParamImmediateOrRamp(presence.gain, Math.max(-10, Math.min(14, nextCfg.clarityBoostDb)), now, snap);
+
+      if (pitchNode) {
+        const p = pitchNode.parameters.get('semitones');
+        if (p) {
+          this.setParamImmediateOrRamp(p, Math.max(-12, Math.min(12, nextCfg.pitchSemitones ?? 0)), now, snap, 0.02);
+        }
+      }
+
+      const dist = Math.max(0, Math.min(100, nextCfg.distortionAmount));
+      shaper.oversample = dist > 0.5 ? '2x' : 'none';
+      if (Math.abs(dist - lastRecDist) >= 0.5) {
+        shaper.curve = this.createDistortionCurve(dist);
+        lastRecDist = dist;
+      }
+
+      const ringActive = nextCfg.ringModHz > 0 && nextCfg.ringModMix > 0;
+      const ringMix = ringActive ? Math.max(0, Math.min(1, nextCfg.ringModMix)) : 0;
+      this.setParamImmediateOrRamp(ringBypass.gain, 1 - ringMix, now, snap);
+      this.setParamImmediateOrRamp(ringDepth.gain, ringMix, now, snap);
+      this.setParamImmediateOrRamp(ringOsc.frequency, Math.max(10, Math.min(240, nextCfg.ringModHz || 45)), now, snap);
+
+      const echoActive = nextCfg.echoDelayMs > 0 && nextCfg.echoMix > 0;
+      this.setParamImmediateOrRamp(echoDelay.delayTime, Math.max(0.01, Math.min(0.6, (nextCfg.echoDelayMs || 100) / 1000)), now, snap, 0.02);
+      this.setParamImmediateOrRamp(echoFb.gain, echoActive ? Math.max(0, Math.min(0.75, nextCfg.echoFeedback)) : 0, now, snap, 0.02);
+      this.setParamImmediateOrRamp(echoGain.gain, echoActive ? Math.max(0, Math.min(0.9, nextCfg.echoMix)) : 0, now, snap, 0.02);
+      this.setParamImmediateOrRamp(reverbGain.gain, Math.max(0, Math.min(0.95, nextCfg.reverbMix)), now, snap, 0.02);
+
+      setRecWetConnected(true);
+    };
+
+    applyRecParams(this.voiceChangerConfig, true);
+    this.activeRecDspUpdater = (nextCfg) => applyRecParams(nextCfg, false);
+
+    const trackLabel = tempStream.getAudioTracks()?.[0]?.label || 'Mikrofon';
+    return {
+      stream: recDest.stream,
+      analyser: recAnalyser,
+      micLabel: trackLabel,
+      cleanup: () => {
+        this.activeRecDspUpdater = null;
+        setRecWetConnected(false);
+        try {
+          ringOsc.stop();
+        } catch { }
+        const nodes: Array<AudioNode | null> = [
+          tempSource, dryGain, wetGain, hp, pitchNode, lp, bass, presence,
+          shaper, ringBypass, ringMod, ringOsc, ringDepth, ringSum,
+          echoDelay, echoFb, echoGain, convolver, reverbGain, recAnalyser,
+        ];
+        for (const n of nodes) {
+          try {
+            n?.disconnect();
+          } catch { }
+        }
+        tempStream.getTracks().forEach((t) => t.stop());
+      },
+    };
   }
 
   // Get active microphone hardware status
@@ -570,16 +1443,16 @@ class AudioEngine {
 
     // 2. Play on Monitor Context if dual output is enabled (User's Headphones)
     // CRITICAL ANTI-ECHO GUARD:
-    // If primary and secondary outputs point to the same physical device (e.g. both 'default'),
-    // never play a duplicate buffer on monitorCtx. Playing the same sound across two AudioContexts
-    // into the exact same audio endpoint creates an unbearable double-trigger flanger/echo effect.
+    // If primary and secondary outputs resolve to the same physical device (including "default" vs real ID),
+    // never play a duplicate buffer on monitorCtx.
     const isSameTargetDevice =
+      this.resolvedSameOutputDevice ||
       this.primaryDeviceId === this.secondaryDeviceId ||
       ((!this.primaryDeviceId || this.primaryDeviceId === 'default') &&
         (!this.secondaryDeviceId || this.secondaryDeviceId === 'default'));
 
     let monitorSource: AudioBufferSourceNode | null = null;
-      if (this.dualOutputEnabled && !isSameTargetDevice && this.monitorCtx && this.monitorEffectsGain) {
+      if (this.dualOutputEnabled && !isSameTargetDevice && !this.isSecondaryVirtualCable && this.monitorCtx && this.monitorEffectsGain) {
         monitorSource = this.monitorCtx.createBufferSource();
         monitorSource.buffer = buffer;
         monitorSource.loop = !!sound.loop;

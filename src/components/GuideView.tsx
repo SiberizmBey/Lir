@@ -1,153 +1,140 @@
-import { useState } from "react";
-import { Terminal, Check, Copy, ShieldCheck, Sliders } from "lucide-react";
+import { motion } from "motion/react";
+import { ShieldCheck, Sliders, HelpCircle } from "lucide-react";
 
 export function GuideView() {
-    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-    const copyToClipboard = (text: string, index: number) => {
-        navigator.clipboard.writeText(text);
-        setCopiedIndex(index);
-        setTimeout(() => setCopiedIndex(null), 2000);
-    };
-
-    const codeSnippets = [
-        {
-            title: "1. Bağımlılıkları Yükle",
-            cmd: "npm install --legacy-peer-deps",
-        },
-        {
-            title: "2. Doğrudan Masaüstünde Çalıştır (Önerilen)",
-            cmd: "npm run electron:start",
-        },
-        {
-            title: "3. Canlı Değişiklikler İçin (Vite + Electron)",
-            cmd: "npm run dev  (ve başka terminalde: npm run electron:dev)",
-        },
-        {
-            title: "4. Windows Setup .exe Derle",
-            cmd: "npm run electron:build",
-        },
-    ];
+    const ease = [0.22, 1, 0.36, 1] as const;
 
     return (
-        <div className="flex-1 flex flex-col gap-5 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-            {/* Title */}
-            <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-base font-semibold text-white tracking-tight">
-                        Dokümantasyon & Kurulum
-                    </h1>
-                    <span className="text-[11px] font-mono border border-zinc-800 bg-zinc-950 text-zinc-400 px-1.5 py-0.2 rounded">
-                        DOCS
-                    </span>
+        <div className="flex-1 flex flex-col gap-6 w-full">
+            {/* Page Header */}
+            <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                    <HelpCircle className="w-5 h-5" />
                 </div>
-                <p className="text-xs text-zinc-400">
-                    Lir'i masaüstünde çalıştırma ve oyunlarda Soundpad gibi
-                    kullanma adımları.
-                </p>
+                <div>
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
+                            Dokümantasyon &amp; Kurulum
+                        </h1>
+                        <span className="text-xs font-mono border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)] px-2.5 py-0.5 ui-control font-semibold">
+                            DOCS
+                        </span>
+                    </div>
+                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
+                        Lir&apos;i masaüstünde çalıştırma ve oyunlarda Soundpad gibi kullanma adımları.
+                    </p>
+                </div>
             </div>
 
             {/* Architecture Deep Dive */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, delay: 0.04, ease }}
+                    whileHover={{ y: -2 }}
+                    className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-2.5"
+                >
+                    <div className="flex items-center gap-2.5 text-sm font-semibold text-[var(--text-primary)]">
+                        <ShieldCheck className="w-4 h-4 text-[var(--accent-text)]" />
                         <span>Global Shortcuts (Arka Plan Kancası)</span>
                     </div>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
+                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
                         Electron{" "}
-                        <code className="font-mono text-zinc-200">
+                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
                             globalShortcut
                         </code>{" "}
-                        modülü sayesinde pencere odakta olmasa dahi işletim
-                        sistemi düzeyinde klavye basışlarını yakalar.
+                        modülü sayesinde pencere odakta olmasa dahi işletim sistemi düzeyinde klavye basışlarını yakalar.
                     </p>
-                </div>
+                </motion.div>
 
-                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                        <Sliders className="w-4 h-4 text-zinc-400" />
-                        <span>Sanal Ses Kablosu & Dual Output</span>
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, delay: 0.08, ease }}
+                    whileHover={{ y: -2 }}
+                    className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-2.5"
+                >
+                    <div className="flex items-center gap-2.5 text-sm font-semibold text-[var(--text-primary)]">
+                        <Sliders className="w-4 h-4 text-[var(--accent-text)]" />
+                        <span>Sanal Ses Kablosu &amp; Dual Output</span>
                     </div>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
+                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
                         Sesi hem sanal mikrofona (
-                        <code className="font-mono text-zinc-200">
+                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
                             CABLE Input
                         </code>
                         ) hem kendi kulaklığınıza (
-                        <code className="font-mono text-zinc-200">
+                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
                             Speakers
                         </code>
                         ) gecikmesiz olarak yönlendirir.
                     </p>
-                </div>
+                </motion.div>
             </div>
 
             {/* Discord / Game Setup Steps */}
-            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
-                <h2 className="text-xs font-semibold text-white">
-                    Discord & Oyun Ayarları
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.24, delay: 0.12, ease }}
+                className="app-card ui-card p-5 sm:p-6 border border-[var(--border-card)] flex flex-col gap-4"
+            >
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                    Discord &amp; Oyun Ayarları
                 </h2>
-                <div className="space-y-2 text-xs text-zinc-400">
-                    <div className="flex items-start gap-2">
-                        <span className="font-mono text-zinc-600">01.</span>
+                <div className="grid grid-cols-1 gap-3 text-xs sm:text-[13px] text-[var(--text-secondary)]">
+                    <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <span className="font-mono font-bold text-[var(--accent-text)]">01.</span>
                         <div>
-                            <strong className="text-zinc-200">
+                            <strong className="text-[var(--text-primary)]">
                                 Discord Giriş Aygıtı:
                             </strong>{" "}
-                            Kullanıcı Ayarları &gt; Ses ve Görüntü &gt; Giriş
-                            Aygıtı olarak{" "}
-                            <span className="text-zinc-200 font-mono">
+                            Kullanıcı Ayarları &gt; Ses ve Görüntü &gt; Giriş Aygıtı olarak{" "}
+                            <span className="text-[var(--accent-text)] font-mono">
                                 CABLE Output
                             </span>{" "}
                             seçin.
                         </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                        <span className="font-mono text-zinc-600">02.</span>
+                    <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <span className="font-mono font-bold text-[var(--accent-text)]">02.</span>
                         <div>
-                            <strong className="text-zinc-200">
+                            <strong className="text-[var(--text-primary)]">
                                 Oyun İçi Mikrofon:
                             </strong>{" "}
-                            Windows varsayılan kayıt aygıtını "CABLE Output"
-                            yaptığınızda veya oyun içi mikrofon ayarını "CABLE
-                            Output" seçtiğinizde tuşa basınca ses yayına gider.
+                            Windows varsayılan kayıt aygıtını &quot;CABLE Output&quot; yaptığınızda veya oyun içi mikrofon ayarını &quot;CABLE Output&quot; seçtiğinizde tuşa basınca ses yayına gider.
                         </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                        <span className="font-mono text-zinc-600">03.</span>
+                    <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <span className="font-mono font-bold text-[var(--accent-text)]">03.</span>
                         <div>
-                            <strong className="text-zinc-200">
+                            <strong className="text-[var(--text-primary)]">
                                 Dual Output:
                             </strong>{" "}
-                            Lir uygulamasında "Çift Çıkış" açık olduğu sürece
-                            kendi bastığınız sesleri siz de kulaklığınızdan
-                            gecikmesiz duyarsınız.
+                            Lir uygulamasında &quot;Çift Çıkış&quot; açık olduğu sürece kendi bastığınız sesleri siz de kulaklığınızdan gecikmesiz duyarsınız.
                         </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                        <span className="font-mono text-zinc-600">04.</span>
+                    <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <span className="font-mono font-bold text-[var(--accent-text)]">04.</span>
                         <div>
-                            <strong className="text-zinc-200">
+                            <strong className="text-[var(--text-primary)]">
                                 Discord Rich Presence (RPC):
                             </strong>{" "}
-                            Discord profilinizde ne çaldığınız ve aktif sesler
-                            otomatik olarak görüntülenir.
+                            Discord profilinizde ne çaldığınız ve aktif sesler otomatik olarak görüntülenir.
                         </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                        <span className="font-mono text-zinc-600">05.</span>
+                    <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
+                        <span className="font-mono font-bold text-[var(--accent-text)]">05.</span>
                         <div>
-                            <strong className="text-zinc-200">
+                            <strong className="text-[var(--text-primary)]">
                                 Tüm Sesleri Durdur:
                             </strong>{" "}
-                            Üst çubuktaki durdur düğmesine basarak çalan tüm
-                            sesleri anında kesebilir veya Ayarlar’dan bir
-                            durdurma kısayolu atayabilirsiniz.
+                            Üst çubuktaki durdur düğmesine basarak çalan tüm sesleri anında kesebilir veya Ayarlar’dan bir durdurma kısayolu atayabilirsiniz.
                         </div>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }

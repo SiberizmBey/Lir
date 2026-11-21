@@ -449,6 +449,7 @@ function registerGlobalHotkeys(hotkeyList) {
             .replace(/CONTROL/gi, "CommandOrControl")
             .replace(/WIN/gi, "Super")
             .replace(/META/gi, "Super")
+            .replace(/\bNUMPAD\s*([0-9])\b/gi, "num$1")
             .replace(/^ESC$/i, "Escape")
             .replace(/\+ESC$/i, "+Escape")
             .replace(/^SPACE$/i, "Space")

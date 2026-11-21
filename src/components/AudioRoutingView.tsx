@@ -1,16 +1,14 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
     Radio,
     Headphones,
     Mic,
     ArrowRight,
-    Volume2,
-    ExternalLink,
     Sliders,
     Play,
     HelpCircle,
     Activity,
-    CheckCircle2,
     AlertTriangle,
 } from "lucide-react";
 import { AudioRoutingConfig } from "../types/sound";
@@ -25,7 +23,6 @@ interface AudioRoutingViewProps {
 export function AudioRoutingView({
     routingConfig,
     onRoutingConfigChange,
-    isElectron,
 }: AudioRoutingViewProps) {
     const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
     const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -33,7 +30,6 @@ export function AudioRoutingView({
     const [micLevel, setMicLevel] = useState(0);
     const [micError, setMicError] = useState<string | null>(null);
 
-    // Load and auto-detect system audio devices
     useEffect(() => {
         let isMounted = true;
 
@@ -44,7 +40,6 @@ export function AudioRoutingView({
                 let allDevices =
                     await navigator.mediaDevices.enumerateDevices();
 
-                // If labels are empty, request brief audio permission to populate device labels
                 if (allDevices.some((d) => !d.label)) {
                     try {
                         const stream =
@@ -54,7 +49,7 @@ export function AudioRoutingView({
                         stream.getTracks().forEach((t) => t.stop());
                         allDevices =
                             await navigator.mediaDevices.enumerateDevices();
-                    } catch (e) {
+                    } catch {
                         // User may not have granted yet
                     }
                 }
@@ -71,9 +66,8 @@ export function AudioRoutingView({
                 setOutputDevices(outputs);
                 setInputDevices(inputs);
 
-                // Auto-detect VB-CABLE Output device if not yet configured
                 let updated = false;
-                let newConfig = { ...routingConfig };
+                const newConfig = { ...routingConfig };
 
                 const vbCableOutput = outputs.find(
                     (d) =>
@@ -91,7 +85,6 @@ export function AudioRoutingView({
                     updated = true;
                 }
 
-                // Auto-detect user's physical microphone (ignoring virtual cables and loopback/stereo mix)
                 const isVirtualOrLoopback = (label: string) => {
                     const l = label.toLowerCase();
                     return (
@@ -104,7 +97,19 @@ export function AudioRoutingView({
                     );
                 };
 
-                const physicalMic = inputs.find((d) => !isVirtualOrLoopback(d.label));
+                const physicalMic =
+                    inputs.find(
+                        (d) =>
+                            d.label.trim() !== "" &&
+                            d.deviceId !== "default" &&
+                            d.deviceId !== "communications" &&
+                            !isVirtualOrLoopback(d.label),
+                    ) ||
+                    inputs.find(
+                        (d) =>
+                            d.label.trim() !== "" &&
+                            !isVirtualOrLoopback(d.label),
+                    );
 
                 if (
                     physicalMic &&
@@ -124,8 +129,7 @@ export function AudioRoutingView({
             }
         };
 
-        scanDevices();
-
+        void scanDevices();
         navigator.mediaDevices?.addEventListener?.("devicechange", scanDevices);
 
         return () => {
@@ -147,7 +151,6 @@ export function AudioRoutingView({
         muted: false,
     });
 
-    // Live microphone level and hardware status polling
     useEffect(() => {
         if (!routingConfig.micPassThrough) {
             setMicLevel(0);
@@ -188,7 +191,7 @@ export function AudioRoutingView({
             false,
             routingConfig.primaryDeviceId,
             routingConfig.secondaryDeviceId,
-            true, // Always hear the test tone locally so user knows the engine is healthy!
+            true,
         );
         setTimeout(() => setIsPlayingTestTone(false), 900);
     };
@@ -200,79 +203,93 @@ export function AudioRoutingView({
     );
 
     return (
-        <div className="flex-1 flex flex-col gap-5 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-            {/* Title */}
-            <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-base font-semibold text-white tracking-tight">
-                        Ses Yönlendirme & Sanal Kablo Mimarisi
-                    </h1>
-                    <span className="text-[11px] font-mono border border-zinc-800 bg-zinc-950 text-zinc-400 px-1.5 py-0.2 rounded">
-                        {isVbCableDetected
-                            ? "VB-CABLE ALGILANDI"
-                            : "CABLE BEKLENİYOR"}
-                    </span>
+        <div className="flex-1 flex flex-col gap-6 w-full">
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                        <Sliders className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
+                                Ses Yönlendirme &amp; Sanal Kablo
+                            </h1>
+                            <span
+                                className={`text-xs font-mono px-2.5 py-0.5 ui-control border font-semibold ${
+                                    isVbCableDetected
+                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                        : "bg-[var(--bg-card)] border-[var(--border-card)] text-[var(--text-secondary)]"
+                                }`}
+                            >
+                                {isVbCableDetected
+                                    ? "VB-CABLE ALGILANDI"
+                                    : "CABLE BEKLENİYOR"}
+                            </span>
+                        </div>
+                        <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
+                            Lir ses efektlerini ve mikrofonunuzu Discord veya oyunlara iletmek için sanal ses hattını yapılandırın.
+                        </p>
+                    </div>
                 </div>
-                <p className="text-xs text-zinc-400">
-                    Lir ses efektlerini ve mikrofonunuzu Discord/oyunlara
-                    iletmek için sanal ses hattını yapılandırın.
-                </p>
             </div>
 
             {/* Pipeline Diagram */}
-            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    {/* Node 1: Sources */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col items-center text-center gap-1.5 relative">
-                        <Radio className="w-4 h-4 text-zinc-300" />
-                        <span className="text-xs font-medium text-white">
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }}
+                className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-4"
+            >
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center">
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col items-center text-center gap-1.5 relative">
+                        <Radio className="w-5 h-5 text-[var(--text-primary)]" />
+                        <span className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
                             Lir + Gerçek Mikrofon
                         </span>
-                        <span className="text-[11px] text-zinc-500 font-mono">
-                            Sesler & Konuşmanız
+                        <span className="text-xs text-[var(--text-secondary)] font-mono">
+                            Sesler &amp; Konuşmanız
                         </span>
-                        <div className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 z-10 text-zinc-600">
-                            <ArrowRight className="w-3.5 h-3.5" />
+                        <div className="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 text-[var(--text-muted)]">
+                            <ArrowRight className="w-4 h-4" />
                         </div>
                     </div>
 
-                    {/* Node 2: Cable Input */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-emerald-800/50 flex flex-col items-center text-center gap-1.5 relative">
-                        <Sliders className="w-4 h-4 text-emerald-400" />
-                        <span className="text-xs font-medium text-emerald-300">
+                    <div className="p-4 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex flex-col items-center text-center gap-1.5 relative">
+                        <Sliders className="w-5 h-5 text-[var(--accent-text)]" />
+                        <span className="text-xs sm:text-sm font-semibold text-[var(--accent-text)]">
                             CABLE Input
                         </span>
-                        <span className="text-[11px] text-zinc-500 font-mono">
+                        <span className="text-xs text-[var(--text-secondary)] font-mono">
                             Sanal Mikser Hattı
                         </span>
-                        <div className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 z-10 text-zinc-600">
-                            <ArrowRight className="w-3.5 h-3.5" />
+                        <div className="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 text-[var(--text-muted)]">
+                            <ArrowRight className="w-4 h-4" />
                         </div>
                     </div>
 
-                    {/* Node 3: Discord */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col items-center text-center gap-1.5">
-                        <Mic className="w-4 h-4 text-zinc-300" />
-                        <span className="text-xs font-medium text-white">
-                            Discord & Oyun Girişi
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col items-center text-center gap-1.5">
+                        <Mic className="w-5 h-5 text-[var(--text-primary)]" />
+                        <span className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
+                            Discord &amp; Oyun Girişi
                         </span>
-                        <span className="text-[11px] text-zinc-500 font-mono">
+                        <span className="text-xs text-[var(--text-secondary)] font-mono">
                             CABLE Output (Mikrofon)
                         </span>
                     </div>
                 </div>
 
                 {/* Status Callout */}
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-950 border border-zinc-850 text-xs text-zinc-400">
-                    <div className="flex items-center gap-2">
-                        <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
+                <div className="flex items-center justify-between px-4 py-3 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
+                    <div className="flex items-center gap-2.5">
+                        <Headphones className="w-4 h-4 text-[var(--accent-text)] shrink-0" />
                         <span>
                             Çift Çıkış (Monitoring):{" "}
                             <strong
                                 className={
                                     routingConfig.dualOutputEnabled
-                                        ? "text-white"
-                                        : "text-zinc-500"
+                                        ? "text-[var(--text-primary)]"
+                                        : "text-[var(--text-muted)]"
                                 }
                             >
                                 {routingConfig.dualOutputEnabled
@@ -281,40 +298,48 @@ export function AudioRoutingView({
                             </strong>
                         </span>
                     </div>
-                    <span className="font-mono text-[11px] text-zinc-500">
+                    <span className="font-mono text-xs text-[var(--accent-text)] font-medium">
                         {routingConfig.dualOutputEnabled
                             ? "2 Kanal Aktif"
                             : "1 Kanal Aktif"}
                     </span>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Main Grid: Device Configuration */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Output Routing Box */}
-                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Radio className="w-3.5 h-3.5 text-zinc-400" />
-                            <h2 className="text-xs font-semibold text-white">
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: 0.05, ease: [0.22, 1, 0.36, 1] as const }}
+                    className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-4"
+                >
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                            <Radio className="w-4 h-4 text-[var(--accent-text)]" />
+                            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                                 Birincil Ses Çıkışı (VB-CABLE)
                             </h2>
                         </div>
-                        <button
+                        <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.94 }}
                             onClick={handleTestTone}
                             disabled={isPlayingTestTone}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-850 text-zinc-300 text-xs font-mono border border-zinc-700 transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] text-[var(--text-primary)] text-xs font-mono border border-[var(--border-subtle)] hover:border-[var(--accent-border)] transition-colors cursor-pointer"
                         >
-                            <Play className="w-3 h-3 fill-current" />
+                            <Play className="w-3 h-3 fill-current text-[var(--accent-text)]" />
                             <span>
                                 {isPlayingTestTone ? "Çalıyor..." : "Test Sesi"}
                             </span>
-                        </button>
+                        </motion.button>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[11px] text-zinc-500">
-                            Seslerin Gönderileceği Aygıt (Discord'a gidecek hat)
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-[var(--text-secondary)]">
+                            Seslerin Gönderileceği Aygıt (Discord&apos;a gidecek hat)
                         </label>
                         <select
                             value={routingConfig.primaryDeviceId}
@@ -337,7 +362,7 @@ export function AudioRoutingView({
                                     routingConfig.masterVolume,
                                 );
                             }}
-                            className="px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"
+                            className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                         >
                             <option value="default">
                                 Varsayılan Sistem Çıkışı
@@ -354,18 +379,19 @@ export function AudioRoutingView({
                         </select>
                     </div>
 
-                    {/* Dual Output Toggle (User Hear Sound Toggle) */}
-                    <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
+                    {/* Dual Output Toggle */}
+                    <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3">
                         <div className="flex flex-col">
-                            <span className="text-xs font-medium text-zinc-200">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">
                                 Çift Çıkış (Kulaklığında da Duy)
                             </span>
-                            <span className="text-[11px] text-zinc-500">
-                                Kapatırsanız sesi sadece karşı taraf duyar, siz
-                                duymazsınız
+                            <span className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                Kapatırsanız sesi sadece karşı taraf duyar, siz duymazsınız
                             </span>
                         </div>
-                        <button
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
                             onClick={() =>
                                 onRoutingConfigChange({
                                     ...routingConfig,
@@ -373,82 +399,100 @@ export function AudioRoutingView({
                                         !routingConfig.dualOutputEnabled,
                                 })
                             }
-                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${routingConfig.dualOutputEnabled
-                                    ? "bg-white justify-end"
-                                    : "bg-zinc-800 justify-start"
-                                }`}
+                            className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 ${
+                                routingConfig.dualOutputEnabled
+                                    ? "bg-[var(--accent)] justify-end"
+                                    : "bg-zinc-700 justify-start"
+                            }`}
                         >
-                            <div
-                                className={`w-4 h-4 rounded-full ${routingConfig.dualOutputEnabled ? "bg-black" : "bg-zinc-400"}`}
+                            <motion.div
+                                layout
+                                transition={{ type: "spring", stiffness: 520, damping: 32 }}
+                                className="w-5 h-5 ui-control bg-white"
                             />
-                        </button>
+                        </motion.button>
                     </div>
 
                     {/* Secondary Device selection */}
-                    {routingConfig.dualOutputEnabled && (
-                        <div className="flex flex-col gap-1 pt-1">
-                            <label className="text-[11px] text-zinc-500">
-                                Kendi Kulaklığınız (Monitoring Aygıtı)
-                            </label>
-                            <select
-                                value={routingConfig.secondaryDeviceId}
-                                onChange={(e) => {
-                                    const selected = outputDevices.find(
-                                        (d) => d.deviceId === e.target.value,
-                                    );
-                                    onRoutingConfigChange({
-                                        ...routingConfig,
-                                        secondaryDeviceId: e.target.value,
-                                        secondaryDeviceLabel:
-                                            selected?.label || "Kulaklık",
-                                    });
-                                }}
-                                className="px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"
+                    <AnimatePresence initial={false}>
+                        {routingConfig.dualOutputEnabled && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] as const }}
+                                className="overflow-hidden"
                             >
-                                <option value="default">
-                                    Varsayılan Sistem Kulaklığı / Hoparlör
-                                </option>
-                                {outputDevices.map((device) => (
-                                    <option
-                                        key={device.deviceId}
-                                        value={device.deviceId}
+                                <div className="flex flex-col gap-2 pt-2">
+                                    <label className="text-xs text-[var(--text-secondary)]">
+                                        Kendi Kulaklığınız (Monitoring Aygıtı)
+                                    </label>
+                                    <select
+                                        value={routingConfig.secondaryDeviceId}
+                                        onChange={(e) => {
+                                            const selected = outputDevices.find(
+                                                (d) => d.deviceId === e.target.value,
+                                            );
+                                            onRoutingConfigChange({
+                                                ...routingConfig,
+                                                secondaryDeviceId: e.target.value,
+                                                secondaryDeviceLabel:
+                                                    selected?.label || "Kulaklık",
+                                            });
+                                        }}
+                                        className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                                     >
-                                        {device.label ||
-                                            `Kulaklık ${device.deviceId.slice(0, 8)}`}
-                                    </option>
-                                ))}
-                            </select>
+                                        <option value="default">
+                                            Varsayılan Sistem Kulaklığı / Hoparlör
+                                        </option>
+                                        {outputDevices.map((device) => (
+                                            <option
+                                                key={device.deviceId}
+                                                value={device.deviceId}
+                                            >
+                                                {device.label ||
+                                                    `Kulaklık ${device.deviceId.slice(0, 8)}`}
+                                            </option>
+                                        ))}
+                                    </select>
 
-                            {/* Same device anti-echo alert */}
-                            {(routingConfig.primaryDeviceId === routingConfig.secondaryDeviceId ||
-                                ((!routingConfig.primaryDeviceId || routingConfig.primaryDeviceId === "default") &&
-                                    (!routingConfig.secondaryDeviceId || routingConfig.secondaryDeviceId === "default"))) && (
-                                    <div className="mt-1 p-2 rounded bg-amber-950/40 border border-amber-800/80 text-[10px] text-amber-300 flex items-start gap-1.5 leading-relaxed">
-                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
-                                        <span>
-                                            <strong>Yankı Koruması:</strong> Birincil çıkış ile Kulaklık aynı aygıtta.
-                                            Seslerin çift çalıp yankı (flanger/delay) yapmaması için tek kanaldan iletilir. Discord'a ses vermek için Birincil Çıkış olarak <strong>CABLE Input</strong> seçilmelidir.
-                                        </span>
-                                    </div>
-                                )}
-                        </div>
-                    )}
-                </div>
+                                    {(routingConfig.primaryDeviceId === routingConfig.secondaryDeviceId ||
+                                        ((!routingConfig.primaryDeviceId || routingConfig.primaryDeviceId === "default") &&
+                                            (!routingConfig.secondaryDeviceId || routingConfig.secondaryDeviceId === "default"))) && (
+                                        <div className="mt-1 p-3 ui-inner bg-amber-950/30 border border-amber-800/60 text-xs text-amber-300 flex items-start gap-2 leading-relaxed">
+                                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                                            <span>
+                                                <strong>Yankı Koruması:</strong> Birincil çıkış ile Kulaklık aynı aygıtta.
+                                                Seslerin çift çalıp yankı yapmaması için tek kanaldan iletilir. Discord&apos;a ses vermek için Birincil Çıkış olarak <strong>CABLE Input</strong> seçilmelidir.
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
 
-                {/* Microphone Pass-Through Box (CRITICAL FIX FOR USER'S VOICE CUTTING OFF) */}
-                <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Mic className="w-3.5 h-3.5 text-zinc-400" />
-                            <h2 className="text-xs font-semibold text-white">
+                {/* Microphone Pass-Through Box */}
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: 0.1, ease: [0.22, 1, 0.36, 1] as const }}
+                    className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-4"
+                >
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                            <Mic className="w-4 h-4 text-[var(--accent-text)]" />
+                            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                                 Mikrofon Geçişi (Mic Pass-Through)
                             </h2>
                         </div>
                         <span
-                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${routingConfig.micPassThrough
-                                    ? "border-emerald-700 bg-emerald-950 text-emerald-300"
-                                    : "border-zinc-800 bg-zinc-950 text-zinc-500"
-                                }`}
+                            className={`text-[11px] font-mono px-2.5 py-0.5 ui-control border font-semibold ${
+                                routingConfig.micPassThrough
+                                    ? "border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)]"
+                                    : "border-[var(--border-subtle)] bg-[var(--bg-inner)] text-[var(--text-muted)]"
+                            }`}
                         >
                             {routingConfig.micPassThrough
                                 ? "MİKROFON AKTİF"
@@ -456,19 +500,20 @@ export function AudioRoutingView({
                         </span>
                     </div>
 
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
-                        Discord'da mikrofon olarak{" "}
-                        <strong className="text-zinc-200">CABLE Output</strong>{" "}
-                        seçtiğinizde kendi normal sesinizin gitmesi için burayı
-                        açın. Lir mikrofonunuzu alıp sanal kabloya miksler.
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                        Discord&apos;da mikrofon olarak{" "}
+                        <strong className="text-[var(--text-primary)]">CABLE Output</strong>{" "}
+                        seçtiğinizde kendi konuşmanızın gitmesi için burayı açın. Lir mikrofonunuzu alıp sanal kabloya miksler.
                     </p>
 
                     {/* Toggle Switch */}
-                    <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60">
-                        <span className="text-xs font-medium text-zinc-200">
-                            Mikrofonumu Yayına / Sanal Kabloya Aktar
+                    <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)] gap-3">
+                        <span className="text-xs font-semibold text-[var(--text-primary)]">
+                            Mikrofonumu Sanal Kabloya Aktar
                         </span>
-                        <button
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
                             onClick={async () => {
                                 const nextState = !routingConfig.micPassThrough;
                                 if (nextState) {
@@ -480,30 +525,55 @@ export function AudioRoutingView({
                                             routingConfig.micVolume,
                                         );
                                     if (res.success) {
-                                        onRoutingConfigChange({
-                                            ...routingConfig,
-                                            micPassThrough: true,
-                                        });
+                                        let nextPrimaryId =
+                                            routingConfig.primaryDeviceId;
+                                        let nextPrimaryLabel =
+                                            routingConfig.primaryDeviceLabel;
+
                                         if (
                                             navigator.mediaDevices
                                                 ?.enumerateDevices
                                         ) {
                                             const all =
                                                 await navigator.mediaDevices.enumerateDevices();
-                                            setInputDevices(
-                                                all.filter(
-                                                    (d) =>
-                                                        d.kind === "audioinput",
-                                                ),
+                                            const nextInputs = all.filter(
+                                                (d) => d.kind === "audioinput",
                                             );
-                                            setOutputDevices(
-                                                all.filter(
-                                                    (d) =>
-                                                        d.kind ===
-                                                        "audiooutput",
-                                                ),
+                                            const nextOutputs = all.filter(
+                                                (d) => d.kind === "audiooutput",
                                             );
+                                            setInputDevices(nextInputs);
+                                            setOutputDevices(nextOutputs);
+
+                                            if (
+                                                !nextPrimaryId ||
+                                                nextPrimaryId === "default"
+                                            ) {
+                                                const vbCable = nextOutputs.find(
+                                                    (d) =>
+                                                        d.label
+                                                            .toLowerCase()
+                                                            .includes("cable input") ||
+                                                        d.label
+                                                            .toLowerCase()
+                                                            .includes("vb-audio"),
+                                                );
+                                                if (vbCable) {
+                                                    nextPrimaryId =
+                                                        vbCable.deviceId;
+                                                    nextPrimaryLabel =
+                                                        vbCable.label;
+                                                }
+                                            }
                                         }
+
+                                        onRoutingConfigChange({
+                                            ...routingConfig,
+                                            micPassThrough: true,
+                                            primaryDeviceId: nextPrimaryId,
+                                            primaryDeviceLabel:
+                                                nextPrimaryLabel,
+                                        });
                                     } else {
                                         setMicError(
                                             res.error ||
@@ -521,25 +591,40 @@ export function AudioRoutingView({
                                     });
                                 }
                             }}
-                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${routingConfig.micPassThrough
-                                    ? "bg-emerald-500 justify-end"
-                                    : "bg-zinc-800 justify-start"
-                                }`}
+                            className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 ${
+                                routingConfig.micPassThrough
+                                    ? "bg-[var(--accent)] justify-end"
+                                    : "bg-zinc-700 justify-start"
+                            }`}
                         >
-                            <div className="w-4 h-4 rounded-full bg-black" />
-                        </button>
+                            <motion.div
+                                layout
+                                transition={{ type: "spring", stiffness: 520, damping: 32 }}
+                                className="w-5 h-5 ui-control bg-white"
+                            />
+                        </motion.button>
                     </div>
 
-                    {micError && (
-                        <div className="p-2 rounded bg-red-950/70 border border-red-800 text-red-300 text-[11px] flex items-center gap-1.5">
-                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-400" />
-                            <span>{micError}</span>
-                        </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                        {micError && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.18 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="p-3 ui-inner bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                                    <span>{micError}</span>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Physical Mic Selector */}
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[11px] text-zinc-500">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-[var(--text-secondary)]">
                             Gerçek Mikrofonunuz (Kulaklık Mikrofonu)
                         </label>
                         <select
@@ -556,7 +641,7 @@ export function AudioRoutingView({
                                         selected?.label || "Mikrofon",
                                 });
                             }}
-                            className="px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600"
+                            className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                         >
                             <option value="default">Varsayılan Mikrofon</option>
                             {inputDevices.map((device) => (
@@ -570,16 +655,15 @@ export function AudioRoutingView({
                             ))}
                         </select>
 
-                        {/* Hardware Link Status */}
                         {routingConfig.micPassThrough && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono mt-0.5 px-1 py-0.5 rounded bg-zinc-950/80 border border-zinc-900">
+                            <div className="flex items-center gap-2 text-xs font-mono mt-1 px-3 py-1.5 ui-input bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                                 <span
-                                    className={`w-1.5 h-1.5 rounded-full ${micStatus.active ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`}
+                                    className={`w-2 h-2 rounded-full ${micStatus.active ? "bg-[var(--accent)]" : "bg-amber-400 animate-pulse"}`}
                                 />
                                 <span
                                     className={
                                         micStatus.active
-                                            ? "text-zinc-300"
+                                            ? "text-[var(--text-primary)]"
                                             : "text-amber-400"
                                     }
                                 >
@@ -588,7 +672,7 @@ export function AudioRoutingView({
                                         : "Mikrofon taranıyor / Yeniden Başlatın"}
                                 </span>
                                 {micStatus.muted && (
-                                    <span className="text-red-400 bg-red-950 px-1 rounded ml-auto">
+                                    <span className="text-red-400 bg-red-950 px-1.5 py-0.5 rounded ml-auto">
                                         Windows Sessizde!
                                     </span>
                                 )}
@@ -596,100 +680,110 @@ export function AudioRoutingView({
                         )}
                     </div>
 
-                    {/* Live Mic VU Meter */}
-                    {routingConfig.micPassThrough && (
-                        <div className="flex flex-col gap-1.5 pt-1">
-                            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                                <span className="flex items-center gap-1.5">
-                                    <Activity
-                                        className={`w-3 h-3 ${micLevel > 0 ? "text-emerald-400 animate-pulse" : "text-zinc-500"}`}
-                                    />
-                                    <span>Mikrofon Sinyal Düzeyi:</span>
-                                </span>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={async () => {
-                                            setMicError(null);
-                                            await audioEngine.setMicrophonePassThrough(
-                                                false,
-                                            );
-                                            const res =
-                                                await audioEngine.setMicrophonePassThrough(
-                                                    true,
-                                                    routingConfig.micDeviceId,
-                                                    routingConfig.micVolume,
-                                                );
-                                            if (!res.success) {
-                                                setMicError(
-                                                    res.error ||
-                                                    "Mikrofona bağlanılamadı. Windows mikrofon izinlerini kontrol edin.",
-                                                );
-                                            }
-                                        }}
-                                        title="Mikrofon bağlantısını yeniden başlat"
-                                        className="text-[10px] text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-750 transition-colors cursor-pointer"
-                                    >
-                                        Yeniden Başlat
-                                    </button>
-                                    <span className="text-emerald-400 tabular-nums font-bold">
-                                        %{micLevel}
-                                    </span>
+                    {/* Live Mic VU Meter & Volume Slider */}
+                    <AnimatePresence initial={false}>
+                        {routingConfig.micPassThrough && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] as const }}
+                                className="overflow-hidden flex flex-col gap-4"
+                            >
+                                <div className="flex flex-col gap-2 pt-1">
+                                    <div className="flex items-center justify-between text-xs font-mono text-[var(--text-secondary)]">
+                                        <span className="flex items-center gap-1.5">
+                                            <Activity
+                                                className={`w-3.5 h-3.5 ${micLevel > 0 ? "text-[var(--accent-text)] animate-pulse" : "text-[var(--text-muted)]"}`}
+                                            />
+                                            <span>Mikrofon Sinyal Düzeyi</span>
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <motion.button
+                                                type="button"
+                                                whileTap={{ scale: 0.94 }}
+                                                onClick={async () => {
+                                                    setMicError(null);
+                                                    await audioEngine.setMicrophonePassThrough(
+                                                        false,
+                                                    );
+                                                    const res =
+                                                        await audioEngine.setMicrophonePassThrough(
+                                                            true,
+                                                            routingConfig.micDeviceId,
+                                                            routingConfig.micVolume,
+                                                        );
+                                                    if (!res.success) {
+                                                        setMicError(
+                                                            res.error ||
+                                                            "Mikrofona bağlanılamadı. Windows mikrofon izinlerini kontrol edin.",
+                                                        );
+                                                    }
+                                                }}
+                                                className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2.5 py-1 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                                            >
+                                                Yeniden Başlat
+                                            </motion.button>
+                                            <span className="text-[var(--accent-text)] tabular-nums font-bold">
+                                                %{micLevel}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="w-full h-2.5 ui-control bg-[var(--bg-inner)] overflow-hidden border border-[var(--border-subtle)]">
+                                        <div
+                                            className="h-full bg-[var(--accent)] transition-all duration-75"
+                                            style={{
+                                                width: `${Math.max(micLevel > 0 ? 5 : 0, micLevel)}%`,
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden border border-zinc-800">
-                                <div
-                                    className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75"
-                                    style={{
-                                        width: `${Math.max(micLevel > 0 ? 5 : 0, micLevel)}%`,
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Microphone Volume Slider */}
-                    {routingConfig.micPassThrough && (
-                        <div className="flex flex-col gap-1.5 pt-2 border-t border-zinc-800/60">
-                            <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-zinc-400">Mikrofon Geçiş Düzeyi:</span>
-                                <span className="font-mono text-emerald-400 font-semibold">
-                                    %{Math.round((routingConfig.micVolume ?? 1.0) * 100)}
-                                </span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="1.5"
-                                step="0.05"
-                                value={routingConfig.micVolume ?? 1.0}
-                                onChange={(e) => {
-                                    const vol = parseFloat(e.target.value);
-                                    onRoutingConfigChange({
-                                        ...routingConfig,
-                                        micVolume: vol,
-                                    });
-                                    audioEngine.setMicrophonePassThrough(
-                                        true,
-                                        routingConfig.micDeviceId,
-                                        vol,
-                                    );
-                                }}
-                                className="w-full accent-emerald-400 bg-zinc-800 h-1.5 rounded cursor-pointer"
-                            />
-                        </div>
-                    )}
+                                <div className="flex flex-col gap-1.5 pt-3 border-t border-[var(--border-subtle)]">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-[var(--text-secondary)]">Mikrofon Geçiş Düzeyi</span>
+                                        <span className="font-mono text-[var(--accent-text)] font-semibold">
+                                            %{Math.round((routingConfig.micVolume ?? 1.0) * 100)}
+                                        </span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1.5"
+                                        step="0.05"
+                                        value={routingConfig.micVolume ?? 1.0}
+                                        onChange={(e) => {
+                                            const vol = parseFloat(e.target.value);
+                                            onRoutingConfigChange({
+                                                ...routingConfig,
+                                                micVolume: vol,
+                                            });
+                                            audioEngine.setMicrophonePassThrough(
+                                                true,
+                                                routingConfig.micDeviceId,
+                                                vol,
+                                            );
+                                        }}
+                                        className="w-full cursor-pointer"
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Anti-Echo Mic Ducking Toggle */}
-                    <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
+                    <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3">
                         <div className="flex flex-col pr-2">
-                            <span className="text-xs font-medium text-zinc-200">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">
                                 Ses Çalarken Mikrofonu Sustur (Akustik Yankı Önleyici)
                             </span>
-                            <span className="text-[11px] text-zinc-500 leading-tight">
-                                Kulaklıktan veya hoparlörden mikrofona sızan sesin karşı tarafa çift (yankılı) gitmesini engeller
+                            <span className="text-xs text-[var(--text-secondary)] leading-relaxed mt-0.5">
+                                Kulaklıktan veya hoparlörden mikrofona sızan sesin karşı tarafa çift gitmesini engeller
                             </span>
                         </div>
-                        <button
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
                             onClick={() => {
                                 const nextVal = routingConfig.muteMicOnPlay === false;
                                 onRoutingConfigChange({
@@ -698,66 +792,76 @@ export function AudioRoutingView({
                                 });
                                 audioEngine.setMuteMicOnPlay(nextVal);
                             }}
-                            className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${routingConfig.muteMicOnPlay !== false
-                                    ? "bg-emerald-500 justify-end"
-                                    : "bg-zinc-800 justify-start"
-                                }`}
+                            className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 ${
+                                routingConfig.muteMicOnPlay !== false
+                                    ? "bg-[var(--accent)] justify-end"
+                                    : "bg-zinc-700 justify-start"
+                            }`}
                         >
-                            <div className="w-4 h-4 rounded-full bg-black" />
-                        </button>
+                            <motion.div
+                                layout
+                                transition={{ type: "spring", stiffness: 520, damping: 32 }}
+                                className="w-5 h-5 ui-control bg-white"
+                            />
+                        </motion.button>
                     </div>
-                </div>
+                </motion.div>
             </div>
 
             {/* Discord Quick Configuration Guide */}
-            <div className="app-card p-4 rounded-2xl bg-[#0a0a0a] border border-zinc-800/80 flex flex-col gap-3">
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: 0.14, ease: [0.22, 1, 0.36, 1] as const }}
+                className="app-card ui-card p-5 border border-[var(--border-card)] flex flex-col gap-4"
+            >
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <HelpCircle className="w-4 h-4 text-zinc-400" />
-                        <h2 className="text-xs font-semibold text-white">
-                            Discord & Oyun Nasıl Ayarlanmalı?
+                    <div className="flex items-center gap-2.5">
+                        <HelpCircle className="w-4 h-4 text-[var(--accent-text)]" />
+                        <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                            Discord &amp; Oyun Nasıl Ayarlanmalı?
                         </h2>
                     </div>
-                    <span className="text-[11px] font-mono text-emerald-400">
-                        Çokomelli Adımlar
+                    <span className="text-xs font-mono text-[var(--accent-text)] font-semibold">
+                        Önemli Adımlar
                     </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-zinc-400">
-                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
-                        <span className="font-mono text-zinc-300 font-bold">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs text-[var(--text-secondary)]">
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                        <span className="font-mono text-[var(--text-primary)] font-bold">
                             1. Lir Ayarları
                         </span>
-                        <p className="text-[11px] leading-relaxed">
-                            • <strong>Birincil Çıkış:</strong> CABLE Input seçin.
-                            <br />• <strong>Mikrofon Geçişi:</strong> AÇIK yapıp kendi mikrofonunuzu seçin (Stereo Karışımı değil).
-                            <br />• <strong>Yankı Önleyici:</strong> AÇIK tutun (Ses çalarken mikrofonu susturarak akustik sızıntıyı engeller).
+                        <p className="leading-relaxed">
+                            • <strong className="text-[var(--text-primary)]">Birincil Çıkış:</strong> CABLE Input seçin.
+                            <br />• <strong className="text-[var(--text-primary)]">Mikrofon Geçişi:</strong> AÇIK yapıp kendi mikrofonunuzu seçin (Stereo Karışımı değil).
+                            <br />• <strong className="text-[var(--text-primary)]">Yankı Önleyici:</strong> AÇIK tutun.
                         </p>
                     </div>
 
-                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
-                        <span className="font-mono text-zinc-300 font-bold">
-                            2. Discord Ayarı (Yankı & Bozuk Sesi Önleme)
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                        <span className="font-mono text-[var(--text-primary)] font-bold">
+                            2. Discord Ayarı
                         </span>
-                        <p className="text-[11px] leading-relaxed">
-                            • <strong>Giriş Aygıtı:</strong> Sadece <span className="text-white font-medium">CABLE Output</span> (Kendi mikrofonunuzu seçmeyin!).
-                            <br />• <strong>Yankı Engelleme:</strong> <span className="text-amber-300 font-semibold">KAPATIN</span> (Discord'un yankı filtresi robotik/boğuk sese neden olur).
-                            <br />• <strong>Gürültü Azaltma (Krisp):</strong> <span className="text-amber-300 font-semibold">KAPALI</span> yapın.
-                            <br />• <strong>Giriş Hassasiyeti:</strong> Otomatiği kapatıp sola çekin.
+                        <p className="leading-relaxed">
+                            • <strong className="text-[var(--text-primary)]">Giriş Aygıtı:</strong> Sadece <span className="text-[var(--accent-text)] font-medium">CABLE Output</span>.
+                            <br />• <strong className="text-[var(--text-primary)]">Yankı Engelleme:</strong> <span className="text-amber-400 font-semibold">KAPATIN</span>.
+                            <br />• <strong className="text-[var(--text-primary)]">Gürültü Azaltma (Krisp):</strong> <span className="text-amber-400 font-semibold">KAPALI</span> yapın.
+                            <br />• <strong className="text-[var(--text-primary)]">Giriş Hassasiyeti:</strong> Otomatiği kapatıp sola çekin.
                         </p>
                     </div>
 
-                    <div className="app-card p-3 rounded-xl bg-zinc-950 border border-zinc-850 flex flex-col gap-1.5">
-                        <span className="font-mono text-zinc-300 font-bold">
-                            3. Yankı & Cızırtı Çözümleri
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                        <span className="font-mono text-[var(--text-primary)] font-bold">
+                            3. Yankı &amp; Cızırtı Çözümleri
                         </span>
-                        <p className="text-[11px] leading-relaxed">
-                            • <strong>Karşıya Çift Ses Gitmesi:</strong> Kulaklıktan sızan ses mikrofona girmesin diye "Ses Çalarken Mikrofonu Sustur" açık olmalıdır.
-                            <br />• <strong>Dahili Limiter:</strong> Lir, ses patlamasını (clipping) önleyen dahili kompresör ile sesi tertemiz iletir.
+                        <p className="leading-relaxed">
+                            • <strong className="text-[var(--text-primary)]">Çift Ses Önleme:</strong> &quot;Ses Çalarken Mikrofonu Sustur&quot; açık olmalıdır.
+                            <br />• <strong className="text-[var(--text-primary)]">Dahili Limiter:</strong> Lir, ses patlamasını (clipping) önleyen dahili kompresör ile sesi temiz iletir.
                         </p>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }
