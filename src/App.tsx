@@ -51,6 +51,7 @@ import {
     applyAccentColorToRoot,
     normalizeHexColor,
 } from "./utils/accentColors";
+import { useTranslation } from "./i18n";
 
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
@@ -107,6 +108,7 @@ const normalizeHotkey = (hotkey: string) =>
         .replace(/\bNUMPAD\s+([0-9])\b/g, "NUMPAD$1");
 
 export default function App() {
+    const { t, language } = useTranslation();
     const [theme, setTheme] = useState<AppTheme>(() => {
         try {
             const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
@@ -438,21 +440,28 @@ export default function App() {
                 extraCount > 0 ? `${firstTitle} (+${extraCount})` : firstTitle;
 
             window.electronAPI.updateDiscordActivity({
-                details: `Çalıyor: ${titleDisplay}`,
-                state: `${activePlayingIds.length} aktif ses · %${Math.round(routingConfig.masterVolume * 100)} ses`,
+                details: t("discordRpc.playing", {
+                    title: titleDisplay,
+                }),
+                state: t("discordRpc.activeSounds", {
+                    count: activePlayingIds.length,
+                    volume: Math.round(routingConfig.masterVolume * 100),
+                }),
                 largeImageKey: "icon",
                 largeImageText: "Lir - Modern Soundpad",
                 smallImageKey: "play",
-                smallImageText: "Oynatılıyor",
+                smallImageText: t("discordRpc.playingShort"),
             });
         } else {
             window.electronAPI.updateDiscordActivity({
-                details: "Lir • Gelişmiş Soundpad",
-                state: `${sounds.length} ses hazır · Boşta`,
+                details: t("discordRpc.idleDetails"),
+                state: t("discordRpc.idleState", {
+                    count: sounds.length,
+                }),
                 largeImageKey: "icon",
                 largeImageText: "Lir - Modern Soundpad",
                 smallImageKey: "mic",
-                smallImageText: "Hazır",
+                smallImageText: t("common.ready"),
             });
         }
     }, [
@@ -768,7 +777,7 @@ export default function App() {
 
             if (cleanKey === normalizeHotkey(routingConfig.stopAllHotkey)) {
                 handleStopAll();
-                showTriggeredToast(cleanKey, "Tüm Sesler Durduruldu");
+                showTriggeredToast(cleanKey, t("soundboard.stopAll"));
                 return;
             }
 
@@ -781,8 +790,8 @@ export default function App() {
                 showTriggeredToast(
                     cleanKey,
                     nextEnabled
-                        ? "Efekt Motoru Açık"
-                        : "Efekt Motoru Kapalı",
+                        ? `${t("voiceChanger.title")} (${t("common.active")})`
+                        : `${t("voiceChanger.title")} (${t("common.inactive")})`,
                 );
                 return;
             }
@@ -801,6 +810,7 @@ export default function App() {
                     (p) => p.id === matchedPresetId,
                 );
                 if (matchedPreset) {
+                    const presetName = t(`voicePresets.${matchedPreset.id}_name`) || matchedPreset.name;
                     if (matchedPreset.id === "natural") {
                         setVoiceChangerConfig((prev) => ({
                             ...prev,
@@ -808,7 +818,7 @@ export default function App() {
                             enabled: false,
                             ...matchedPreset.params,
                         }));
-                        showTriggeredToast(cleanKey, "Doğal Ses");
+                        showTriggeredToast(cleanKey, presetName);
                     } else if (
                         voiceChangerConfig.enabled &&
                         voiceChangerConfig.preset === matchedPreset.id
@@ -819,7 +829,7 @@ export default function App() {
                         }));
                         showTriggeredToast(
                             cleanKey,
-                            `${matchedPreset.name} (Kapalı)`,
+                            `${presetName} (${t("common.inactive")})`,
                         );
                     } else {
                         setVoiceChangerConfig((prev) => ({
@@ -830,7 +840,7 @@ export default function App() {
                         }));
                         showTriggeredToast(
                             cleanKey,
-                            `${matchedPreset.name} (Aktif)`,
+                            `${presetName} (${t("common.active")})`,
                         );
                     }
                     return;
@@ -1061,14 +1071,14 @@ export default function App() {
         if (voiceChangerConfig.toggleHotkey?.trim()) {
             list.push({
                 targetKey: "voice-toggle",
-                label: "Efekt Motoru Aç / Kapat",
+                label: t("hotkeys.engineToggleTitle"),
                 hotkey: voiceChangerConfig.toggleHotkey,
             });
         }
         if (routingConfig.stopAllHotkey?.trim()) {
             list.push({
                 targetKey: "stop-all",
-                label: "Tüm Sesleri Durdur",
+                label: t("settings.stopAllHotkeyTitle"),
                 hotkey: routingConfig.stopAllHotkey,
             });
         }
@@ -1244,10 +1254,10 @@ export default function App() {
                                             </div>
                                             <div>
                                                 <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                                                    Soundboard
+                                                    {t("nav.soundboard")}
                                                 </h1>
                                                 <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                                                    Ses efektlerini kısayollarla tetikleyin, ses düzeylerini ayarlayın ve favorilerinizi yönetin.
+                                                    {t("soundboard.subtitle")}
                                                 </p>
                                             </div>
                                         </div>
@@ -1283,7 +1293,7 @@ export default function App() {
                                                             }}
                                                         />
                                                     )}
-                                                    <span className="relative z-10">Tümü</span>
+                                                    <span className="relative z-10">{t('common.all')}</span>
                                                     <span
                                                         className={`relative z-10 px-1.5 py-0.2 ui-control text-[11px] font-mono ${
                                                             !showOnlyFavorites
@@ -1326,7 +1336,7 @@ export default function App() {
                                                     <Heart
                                                         className={`relative z-10 w-3.5 h-3.5 ${showOnlyFavorites ? "fill-current" : ""}`}
                                                     />
-                                                    <span className="relative z-10">Favoriler</span>
+                                                    <span className="relative z-10">{t('soundboard.favorites')}</span>
                                                     <span
                                                         className={`relative z-10 px-1.5 py-0.2 ui-control text-[11px] font-mono ${
                                                             showOnlyFavorites
@@ -1349,7 +1359,7 @@ export default function App() {
                                                     damping: 26,
                                                 }}
                                                 onClick={handleResetToDefaults}
-                                                title="Varsayılan sesleri geri yükle"
+                                                title={t('soundboard.loadStarterSounds')}
                                                 className="p-2.5 ui-control bg-[var(--bg-island)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                                             >
                                                 <RotateCcw className="w-4 h-4" />
@@ -1385,7 +1395,7 @@ export default function App() {
                                                             className="absolute inset-0 ui-control bg-[var(--accent-subtle)]"
                                                         />
                                                     )}
-                                                    <span className="relative z-10">{category}</span>
+                                                    <span className="relative z-10">{t(`categories.${category}`) || category}</span>
                                                 </motion.button>
                                             );
                                         })}
@@ -1436,10 +1446,12 @@ export default function App() {
                                                 <Music className="w-6 h-6" />
                                             </div>
                                             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-                                                Ses Bulunamadı
+                                                {t('soundboard.noSearchResultsTitle')}
                                             </h3>
                                             <p className="text-xs text-[var(--text-secondary)] max-w-xs mb-4">
-                                                Arama veya filtre kriterinizle eşleşen bir ses bulunamadı.
+                                                {searchQuery
+                                                    ? t('soundboard.noSearchResultsSubtitle', { query: searchQuery })
+                                                    : t('soundboard.noSoundsSubtitle')}
                                             </p>
                                             <motion.button
                                                 type="button"
@@ -1449,7 +1461,7 @@ export default function App() {
                                                 className="btn-accent flex items-center gap-1.5 px-4 py-2 ui-control text-xs font-semibold transition-colors cursor-pointer"
                                             >
                                                 <Plus className="w-4 h-4" />
-                                                <span>Yeni Ses Ekle</span>
+                                                <span>{t('header.addNewSound')}</span>
                                             </motion.button>
                                         </motion.div>
                                     )}
@@ -1469,7 +1481,11 @@ export default function App() {
                                         setEditingHotkeyTarget({
                                             kind: "voice-preset",
                                             presetId: preset.id,
-                                            title: `Ses Efekti: ${preset.name}`,
+                                            title: t("hotkeys.presetTargetTitle", {
+                                                name:
+                                                    t(`voicePresets.${preset.id}_name`) ||
+                                                    preset.name,
+                                            }),
                                             hotkey:
                                                 voiceChangerConfig.presetHotkeys?.[
                                                     preset.id
@@ -1479,7 +1495,7 @@ export default function App() {
                                     onEditToggleHotkey={() =>
                                         setEditingHotkeyTarget({
                                             kind: "voice-toggle",
-                                            title: "Efekt Motoru Aç / Kapat",
+                                            title: t("hotkeys.engineToggleTitle"),
                                             hotkey:
                                                 voiceChangerConfig.toggleHotkey ||
                                                 "",
@@ -1513,7 +1529,11 @@ export default function App() {
                                         setEditingHotkeyTarget({
                                             kind: "voice-preset",
                                             presetId: preset.id,
-                                            title: `Ses Efekti: ${preset.name}`,
+                                            title: t("hotkeys.presetTargetTitle", {
+                                                name:
+                                                    t(`voicePresets.${preset.id}_name`) ||
+                                                    preset.name,
+                                            }),
                                             hotkey:
                                                 voiceChangerConfig.presetHotkeys?.[
                                                     preset.id
@@ -1523,7 +1543,7 @@ export default function App() {
                                     onOpenVoiceToggleHotkeyModal={() =>
                                         setEditingHotkeyTarget({
                                             kind: "voice-toggle",
-                                            title: "Efekt Motoru Aç / Kapat",
+                                            title: t("hotkeys.engineToggleTitle"),
                                             hotkey:
                                                 voiceChangerConfig.toggleHotkey ||
                                                 "",
@@ -1595,7 +1615,9 @@ export default function App() {
                         className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs"
                     >
                         <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
-                        <span className="text-[var(--text-secondary)]">Kısayol:</span>
+                        <span className="text-[var(--text-secondary)]">
+                            {t("recorder.hotkeyLabel")}
+                        </span>
                         <strong className="text-[var(--accent-text)] font-semibold">
                             {lastTriggeredNotice.key}
                         </strong>
@@ -1663,11 +1685,11 @@ export default function App() {
                             <div className="flex items-center gap-2.5 text-rose-400">
                                 <RotateCcw className="w-4 h-4" />
                                 <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                                    Sesleri Sıfırla
+                                    {t("soundboard.resetModalTitle")}
                                 </h3>
                             </div>
                             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                                Tüm eklenen veya özelleştirilen sesler silinip varsayılan başlangıç sesleri geri yüklenecektir. Emin misiniz?
+                                {t("soundboard.resetModalDesc")}
                             </p>
                             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
                                 <motion.button
@@ -1676,7 +1698,7 @@ export default function App() {
                                     onClick={() => setIsResetConfirmOpen(false)}
                                     className="px-4 py-1.5 ui-control text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                                 >
-                                    Vazgeç
+                                    {t("soundboard.resetModalCancel")}
                                 </motion.button>
                                 <motion.button
                                     type="button"
@@ -1684,7 +1706,7 @@ export default function App() {
                                     onClick={handleConfirmReset}
                                     className="px-4 py-1.5 ui-control bg-rose-600 hover:bg-rose-500 text-white keep-white text-xs font-semibold transition-colors cursor-pointer"
                                 >
-                                    Sıfırla
+                                    {t("soundboard.resetModalConfirm")}
                                 </motion.button>
                             </div>
                         </motion.div>

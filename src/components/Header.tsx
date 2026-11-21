@@ -15,6 +15,7 @@ import {
     Check,
     Sliders,
 } from "lucide-react";
+import { useTranslation } from "../i18n";
 import { AudioVisualizer } from "./AudioVisualizer";
 import {
     AudioRoutingConfig,
@@ -58,6 +59,7 @@ export function Header({
     transparency,
     uiStyle,
 }: HeaderProps) {
+    const { t } = useTranslation();
     const [isVolumeExpanded, setIsVolumeExpanded] = useState(false);
     const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
     const voiceMenuRef = useRef<HTMLDivElement | null>(null);
@@ -179,7 +181,7 @@ export function Header({
                         onClick={onOpenRoutingTab}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.96 }}
-                        title="Ses çıkış ayarlarını düzenle"
+                        title={t("header.openRoutingTab")}
                         className={`flex items-center gap-2 px-2.5 py-1.5 ${controlRadius} hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                     >
                         <span
@@ -209,7 +211,7 @@ export function Header({
                         type="button"
                         whileTap={{ scale: 0.96 }}
                         onClick={() => setIsVoiceMenuOpen((prev) => !prev)}
-                        title="Anlık ses efekti değiştir"
+                        title={t("header.voiceEffectSwitch")}
                         style={!isWin10 ? capsuleStyle : undefined}
                         className={`${
                             isWin10
@@ -226,8 +228,8 @@ export function Header({
                         <AudioWaveform className="w-3.5 h-3.5 shrink-0" />
                         <span className="hidden sm:inline truncate max-w-[115px]">
                             {isVoiceEffectRunning
-                                ? activePreset?.name || "Özel Efekt"
-                                : "Doğal Ses"}
+                                ? (activePreset ? t(`voicePresets.${activePreset.id}_name`) : t("header.voiceEngineActive"))
+                                : t("header.voicePresetNatural")}
                         </span>
                         <ChevronDown
                             className={`w-3.5 h-3.5 transition-transform ${
@@ -249,7 +251,7 @@ export function Header({
                                     <div className="flex items-center gap-2">
                                         <AudioWaveform className="w-4 h-4 text-[var(--accent-text)]" />
                                         <span className="text-xs font-bold text-[var(--text-primary)]">
-                                            Anlık Ses Efekti
+                                            {t("header.voiceEngine")}
                                         </span>
                                     </div>
                                     <button
@@ -261,7 +263,7 @@ export function Header({
                                                 : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-muted)]"
                                         }`}
                                     >
-                                        {isVoiceEffectRunning ? "AÇIK" : "KAPALI"}
+                                        {isVoiceEffectRunning ? t("nav.statusOn") : t("common.inactive").toUpperCase()}
                                     </button>
                                 </div>
 
@@ -277,6 +279,8 @@ export function Header({
                                             voiceChangerConfig.presetHotkeys?.[
                                                 preset.id
                                             ];
+                                        const presetName = t(`voicePresets.${preset.id}_name`) || preset.name;
+                                        const presetBadge = t(`voicePresets.${preset.id}_badge`) || preset.badge;
                                         return (
                                             <button
                                                 key={preset.id}
@@ -298,7 +302,7 @@ export function Header({
                                                         )}
                                                     </span>
                                                     <span className="truncate">
-                                                        {preset.name}
+                                                        {presetName}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 shrink-0">
@@ -308,7 +312,7 @@ export function Header({
                                                         </span>
                                                     )}
                                                     <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                                                        {preset.badge}
+                                                        {presetBadge}
                                                     </span>
                                                 </div>
                                             </button>
@@ -325,7 +329,7 @@ export function Header({
                                     className="w-full flex items-center justify-center gap-1.5 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                                 >
                                     <Sliders className="w-3 h-3" />
-                                    <span>Kısayol &amp; İnce Ayarları Aç</span>
+                                    <span>{t("header.openVoiceTab")}</span>
                                 </button>
                             </motion.div>
                         )}
@@ -343,7 +347,7 @@ export function Header({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
-                    placeholder="Ses adı, kategori veya kısayol ara..."
+                    placeholder={t("header.searchPlaceholder")}
                     className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none"
                 />
                 <AnimatePresence>
@@ -355,7 +359,7 @@ export function Header({
                             exit={{ opacity: 0, scale: 0.6 }}
                             transition={{ duration: 0.14 }}
                             onClick={() => onSearchChange("")}
-                            aria-label="Aramayı temizle"
+                            aria-label={t("header.searchClear")}
                             className={`p-1 ${controlRadius} text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                         >
                             <X className="w-3.5 h-3.5" />
@@ -390,7 +394,7 @@ export function Header({
                         whileTap={{ scale: 0.88 }}
                         onClick={handleToggleMute}
                         className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
-                        title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
+                        title={isMuted ? t("header.unmute") : t("header.mute")}
                     >
                         {isMuted ? (
                             <VolumeX className="w-4 h-4 text-rose-400" />
@@ -415,7 +419,7 @@ export function Header({
                                 handleVolumeSlider(parseFloat(e.target.value))
                             }
                             className="w-16 shrink-0 cursor-pointer"
-                            title={`Ana Ses: %${Math.round(routingConfig.masterVolume * 100)}`}
+                            title={`${t("header.masterVolume")}: %${Math.round(routingConfig.masterVolume * 100)}`}
                         />
                         <span className="w-8 shrink-0 text-right text-[11px] font-mono tabular-nums text-[var(--text-secondary)]">
                             %{Math.round(routingConfig.masterVolume * 100)}
@@ -429,7 +433,7 @@ export function Header({
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.94 }}
                     onClick={onStopAll}
-                    title={`Tüm sesleri durdur (${routingConfig.stopAllHotkey})`}
+                    title={`${t("header.stopAll")} (${routingConfig.stopAllHotkey})`}
                     className={`h-8 flex items-center gap-1.5 px-3 ${controlRadius} text-xs font-medium border transition-colors cursor-pointer ${
                         activePlayingCount > 0
                             ? "bg-rose-950/60 border-rose-700 text-rose-300 hover:bg-rose-950/80"
@@ -437,7 +441,7 @@ export function Header({
                     }`}
                 >
                     <Square className="w-3 h-3 fill-current" />
-                    <span className="hidden xl:inline">Durdur</span>
+                    <span className="hidden xl:inline">{t("soundCard.stop")}</span>
                 </motion.button>
 
                 {/* Primary Green Accent CTA: Yeni Ses */}
@@ -449,7 +453,7 @@ export function Header({
                     className={`btn-accent h-8 flex items-center gap-1.5 px-3.5 ${controlRadius} text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap`}
                 >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span className="hidden md:inline">Yeni Ses</span>
+                    <span className="hidden md:inline">{t("header.addNewSound")}</span>
                 </motion.button>
 
                 {/* Electron Window Controls */}
@@ -459,7 +463,7 @@ export function Header({
                             type="button"
                             whileTap={{ scale: 0.88 }}
                             onClick={handleMinimize}
-                            title="Simge Durumuna Küçült"
+                            title={t("header.minimize")}
                             className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                         >
                             <Minus className="w-3.5 h-3.5" />
@@ -469,7 +473,7 @@ export function Header({
                             type="button"
                             whileTap={{ scale: 0.88 }}
                             onClick={handleMaximize}
-                            title="Ekranı Kapla / Geri Yükle"
+                            title={t("header.maximize")}
                             className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                         >
                             <Maximize2 className="w-3 h-3" />
@@ -479,7 +483,7 @@ export function Header({
                             type="button"
                             whileTap={{ scale: 0.88 }}
                             onClick={handleClose}
-                            title="Kapat"
+                            title={t("header.close")}
                             className={`w-7 h-7 flex items-center justify-center ${controlRadius} text-[var(--text-secondary)] hover:text-white hover:bg-rose-600 transition-colors cursor-pointer`}
                         >
                             <X className="w-3.5 h-3.5" />

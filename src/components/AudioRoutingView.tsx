@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AudioRoutingConfig } from "../types/sound";
 import { audioEngine } from "../utils/audioEngine";
+import { useTranslation } from "../i18n";
 
 interface AudioRoutingViewProps {
     routingConfig: AudioRoutingConfig;
@@ -24,6 +25,7 @@ export function AudioRoutingView({
     routingConfig,
     onRoutingConfigChange,
 }: AudioRoutingViewProps) {
+    const { t } = useTranslation();
     const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
     const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
     const [isPlayingTestTone, setIsPlayingTestTone] = useState(false);
@@ -213,7 +215,7 @@ export function AudioRoutingView({
                     <div>
                         <div className="flex flex-wrap items-center gap-2.5">
                             <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                                Ses Yönlendirme &amp; Sanal Kablo
+                                {t("routing.title")}
                             </h1>
                             <span
                                 className={`text-xs font-mono px-2.5 py-0.5 ui-control border font-semibold ${
@@ -223,12 +225,12 @@ export function AudioRoutingView({
                                 }`}
                             >
                                 {isVbCableDetected
-                                    ? "VB-CABLE ALGILANDI"
-                                    : "CABLE BEKLENİYOR"}
+                                    ? "VB-CABLE OK"
+                                    : "WAITING CABLE"}
                             </span>
                         </div>
                         <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                            Lir ses efektlerini ve mikrofonunuzu Discord veya oyunlara iletmek için sanal ses hattını yapılandırın.
+                            {t("routing.subtitle")}
                         </p>
                     </div>
                 </div>
@@ -245,10 +247,10 @@ export function AudioRoutingView({
                     <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col items-center text-center gap-1.5 relative">
                         <Radio className="w-5 h-5 text-[var(--text-primary)]" />
                         <span className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
-                            Lir + Gerçek Mikrofon
+                            {t("routing.pipeLirMic")}
                         </span>
                         <span className="text-xs text-[var(--text-secondary)] font-mono">
-                            Sesler &amp; Konuşmanız
+                            {t("routing.pipeLirMicSub")}
                         </span>
                         <div className="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 text-[var(--text-muted)]">
                             <ArrowRight className="w-4 h-4" />
@@ -261,7 +263,7 @@ export function AudioRoutingView({
                             CABLE Input
                         </span>
                         <span className="text-xs text-[var(--text-secondary)] font-mono">
-                            Sanal Mikser Hattı
+                            {t("routing.pipeCableInputSub")}
                         </span>
                         <div className="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 text-[var(--text-muted)]">
                             <ArrowRight className="w-4 h-4" />
@@ -271,10 +273,10 @@ export function AudioRoutingView({
                     <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col items-center text-center gap-1.5">
                         <Mic className="w-5 h-5 text-[var(--text-primary)]" />
                         <span className="text-xs sm:text-sm font-semibold text-[var(--text-primary)]">
-                            Discord &amp; Oyun Girişi
+                            {t("routing.pipeDiscord")}
                         </span>
                         <span className="text-xs text-[var(--text-secondary)] font-mono">
-                            CABLE Output (Mikrofon)
+                            {t("routing.pipeDiscordSub")}
                         </span>
                     </div>
                 </div>
@@ -284,7 +286,7 @@ export function AudioRoutingView({
                     <div className="flex items-center gap-2.5">
                         <Headphones className="w-4 h-4 text-[var(--accent-text)] shrink-0" />
                         <span>
-                            Çift Çıkış (Monitoring):{" "}
+                            {t("routing.dualOutputStatus")}{" "}
                             <strong
                                 className={
                                     routingConfig.dualOutputEnabled
@@ -293,15 +295,15 @@ export function AudioRoutingView({
                                 }
                             >
                                 {routingConfig.dualOutputEnabled
-                                    ? "AÇIK (Kulaklığında Duyuyorsun)"
-                                    : "KAPALI (Sadece Karşı Taraf Duyar)"}
+                                    ? t("routing.dualOutputActiveText")
+                                    : t("routing.dualOutputInactiveText")}
                             </strong>
                         </span>
                     </div>
                     <span className="font-mono text-xs text-[var(--accent-text)] font-medium">
                         {routingConfig.dualOutputEnabled
-                            ? "2 Kanal Aktif"
-                            : "1 Kanal Aktif"}
+                            ? t("routing.channelsActive2")
+                            : t("routing.channelsActive1")}
                     </span>
                 </div>
             </motion.div>
@@ -319,7 +321,7 @@ export function AudioRoutingView({
                         <div className="flex items-center gap-2.5">
                             <Radio className="w-4 h-4 text-[var(--accent-text)]" />
                             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                                Birincil Ses Çıkışı (VB-CABLE)
+                                {t("routing.primaryOutputTitle")}
                             </h2>
                         </div>
                         <motion.button
@@ -332,14 +334,16 @@ export function AudioRoutingView({
                         >
                             <Play className="w-3 h-3 fill-current text-[var(--accent-text)]" />
                             <span>
-                                {isPlayingTestTone ? "Çalıyor..." : "Test Sesi"}
+                                {isPlayingTestTone
+                                    ? t("routing.playingTestTone")
+                                    : t("routing.playTestTone")}
                             </span>
                         </motion.button>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-[var(--text-secondary)]">
-                            Seslerin Gönderileceği Aygıt (Discord&apos;a gidecek hat)
+                            {t("routing.primaryOutputDesc")}
                         </label>
                         <select
                             value={routingConfig.primaryDeviceId}
@@ -365,7 +369,7 @@ export function AudioRoutingView({
                             className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                         >
                             <option value="default">
-                                Varsayılan Sistem Çıkışı
+                                {t("routing.defaultSystemOutput")}
                             </option>
                             {outputDevices.map((device) => (
                                 <option
@@ -373,7 +377,9 @@ export function AudioRoutingView({
                                     value={device.deviceId}
                                 >
                                     {device.label ||
-                                        `Aygıt ${device.deviceId.slice(0, 8)}`}
+                                        t("routing.deviceItem", {
+                                            id: device.deviceId.slice(0, 8),
+                                        })}
                                 </option>
                             ))}
                         </select>
@@ -383,10 +389,10 @@ export function AudioRoutingView({
                     <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3">
                         <div className="flex flex-col">
                             <span className="text-xs font-semibold text-[var(--text-primary)]">
-                                Çift Çıkış (Kulaklığında da Duy)
+                                {t("routing.dualOutputCardTitle")}
                             </span>
                             <span className="text-xs text-[var(--text-secondary)] mt-0.5">
-                                Kapatırsanız sesi sadece karşı taraf duyar, siz duymazsınız
+                                {t("routing.dualOutputCardDesc")}
                             </span>
                         </div>
                         <motion.button
@@ -425,7 +431,7 @@ export function AudioRoutingView({
                             >
                                 <div className="flex flex-col gap-2 pt-2">
                                     <label className="text-xs text-[var(--text-secondary)]">
-                                        Kendi Kulaklığınız (Monitoring Aygıtı)
+                                        {t("routing.secondaryDeviceTitle")}
                                     </label>
                                     <select
                                         value={routingConfig.secondaryDeviceId}
@@ -437,13 +443,14 @@ export function AudioRoutingView({
                                                 ...routingConfig,
                                                 secondaryDeviceId: e.target.value,
                                                 secondaryDeviceLabel:
-                                                    selected?.label || "Kulaklık",
+                                                    selected?.label ||
+                                                    t("routing.headphonesFallback"),
                                             });
                                         }}
                                         className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                                     >
                                         <option value="default">
-                                            Varsayılan Sistem Kulaklığı / Hoparlör
+                                            {t("routing.secondaryDeviceDefault")}
                                         </option>
                                         {outputDevices.map((device) => (
                                             <option
@@ -451,7 +458,12 @@ export function AudioRoutingView({
                                                 value={device.deviceId}
                                             >
                                                 {device.label ||
-                                                    `Kulaklık ${device.deviceId.slice(0, 8)}`}
+                                                    t("routing.headphonesItem", {
+                                                        id: device.deviceId.slice(
+                                                            0,
+                                                            8,
+                                                        ),
+                                                    })}
                                             </option>
                                         ))}
                                     </select>
@@ -462,8 +474,10 @@ export function AudioRoutingView({
                                         <div className="mt-1 p-3 ui-inner bg-amber-950/30 border border-amber-800/60 text-xs text-amber-300 flex items-start gap-2 leading-relaxed">
                                             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                                             <span>
-                                                <strong>Yankı Koruması:</strong> Birincil çıkış ile Kulaklık aynı aygıtta.
-                                                Seslerin çift çalıp yankı yapmaması için tek kanaldan iletilir. Discord&apos;a ses vermek için Birincil Çıkış olarak <strong>CABLE Input</strong> seçilmelidir.
+                                                <strong>
+                                                    {t("routing.echoWarningTitle")}
+                                                </strong>{" "}
+                                                {t("routing.echoWarningBody")}
                                             </span>
                                         </div>
                                     )}
@@ -484,7 +498,7 @@ export function AudioRoutingView({
                         <div className="flex items-center gap-2.5">
                             <Mic className="w-4 h-4 text-[var(--accent-text)]" />
                             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                                Mikrofon Geçişi (Mic Pass-Through)
+                                {t("routing.micPassthroughTitle")}
                             </h2>
                         </div>
                         <span
@@ -495,21 +509,19 @@ export function AudioRoutingView({
                             }`}
                         >
                             {routingConfig.micPassThrough
-                                ? "MİKROFON AKTİF"
-                                : "DEVRE DIŞI"}
+                                ? t("routing.micPassthroughActiveBadge")
+                                : t("routing.micPassthroughInactiveBadge")}
                         </span>
                     </div>
 
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                        Discord&apos;da mikrofon olarak{" "}
-                        <strong className="text-[var(--text-primary)]">CABLE Output</strong>{" "}
-                        seçtiğinizde kendi konuşmanızın gitmesi için burayı açın. Lir mikrofonunuzu alıp sanal kabloya miksler.
+                        {t("routing.micPassthroughDesc")}
                     </p>
 
                     {/* Toggle Switch */}
                     <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)] gap-3">
                         <span className="text-xs font-semibold text-[var(--text-primary)]">
-                            Mikrofonumu Sanal Kabloya Aktar
+                            {t("routing.micPassthroughToggle")}
                         </span>
                         <motion.button
                             type="button"
@@ -577,7 +589,7 @@ export function AudioRoutingView({
                                     } else {
                                         setMicError(
                                             res.error ||
-                                            "Mikrofona erişilemedi.",
+                                                t("routing.micAccessError"),
                                         );
                                     }
                                 } else {
@@ -625,7 +637,7 @@ export function AudioRoutingView({
                     {/* Physical Mic Selector */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-[var(--text-secondary)]">
-                            Gerçek Mikrofonunuz (Kulaklık Mikrofonu)
+                            {t("routing.physicalMicLabel")}
                         </label>
                         <select
                             value={routingConfig.micDeviceId}
@@ -638,19 +650,24 @@ export function AudioRoutingView({
                                     ...routingConfig,
                                     micDeviceId: newId,
                                     micDeviceLabel:
-                                        selected?.label || "Mikrofon",
+                                        selected?.label ||
+                                        t("routing.micFallback"),
                                 });
                             }}
                             className="px-3 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-xs sm:text-[13px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                         >
-                            <option value="default">Varsayılan Mikrofon</option>
+                            <option value="default">
+                                {t("routing.defaultMicOption")}
+                            </option>
                             {inputDevices.map((device) => (
                                 <option
                                     key={device.deviceId}
                                     value={device.deviceId}
                                 >
                                     {device.label ||
-                                        `Mikrofon ${device.deviceId.slice(0, 8)}`}
+                                        t("routing.micItem", {
+                                            id: device.deviceId.slice(0, 8),
+                                        })}
                                 </option>
                             ))}
                         </select>
@@ -668,12 +685,16 @@ export function AudioRoutingView({
                                     }
                                 >
                                     {micStatus.active
-                                        ? `Donanım: ${micStatus.label || "Aktif"}`
-                                        : "Mikrofon taranıyor / Yeniden Başlatın"}
+                                        ? t("routing.hardwareLabel", {
+                                              label:
+                                                  micStatus.label ||
+                                                  t("common.active"),
+                                          })
+                                        : t("routing.micScanning")}
                                 </span>
                                 {micStatus.muted && (
                                     <span className="text-red-400 bg-red-950 px-1.5 py-0.5 rounded ml-auto">
-                                        Windows Sessizde!
+                                        {t("routing.windowsMuted")}
                                     </span>
                                 )}
                             </div>
@@ -696,7 +717,7 @@ export function AudioRoutingView({
                                             <Activity
                                                 className={`w-3.5 h-3.5 ${micLevel > 0 ? "text-[var(--accent-text)] animate-pulse" : "text-[var(--text-muted)]"}`}
                                             />
-                                            <span>Mikrofon Sinyal Düzeyi</span>
+                                            <span>{t("routing.micLevelLabel")}</span>
                                         </span>
                                         <div className="flex items-center gap-2">
                                             <motion.button
@@ -716,13 +737,13 @@ export function AudioRoutingView({
                                                     if (!res.success) {
                                                         setMicError(
                                                             res.error ||
-                                                            "Mikrofona bağlanılamadı. Windows mikrofon izinlerini kontrol edin.",
+                                                                t("routing.micConnectError"),
                                                         );
                                                     }
                                                 }}
                                                 className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2.5 py-1 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
                                             >
-                                                Yeniden Başlat
+                                                {t("routing.restartMic")}
                                             </motion.button>
                                             <span className="text-[var(--accent-text)] tabular-nums font-bold">
                                                 %{micLevel}
@@ -741,7 +762,9 @@ export function AudioRoutingView({
 
                                 <div className="flex flex-col gap-1.5 pt-3 border-t border-[var(--border-subtle)]">
                                     <div className="flex items-center justify-between text-xs">
-                                        <span className="text-[var(--text-secondary)]">Mikrofon Geçiş Düzeyi</span>
+                                        <span className="text-[var(--text-secondary)]">
+                                            {t("routing.micVolumeSlider")}
+                                        </span>
                                         <span className="font-mono text-[var(--accent-text)] font-semibold">
                                             %{Math.round((routingConfig.micVolume ?? 1.0) * 100)}
                                         </span>
@@ -775,10 +798,10 @@ export function AudioRoutingView({
                     <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3">
                         <div className="flex flex-col pr-2">
                             <span className="text-xs font-semibold text-[var(--text-primary)]">
-                                Ses Çalarken Mikrofonu Sustur (Akustik Yankı Önleyici)
+                                {t("routing.antiEchoTitle")}
                             </span>
                             <span className="text-xs text-[var(--text-secondary)] leading-relaxed mt-0.5">
-                                Kulaklıktan veya hoparlörden mikrofona sızan sesin karşı tarafa çift gitmesini engeller
+                                {t("routing.antiEchoDesc")}
                             </span>
                         </div>
                         <motion.button
@@ -819,45 +842,39 @@ export function AudioRoutingView({
                     <div className="flex items-center gap-2.5">
                         <HelpCircle className="w-4 h-4 text-[var(--accent-text)]" />
                         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                            Discord &amp; Oyun Nasıl Ayarlanmalı?
+                            {t("routing.guideTitle")}
                         </h2>
                     </div>
                     <span className="text-xs font-mono text-[var(--accent-text)] font-semibold">
-                        Önemli Adımlar
+                        {t("routing.guideStepsBadge")}
                     </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs text-[var(--text-secondary)]">
                     <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
                         <span className="font-mono text-[var(--text-primary)] font-bold">
-                            1. Lir Ayarları
+                            {t("routing.guideStep1Title")}
                         </span>
-                        <p className="leading-relaxed">
-                            • <strong className="text-[var(--text-primary)]">Birincil Çıkış:</strong> CABLE Input seçin.
-                            <br />• <strong className="text-[var(--text-primary)]">Mikrofon Geçişi:</strong> AÇIK yapıp kendi mikrofonunuzu seçin (Stereo Karışımı değil).
-                            <br />• <strong className="text-[var(--text-primary)]">Yankı Önleyici:</strong> AÇIK tutun.
+                        <p className="leading-relaxed whitespace-pre-line">
+                            {t("routing.guideStep1Body")}
                         </p>
                     </div>
 
                     <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
                         <span className="font-mono text-[var(--text-primary)] font-bold">
-                            2. Discord Ayarı
+                            {t("routing.guideStep2Title")}
                         </span>
-                        <p className="leading-relaxed">
-                            • <strong className="text-[var(--text-primary)]">Giriş Aygıtı:</strong> Sadece <span className="text-[var(--accent-text)] font-medium">CABLE Output</span>.
-                            <br />• <strong className="text-[var(--text-primary)]">Yankı Engelleme:</strong> <span className="text-amber-400 font-semibold">KAPATIN</span>.
-                            <br />• <strong className="text-[var(--text-primary)]">Gürültü Azaltma (Krisp):</strong> <span className="text-amber-400 font-semibold">KAPALI</span> yapın.
-                            <br />• <strong className="text-[var(--text-primary)]">Giriş Hassasiyeti:</strong> Otomatiği kapatıp sola çekin.
+                        <p className="leading-relaxed whitespace-pre-line">
+                            {t("routing.guideStep2Body")}
                         </p>
                     </div>
 
                     <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
                         <span className="font-mono text-[var(--text-primary)] font-bold">
-                            3. Yankı &amp; Cızırtı Çözümleri
+                            {t("routing.guideStep3Title")}
                         </span>
-                        <p className="leading-relaxed">
-                            • <strong className="text-[var(--text-primary)]">Çift Ses Önleme:</strong> &quot;Ses Çalarken Mikrofonu Sustur&quot; açık olmalıdır.
-                            <br />• <strong className="text-[var(--text-primary)]">Dahili Limiter:</strong> Lir, ses patlamasını (clipping) önleyen dahili kompresör ile sesi temiz iletir.
+                        <p className="leading-relaxed whitespace-pre-line">
+                            {t("routing.guideStep3Body")}
                         </p>
                     </div>
                 </div>

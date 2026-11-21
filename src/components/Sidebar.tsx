@@ -11,6 +11,7 @@ import {
     ScanText,
 } from "lucide-react";
 import { UIStyle } from "../types/sound";
+import { useTranslation } from "../i18n";
 
 export type NavTab =
     | "soundboard"
@@ -43,48 +44,49 @@ export function Sidebar({
     transparency,
     uiStyle,
 }: SidebarProps) {
+    const { t } = useTranslation();
     const [isMenuHovered, setIsMenuHovered] = useState(false);
 
     const navItems = [
         {
             id: "soundboard" as NavTab,
-            label: "Soundboard",
+            label: t("nav.soundboard"),
             icon: Volume2,
             badge: soundCount,
         },
         {
             id: "voice" as NavTab,
-            label: "Ses Değiştirici",
+            label: t("nav.voice"),
             icon: AudioWaveform,
-            badge: isVoiceChangerActive ? "AÇIK" : null,
+            badge: isVoiceChangerActive ? t("nav.statusOn") : null,
         },
         {
             id: "recorder" as NavTab,
-            label: "Ses Kaydedici",
+            label: t("nav.recorder"),
             icon: Mic,
             badge: null,
         },
         {
             id: "routing" as NavTab,
-            label: "Ses Yönlendirme",
+            label: t("nav.routing"),
             icon: Sliders,
             badge: null,
         },
         {
             id: "hotkeys" as NavTab,
-            label: "Kısayol Matrisi",
+            label: t("nav.hotkeys"),
             icon: Keyboard,
             badge: null,
         },
         {
             id: "translator" as NavTab,
-            label: "Altyazı Çevirisi",
+            label: t("nav.translator"),
             icon: ScanText,
             badge: null,
         },
         {
             id: "guide" as NavTab,
-            label: "Kullanım Kılavuzu",
+            label: t("nav.guide"),
             icon: HelpCircle,
             badge: null,
         },
@@ -175,7 +177,7 @@ export function Sidebar({
                 className={`relative ${isWin10 ? "w-16" : "w-14"} flex items-center justify-start my-auto overflow-visible`}
             >
                 <motion.nav
-                    aria-label="Ana menü"
+                    aria-label={t("nav.mainMenu")}
                     onMouseEnter={() => setIsMenuHovered(true)}
                     onMouseLeave={() => setIsMenuHovered(false)}
                     initial={false}
@@ -293,8 +295,8 @@ export function Sidebar({
                     whileHover={{ scale: isWin10 ? 1 : 1.05 }}
                     whileTap={{ scale: 0.92 }}
                     transition={{ type: "spring", stiffness: 450, damping: 28 }}
-                    title="Ayarlar"
-                    aria-label="Ayarlar"
+                    title={t("nav.settings")}
+                    aria-label={t("nav.settings")}
                     className={`relative ${bottomSettingsBtnClass} flex items-center justify-center transition-colors cursor-pointer ${
                         currentTab === "settings"
                             ? "btn-accent"

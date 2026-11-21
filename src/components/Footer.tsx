@@ -1,30 +1,33 @@
 import { FlaskConical, History, Github, Instagram } from "lucide-react";
+import { useTranslation } from "../i18n";
 
 const ANTIC_VALLEY_ASSETS = "https://labs.anticvalley.com.tr/assets/img";
-const ANTIC_VALLEY_PROJECTS = [
-    {
-        name: "Koza",
-        description: "Güvenli kasa ve parola yönetimi",
-        image: "koza.png",
-    },
-    {
-        name: "Kirpi",
-        description: "ERP & MES Platformu",
-        image: "kirpi.png",
-    },
-    {
-        name: "Kirpi: SG",
-        description: "Endüstriyel Akıllı Üretim",
-        image: "kirpifab.png",
-    },
-    {
-        name: "Yonga (Eski Adıyla: MFGI)",
-        description: "Operasyonel Altyapı",
-        image: "mfgi.png",
-    },
-];
-
 export function Footer() {
+    const { t } = useTranslation();
+
+    const translatedProjects = [
+        {
+            name: "Koza",
+            description: t("footer.kozaDesc"),
+            image: "koza.png",
+        },
+        {
+            name: "Kirpi",
+            description: t("footer.kirpiDesc"),
+            image: "kirpi.png",
+        },
+        {
+            name: "Kirpi: SG",
+            description: t("footer.kirpiSgDesc"),
+            image: "kirpifab.png",
+        },
+        {
+            name: "Yonga (MFGI)",
+            description: t("footer.yongaDesc"),
+            image: "mfgi.png",
+        },
+    ];
+
     return (
         <footer className="app-card ui-card mt-auto border border-[var(--border-card)] p-5 sm:p-6">
             <div className="flex flex-col gap-5">
@@ -47,7 +50,7 @@ export function Footer() {
                                 Antic Valley
                             </span>
                             <span className="block text-xs text-[var(--text-secondary)]">
-                                Antic Valley tarafından geliştirildi.
+                                {t("footer.developedBy")}
                             </span>
                         </span>
                     </a>
@@ -60,7 +63,7 @@ export function Footer() {
                             className="inline-flex items-center gap-2 ui-control border border-[var(--border-subtle)] bg-[var(--bg-inner)] px-3.5 py-2 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
                         >
                             <FlaskConical className="h-3.5 w-3.5" />
-                            Projeler
+                            {t("footer.projects")}
                         </a>
                         <a
                             href="https://labs.anticvalley.com.tr/"
@@ -69,7 +72,7 @@ export function Footer() {
                             className="inline-flex items-center gap-2 ui-control border border-[var(--border-subtle)] bg-[var(--bg-inner)] px-3.5 py-2 text-xs text-[var(--text-secondary)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
                         >
                             <History className="h-3.5 w-3.5" />
-                            Günlük gelişmeler
+                            {t("footer.dailyUpdates")}
                         </a>
                         <a
                             href="https://github.com/SiberizmBey"
@@ -94,10 +97,10 @@ export function Footer() {
 
                 <div>
                     <h3 className="mb-2.5 text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
-                        Ekosistemimizle Tanışın
+                        {t("footer.ecosystemTitle")}
                     </h3>
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-                        {ANTIC_VALLEY_PROJECTS.map((project) => (
+                        {translatedProjects.map((project) => (
                             <a
                                 key={project.name}
                                 href="https://labs.anticvalley.com.tr/"
@@ -127,7 +130,9 @@ export function Footer() {
                 </div>
 
                 <p className="text-center text-xs text-[var(--text-muted)] pt-1 border-t border-[var(--border-subtle)]">
-                    © {new Date().getFullYear()} Antic Valley · Lir Açık Kaynak Soundpad (MIT Lisans)
+                    {t("footer.copyright", {
+                        year: new Date().getFullYear(),
+                    })}
                 </p>
             </div>
         </footer>

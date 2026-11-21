@@ -1,7 +1,9 @@
 import { motion } from "motion/react";
 import { ShieldCheck, Sliders, HelpCircle } from "lucide-react";
+import { useTranslation } from "../i18n";
 
 export function GuideView() {
+    const { t } = useTranslation();
     const ease = [0.22, 1, 0.36, 1] as const;
 
     return (
@@ -14,14 +16,14 @@ export function GuideView() {
                 <div>
                     <div className="flex items-center gap-2.5">
                         <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                            Dokümantasyon &amp; Kurulum
+                            {t("guide.title")}
                         </h1>
                         <span className="text-xs font-mono border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)] px-2.5 py-0.5 ui-control font-semibold">
-                            DOCS
+                            {t("guide.badgeDocs")}
                         </span>
                     </div>
                     <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        Lir&apos;i masaüstünde çalıştırma ve oyunlarda Soundpad gibi kullanma adımları.
+                        {t("guide.subtitle")}
                     </p>
                 </div>
             </div>
@@ -37,14 +39,10 @@ export function GuideView() {
                 >
                     <div className="flex items-center gap-2.5 text-sm font-semibold text-[var(--text-primary)]">
                         <ShieldCheck className="w-4 h-4 text-[var(--accent-text)]" />
-                        <span>Global Shortcuts (Arka Plan Kancası)</span>
+                        <span>{t("guide.globalShortcutsTitle")}</span>
                     </div>
                     <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                        Electron{" "}
-                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
-                            globalShortcut
-                        </code>{" "}
-                        modülü sayesinde pencere odakta olmasa dahi işletim sistemi düzeyinde klavye basışlarını yakalar.
+                        {t("guide.globalShortcutsDesc")}
                     </p>
                 </motion.div>
 
@@ -57,18 +55,10 @@ export function GuideView() {
                 >
                     <div className="flex items-center gap-2.5 text-sm font-semibold text-[var(--text-primary)]">
                         <Sliders className="w-4 h-4 text-[var(--accent-text)]" />
-                        <span>Sanal Ses Kablosu &amp; Dual Output</span>
+                        <span>{t("guide.virtualCableTitle")}</span>
                     </div>
                     <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                        Sesi hem sanal mikrofona (
-                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
-                            CABLE Input
-                        </code>
-                        ) hem kendi kulaklığınıza (
-                        <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-inner)] px-1.5 py-0.5 rounded">
-                            Speakers
-                        </code>
-                        ) gecikmesiz olarak yönlendirir.
+                        {t("guide.virtualCableDesc")}
                     </p>
                 </motion.div>
             </div>
@@ -81,56 +71,52 @@ export function GuideView() {
                 className="app-card ui-card p-5 sm:p-6 border border-[var(--border-card)] flex flex-col gap-4"
             >
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                    Discord &amp; Oyun Ayarları
+                    {t("guide.gameSetupTitle")}
                 </h2>
                 <div className="grid grid-cols-1 gap-3 text-xs sm:text-[13px] text-[var(--text-secondary)]">
                     <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <span className="font-mono font-bold text-[var(--accent-text)]">01.</span>
                         <div>
                             <strong className="text-[var(--text-primary)]">
-                                Discord Giriş Aygıtı:
+                                {t("guide.step1Title")}
                             </strong>{" "}
-                            Kullanıcı Ayarları &gt; Ses ve Görüntü &gt; Giriş Aygıtı olarak{" "}
-                            <span className="text-[var(--accent-text)] font-mono">
-                                CABLE Output
-                            </span>{" "}
-                            seçin.
+                            {t("guide.step1Desc")}
                         </div>
                     </div>
                     <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <span className="font-mono font-bold text-[var(--accent-text)]">02.</span>
                         <div>
                             <strong className="text-[var(--text-primary)]">
-                                Oyun İçi Mikrofon:
+                                {t("guide.step2Title")}
                             </strong>{" "}
-                            Windows varsayılan kayıt aygıtını &quot;CABLE Output&quot; yaptığınızda veya oyun içi mikrofon ayarını &quot;CABLE Output&quot; seçtiğinizde tuşa basınca ses yayına gider.
+                            {t("guide.step2Desc")}
                         </div>
                     </div>
                     <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <span className="font-mono font-bold text-[var(--accent-text)]">03.</span>
                         <div>
                             <strong className="text-[var(--text-primary)]">
-                                Dual Output:
+                                {t("guide.step3Title")}
                             </strong>{" "}
-                            Lir uygulamasında &quot;Çift Çıkış&quot; açık olduğu sürece kendi bastığınız sesleri siz de kulaklığınızdan gecikmesiz duyarsınız.
+                            {t("guide.step3Desc")}
                         </div>
                     </div>
                     <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <span className="font-mono font-bold text-[var(--accent-text)]">04.</span>
                         <div>
                             <strong className="text-[var(--text-primary)]">
-                                Discord Rich Presence (RPC):
+                                {t("guide.step4Title")}
                             </strong>{" "}
-                            Discord profilinizde ne çaldığınız ve aktif sesler otomatik olarak görüntülenir.
+                            {t("guide.step4Desc")}
                         </div>
                     </div>
                     <div className="flex items-start gap-3 p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <span className="font-mono font-bold text-[var(--accent-text)]">05.</span>
                         <div>
                             <strong className="text-[var(--text-primary)]">
-                                Tüm Sesleri Durdur:
+                                {t("guide.step5Title")}
                             </strong>{" "}
-                            Üst çubuktaki durdur düğmesine basarak çalan tüm sesleri anında kesebilir veya Ayarlar’dan bir durdurma kısayolu atayabilirsiniz.
+                            {t("guide.step5Desc")}
                         </div>
                     </div>
                 </div>

@@ -18,7 +18,9 @@ import {
     Sparkles,
     Moon,
     Sun,
+    Languages,
 } from "lucide-react";
+import { useTranslation } from "../i18n";
 import {
     AudioRoutingConfig,
     AppearanceSettings,
@@ -133,6 +135,7 @@ export function SettingsView({
     appearance,
     onAppearanceChange,
 }: SettingsViewProps) {
+    const { t, language, setLanguage, languages } = useTranslation();
     const [feedbackMessage, setFeedbackMessage] = useState<{
         type: "success" | "error" | "info";
         text: string;
@@ -204,7 +207,7 @@ export function SettingsView({
         } else {
             setFeedbackMessage({
                 type: "error",
-                text: "Görünüm ayarı kaydedilemedi. Tarayıcı saklama alanı dolu olabilir.",
+                text: t("settings.errorAppearanceSave"),
             });
         }
     };
@@ -238,25 +241,22 @@ export function SettingsView({
     }> = [
         {
             id: "gama",
-            title: "Gama (Varsayılan)",
-            description:
-                "Antic Valley Gama UI: Yüzen 3 kapsül ada, ultra yumuşak köşeler ve akıcı mimari.",
+            title: t("settings.gamaTitle"),
+            description: t("settings.gamaDesc"),
             icon: Layers,
             iconClass: "text-[var(--accent-text)]",
         },
         {
             id: "win11",
-            title: "Windows 11",
-            description:
-                "Windows 11 tarzı yumuşatılmış köşeler ve yüzen ada tasarımı.",
+            title: t("settings.win11Title"),
+            description: t("settings.win11Desc"),
             icon: AppWindow,
             iconClass: "text-sky-400",
         },
         {
             id: "win10",
-            title: "Windows 10",
-            description:
-                "Sert köşeler ve yüzen adasız yapı (Keskin & kenetli düzen).",
+            title: t("settings.win10Title"),
+            description: t("settings.win10Desc"),
             icon: Square,
             iconClass: "text-[var(--text-secondary)]",
         },
@@ -277,10 +277,10 @@ export function SettingsView({
                 </div>
                 <div>
                     <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                        Ayarlar
+                        {t('settings.title')}
                     </h1>
                     <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        Tasarım dili, tema, arka plan saydamlığı, genel kısayollar ve Discord Rich Presence tercihlerinizi yönetin.
+                        {t('settings.subtitle')}
                     </p>
                 </div>
             </div>
@@ -314,6 +314,83 @@ export function SettingsView({
                 )}
             </AnimatePresence>
 
+            {/* 0. LANGUAGE SELECTION */}
+            <motion.section
+                {...sectionTransition(0.01)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-4"
+            >
+                <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
+                    <Languages className="w-4 h-4 text-[var(--accent-text)]" />
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                        {t('settings.languageSectionTitle')}
+                    </h2>
+                </div>
+
+                <p className="text-xs text-[var(--text-secondary)]">
+                    {t('settings.languageSectionDesc')}
+                </p>
+
+                <div
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+                    role="radiogroup"
+                    aria-label={t('settings.languageSectionTitle')}
+                >
+                    {languages.map((lang) => {
+                        const isSelected = language === lang.code;
+                        return (
+                            <motion.button
+                                key={lang.code}
+                                type="button"
+                                role="radio"
+                                aria-checked={isSelected}
+                                whileHover={{ y: -2 }}
+                                whileTap={{ scale: 0.985 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 30,
+                                }}
+                                onClick={() => setLanguage(lang.code)}
+                                className={`ui-inner border p-4 text-left transition-colors cursor-pointer flex items-center justify-between gap-3 ${
+                                    isSelected
+                                        ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                                        : "border-[var(--border-subtle)] bg-[var(--bg-inner)] hover:border-[var(--border-hover)]"
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl select-none">{lang.flag}</span>
+                                    <div>
+                                        <div className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                                            <span>{lang.nativeName}</span>
+                                            <span className="text-xs font-mono text-[var(--text-muted)] uppercase">({lang.code})</span>
+                                        </div>
+                                        <span className="text-xs text-[var(--text-secondary)]">
+                                            {t(`settings.language_${lang.code}Desc`)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <AnimatePresence>
+                                    {isSelected && (
+                                        <motion.span
+                                            initial={{ scale: 0.5, opacity: 0 }}
+                                            animate={{ scale: 1, opacity: 1 }}
+                                            exit={{ scale: 0.5, opacity: 0 }}
+                                            transition={{
+                                                type: "spring",
+                                                stiffness: 500,
+                                                damping: 26,
+                                            }}
+                                        >
+                                            <Check className="w-4 h-4 text-[var(--accent-text)] shrink-0" />
+                                        </motion.span>
+                                    )}
+                                </AnimatePresence>
+                            </motion.button>
+                        );
+                    })}
+                </div>
+            </motion.section>
+
             {/* 1. DESIGN LANGUAGE & UI THEME */}
             <motion.section
                 {...sectionTransition(0.02)}
@@ -321,17 +398,17 @@ export function SettingsView({
             >
                 <div>
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                        Tasarım Dili ve Arayüz Teması
+                        {t("settings.designLanguageTitle")}
                     </h2>
                     <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        Gama mimarisi veya Windows tasarım standartlarına göre pencere ve ada düzenini özelleştirin.
+                        {t("settings.designLanguageDesc")}
                     </p>
                 </div>
 
                 <div
                     className="grid grid-cols-1 md:grid-cols-3 gap-2.5"
                     role="radiogroup"
-                    aria-label="Tasarım dili"
+                    aria-label={t("settings.designLanguageTitle")}
                 >
                     {designLanguages.map((item) => {
                         const Icon = item.icon;
@@ -397,49 +474,53 @@ export function SettingsView({
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
                     <Palette className="w-4 h-4 text-[var(--accent-text)]" />
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                        Görünüm &amp; Tema
+                        {t("settings.themeTitle")}
                     </h2>
                 </div>
 
                 <div>
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
-                        Arayüz Renk Teması
+                        {t("settings.themeColorHeader")}
                     </p>
                     <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        Sistem, Amoled, Koyu veya Açık renk düzenleri arasında geçiş yapın.
+                        {t("settings.themeColorDesc")}
                     </p>
                     <div
                         className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5"
                         role="radiogroup"
-                        aria-label="Uygulama teması"
+                        aria-label={t("settings.themeColorHeader")}
                     >
                         {(
                             [
                                 {
                                     value: "system",
-                                    label: "Sistem Teması",
-                                    description: `İşletim sistemi (${systemPrefersDark ? "Koyu" : "Açık"})`,
+                                    label: t("settings.themeSystemLabel"),
+                                    description: t("settings.themeSystemDesc", {
+                                        state: systemPrefersDark
+                                            ? t("settings.dark")
+                                            : t("settings.light"),
+                                    }),
                                     icon: Monitor,
                                     iconClass: "text-fuchsia-400",
                                 },
                                 {
                                     value: "amoled",
-                                    label: "Amoled (Saf Siyah)",
-                                    description: "#000000 Saf siyah arka plan",
+                                    label: t("settings.themeAmoledLabel"),
+                                    description: t("settings.themeAmoledDesc"),
                                     icon: Sparkles,
                                     iconClass: "text-purple-400",
                                 },
                                 {
                                     value: "dark",
-                                    label: "Koyu Tema (Dark)",
-                                    description: "#0c0c0e Koyu füme tonlar",
+                                    label: t("settings.themeDarkLabel"),
+                                    description: t("settings.themeDarkDesc"),
                                     icon: Moon,
                                     iconClass: "text-sky-400",
                                 },
                                 {
                                     value: "light",
-                                    label: "Açık Tema (Light)",
-                                    description: "#f4f4f5 Ferah ve aydınlık",
+                                    label: t("settings.themeLightLabel"),
+                                    description: t("settings.themeLightDesc"),
                                     icon: Sun,
                                     iconClass: "text-amber-400",
                                 },
@@ -503,22 +584,22 @@ export function SettingsView({
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-xs font-semibold text-[var(--text-primary)]">
-                                Aksan Rengi (Özelleştirme)
+                                {t("settings.accentColorTitle")}
                             </p>
                             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                                Uygulamanın buton, vurgu ve simgelerinde kullanılacak aksan rengini belirleyin.
+                                {t("settings.accentColorDesc")}
                             </p>
                         </div>
 
                         <label
                             className="flex items-center gap-2 px-3 py-1.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] hover:border-[var(--accent-border)] text-xs font-medium text-[var(--text-primary)] transition-colors cursor-pointer"
-                            title="Özel aksan rengi seç"
+                            title={t("settings.pickCustomColorTitle")}
                         >
                             <span
                                 className="w-4 h-4 rounded-full border border-white/20 shrink-0"
                                 style={{ backgroundColor: accentColor }}
                             />
-                            <span>Özel Renk</span>
+                            <span>{t("settings.customColor")}</span>
                             <span className="font-mono text-[11px] text-[var(--text-muted)] uppercase">
                                 {normalizeHexColor(accentColor) ?? DEFAULT_ACCENT_COLOR}
                             </span>
@@ -534,7 +615,7 @@ export function SettingsView({
                     <div
                         className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9 gap-2.5"
                         role="radiogroup"
-                        aria-label="Aksan rengi"
+                        aria-label={t("settings.accentColorTitle")}
                     >
                         {ACCENT_PRESETS.map((preset) => {
                             const isSelected =
@@ -586,10 +667,10 @@ export function SettingsView({
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <p className="text-xs font-semibold text-[var(--text-primary)]">
-                                Arka Plan Görseli
+                                {t("settings.wallpaperTitle")}
                             </p>
                             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                                Görsel uygulamanın tamamında kullanılır ve okunabilirlik için hafifçe karartılır.
+                                {t("settings.wallpaperDesc")}
                             </p>
                         </div>
                         {appearance.backgroundImage && (
@@ -605,7 +686,7 @@ export function SettingsView({
                                 className="flex shrink-0 items-center gap-1.5 ui-control border border-[var(--border-subtle)] bg-[var(--bg-inner)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:border-rose-800 hover:text-rose-300 cursor-pointer"
                             >
                                 <Trash2 className="h-3.5 w-3.5" />
-                                Kaldır
+                                {t("settings.removeWallpaper")}
                             </motion.button>
                         )}
                     </div>
@@ -618,10 +699,10 @@ export function SettingsView({
                                 <Upload className="h-4 w-4 text-[var(--accent-text)]" />
                             )}
                             {isPreparingBackground
-                                ? "Görsel hazırlanıyor..."
+                                ? t("settings.preparingImage")
                                 : appearance.backgroundImage
-                                  ? "Görseli değiştir"
-                                  : "Görsel seç"}
+                                  ? t("settings.changeImage")
+                                  : t("settings.selectImage")}
                             <input
                                 type="file"
                                 accept="image/*,.gif"
@@ -631,7 +712,7 @@ export function SettingsView({
                             />
                         </label>
                         <span className="text-xs text-[var(--text-muted)]">
-                            JPG, PNG, WebP veya hareketli GIF · en fazla 20 MB
+                            {t("settings.wallpaperFormats")}
                         </span>
                     </div>
 
@@ -646,7 +727,7 @@ export function SettingsView({
                             >
                                 <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
                                     <span className="flex justify-between">
-                                        <span>Arka plan bulanıklığı</span>
+                                        <span>{t("settings.backgroundBlur")}</span>
                                         <span className="font-mono text-[var(--text-primary)]">
                                             {appearance.backgroundBlur}px
                                         </span>
@@ -665,17 +746,23 @@ export function SettingsView({
                                                 ),
                                             })
                                         }
-                                        aria-label="Arka plan bulanıklığı"
+                                        aria-label={t("settings.backgroundBlur")}
                                     />
                                 </label>
                                 {(
                                     [
                                         [
                                             "sidebarTransparency",
-                                            "Sidebar saydamlığı",
+                                            t("settings.sidebarTransparency"),
                                         ],
-                                        ["cardTransparency", "Kart saydamlığı"],
-                                        ["headerTransparency", "Üst bar saydamlığı"],
+                                        [
+                                            "cardTransparency",
+                                            t("settings.cardTransparency"),
+                                        ],
+                                        [
+                                            "headerTransparency",
+                                            t("settings.headerTransparency"),
+                                        ],
                                     ] as const
                                 ).map(([key, label]) => (
                                     <label
@@ -720,7 +807,7 @@ export function SettingsView({
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
                     <Sliders className="w-4 h-4 text-[var(--accent-text)]" />
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                        Genel Soundpad Ayarları
+                        {t("settings.generalSoundpadTitle")}
                     </h2>
                 </div>
 
@@ -728,10 +815,10 @@ export function SettingsView({
                     {/* Stop All Hotkey */}
                     <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <label className="text-xs font-semibold text-[var(--text-primary)]">
-                            Tüm Sesleri Durdur Kısayolu
+                            {t("settings.stopAllHotkeyTitle")}
                         </label>
                         <p className="text-xs text-[var(--text-secondary)]">
-                            Oyunlarda ESC’nin etkilenmemesi için bir tuş veya kombinasyon belirleyin.
+                            {t("settings.stopAllHotkeyDesc")}
                         </p>
                         <motion.button
                             type="button"
@@ -751,25 +838,26 @@ export function SettingsView({
                                     .catch(() => {
                                         setFeedbackMessage({
                                             type: "error",
-                                            text: "Kısayol kaydı başlatılamadı.",
+                                            text: t("settings.errorHotkeyCapture"),
                                         });
                                     });
                             }}
                             className="mt-1 w-full ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3.5 py-2.5 text-left font-mono text-xs font-semibold text-[var(--accent-text)] transition-colors hover:border-[var(--accent-border)] cursor-pointer"
                         >
                             {isCapturingStopHotkey
-                                ? "Bir tuşa basın... (iptal için tekrar tıklayın)"
-                                : routingConfig.stopAllHotkey || "Tuş ata"}
+                                ? t("settings.capturingStopHotkey")
+                                : routingConfig.stopAllHotkey ||
+                                  t("common.noHotkey")}
                         </motion.button>
                     </div>
 
                     {/* Playback Mode */}
                     <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
                         <label className="text-xs font-semibold text-[var(--text-primary)]">
-                            Çalma Modu
+                            {t("settings.playbackModeTitle")}
                         </label>
                         <p className="text-xs text-[var(--text-secondary)]">
-                            Yeni bir ses tetiklendiğinde önceki sesin davranışı:
+                            {t("settings.playbackModeDesc")}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                             <motion.button
@@ -787,7 +875,7 @@ export function SettingsView({
                                         : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                 }`}
                             >
-                                Üst Üste Bindir (Overlap)
+                                {t("settings.overlapMode")}
                             </motion.button>
                             <motion.button
                                 type="button"
@@ -804,7 +892,7 @@ export function SettingsView({
                                         : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                 }`}
                             >
-                                Öncekini Kes (Cutoff)
+                                {t("settings.cutoffMode")}
                             </motion.button>
                         </div>
                     </div>
@@ -813,7 +901,7 @@ export function SettingsView({
                     <div className="flex flex-col gap-2 p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] md:col-span-2">
                         <div className="flex items-center justify-between">
                             <label className="text-xs font-semibold text-[var(--text-primary)]">
-                                Genel Ses Seviyesi
+                                {t("settings.masterVolumeTitle")}
                             </label>
                             <span className="text-xs font-mono font-semibold text-[var(--accent-text)]">
                                 %{Math.round(routingConfig.masterVolume * 100)}
@@ -834,7 +922,7 @@ export function SettingsView({
                             className="w-full mt-1 cursor-pointer"
                         />
                         <p className="text-xs text-[var(--text-secondary)]">
-                            Tüm ses efektleri ve önizlemeler bu ana ses seviyesinde çalınır.
+                            {t("settings.masterVolumeDesc")}
                         </p>
                     </div>
                 </div>
@@ -843,10 +931,10 @@ export function SettingsView({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-[var(--border-subtle)]">
                     <div>
                         <p className="text-xs font-semibold text-[var(--text-primary)]">
-                            Fabrika Ayarlarına Sıfırla
+                            {t("settings.factoryResetTitle")}
                         </p>
                         <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                            Tüm sesleri ve kısayolları başlangıç durumuna döndürür.
+                            {t("settings.factoryResetDesc")}
                         </p>
                     </div>
                     <motion.button
@@ -856,7 +944,7 @@ export function SettingsView({
                         onClick={onResetToDefaults}
                         className="px-4 py-2 ui-control bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800 text-rose-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
                     >
-                        Sesleri Sıfırla
+                        {t("settings.resetSoundsBtn")}
                     </motion.button>
                 </div>
             </motion.section>
@@ -869,25 +957,28 @@ export function SettingsView({
                 <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border-subtle)]">
                     <Bot className="w-4 h-4 text-[var(--accent-text)]" />
                     <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                        Discord Rich Presence (RPC)
+                        {t("settings.discordRpcHeader")}
                     </h2>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <p className="text-xs font-semibold text-[var(--text-primary)]">
-                            Discord etkinliğini göster
+                            {t("settings.discordRpcShowActivity")}
                         </p>
                         <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                            Lir’de çalan sesleri ve uygulama durumunu Discord profilinizde isteğe bağlı olarak gösterir.
+                            {t("settings.discordRpcShowActivityDesc")}
                         </p>
                         <p className="mt-2 text-xs text-[var(--text-muted)]">
                             {!isElectron
-                                ? "Discord RPC masaüstü uygulamasında kullanılabilir."
+                                ? t("settings.discordDesktopOnly")
                                 : !routingConfig.discordRpcEnabled
-                                  ? "Discord RPC kapalı."
+                                  ? t("settings.discordOff")
                                   : discordStatus.connected
-                                    ? `Discord’a bağlandı${discordStatus.username ? `: ${discordStatus.username}` : "."}`
-                                    : "Açık; Discord istemcisi bekleniyor."}
+                                    ? t("settings.discordConnected", {
+                                          user:
+                                              discordStatus.username || "",
+                                      })
+                                    : t("settings.discordWaiting")}
                         </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -901,7 +992,7 @@ export function SettingsView({
                                     className="flex items-center gap-1.5 px-3.5 py-2 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-medium transition-colors cursor-pointer"
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
-                                    Yeniden bağlan
+                                    {t("settings.reconnect")}
                                 </motion.button>
                             )}
                         <button

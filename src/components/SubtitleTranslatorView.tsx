@@ -10,20 +10,49 @@ import {
 } from "lucide-react";
 import { createWorker, PSM } from "tesseract.js";
 import type { SubtitleOverlaySettings } from "../types/sound";
+import { useTranslation } from "../i18n";
 
 const OCR_LANGUAGES = {
-    auto: { label: "Otomatik algıla", ocrCode: "eng", translationCode: "auto" },
-    eng: { label: "İngilizce", ocrCode: "eng", translationCode: "en" },
-    jpn: { label: "Japonca", ocrCode: "jpn", translationCode: "ja" },
-    kor: { label: "Korece", ocrCode: "kor", translationCode: "ko" },
+    auto: {
+        labelKey: "translator.langAuto",
+        ocrCode: "eng",
+        translationCode: "auto",
+    },
+    eng: {
+        labelKey: "translator.langEng",
+        ocrCode: "eng",
+        translationCode: "en",
+    },
+    jpn: {
+        labelKey: "translator.langJpn",
+        ocrCode: "jpn",
+        translationCode: "ja",
+    },
+    kor: {
+        labelKey: "translator.langKor",
+        ocrCode: "kor",
+        translationCode: "ko",
+    },
     chi_sim: {
-        label: "Basitleştirilmiş Çince",
+        labelKey: "translator.langChiSim",
         ocrCode: "chi_sim",
         translationCode: "zh-CN",
     },
-    spa: { label: "İspanyolca", ocrCode: "spa", translationCode: "es" },
-    fra: { label: "Fransızca", ocrCode: "fra", translationCode: "fr" },
-    deu: { label: "Almanca", ocrCode: "deu", translationCode: "de" },
+    spa: {
+        labelKey: "translator.langSpa",
+        ocrCode: "spa",
+        translationCode: "es",
+    },
+    fra: {
+        labelKey: "translator.langFra",
+        ocrCode: "fra",
+        translationCode: "fr",
+    },
+    deu: {
+        labelKey: "translator.langDeu",
+        ocrCode: "deu",
+        translationCode: "de",
+    },
 } as const;
 
 type OcrLanguage = keyof typeof OCR_LANGUAGES;
@@ -137,6 +166,7 @@ function hasSubtitleFrameChanged(
 }
 
 export function SubtitleTranslatorView() {
+    const { t } = useTranslation();
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [selection, setSelection] = useState<Selection | null>(null);
     const [language, setLanguage] = useState<OcrLanguage>("auto");
@@ -183,7 +213,7 @@ export function SubtitleTranslatorView() {
         video.srcObject = stream;
         void video.play().catch((playError: unknown) => {
             console.error("Ekran önizlemesi başlatılamadı:", playError);
-            setError("Ekran görüntüsü gösterilemedi. Ekran paylaşımını yeniden başlatın.");
+            setError(t("translator.errScreenPreview"));
         });
 
         const drawFrame = () => {
@@ -328,14 +358,16 @@ export function SubtitleTranslatorView() {
                         );
                         if (!response.ok) {
                             throw new Error(
-                                `Çeviri servisi HTTP ${response.status} hatası döndürdü.`,
+                                t("translator.errHttpStatus", {
+                                    status: response.status,
+                                }),
                             );
                         }
 
                         const result: unknown = await response.json();
                         if (!Array.isArray(result) || !Array.isArray(result[0])) {
                             throw new Error(
-                                "Çeviri servisi beklenmeyen bir yanıt döndürdü.",
+                                t("translator.errUnexpectedResponse"),
                             );
                         }
                         const translation = result[0]
@@ -348,9 +380,7 @@ export function SubtitleTranslatorView() {
                             .join("")
                             .trim();
                         if (!translation) {
-                            throw new Error(
-                                "Çeviri servisi bu metni çeviremedi.",
-                            );
+                            throw new Error(t("translator.errNoTranslation"));
                         }
 
                         lastTranslatedTextRef.current =
@@ -369,12 +399,12 @@ export function SubtitleTranslatorView() {
                                 translationError,
                             );
                             window.electronAPI?.updateSubtitleOverlay(
-                                "Çeviri alınamadı. Bağlantı kontrol ediliyor…",
+                                t("translator.errTranslationFailed"),
                             );
                             setError(
                                 translationError instanceof Error
                                     ? translationError.message
-                                    : "Çeviri sırasında beklenmeyen bir hata oluştu.",
+                                    : t("translator.errTranslationGeneric"),
                             );
                         }
                     } finally {
@@ -436,11 +466,11 @@ export function SubtitleTranslatorView() {
                     window.electronAPI?.updateSubtitleOverlay(
                         confidence >= 20
                             ? cleanedText
-                            : "Altyazı net okunamadı. Alanı daraltıp yeniden deneyin.",
+                            : t("translator.errOcrUnclear"),
                     );
                 } else {
                     window.electronAPI?.updateSubtitleOverlay(
-                        "Seçili alanda altyazı aranıyor…",
+                        t("translator.errSearchingArea"),
                     );
                 }
                 const normalizedText = normalizeText(cleanedText);
@@ -480,12 +510,12 @@ export function SubtitleTranslatorView() {
                 ) {
                     console.error("OCR veya çeviri başarısız oldu:", recognitionError);
                     window.electronAPI?.updateSubtitleOverlay(
-                        "Çeviri alınamadı. Bağlantı kontrol ediliyor…",
+                        t("translator.errTranslationFailed"),
                     );
                     setError(
                         recognitionError instanceof Error
                             ? recognitionError.message
-                            : "OCR veya çeviri sırasında beklenmeyen bir hata oluştu.",
+                            : t("translator.errOcrGeneric"),
                     );
                 }
             } finally {
@@ -547,9 +577,9 @@ export function SubtitleTranslatorView() {
                 if (!cancelled) {
                     console.error("Altyazı kare değişimi algılanamadı:", samplingError);
                     window.electronAPI?.updateSubtitleOverlay(
-                        "Ekran görüntüsü okunamadı.",
+                        t("translator.errScreenshotRead"),
                     );
-                    setError("Altyazı görüntüsü analiz edilemedi.");
+                    setError(t("translator.errFrameAnalysis"));
                 }
             }
         };
@@ -595,11 +625,9 @@ export function SubtitleTranslatorView() {
                 if (!cancelled) {
                     console.error("OCR motoru başlatılamadı:", workerError);
                     window.electronAPI?.updateSubtitleOverlay(
-                        "OCR yüklenemedi. İnternet bağlantısını kontrol edin.",
+                        t("translator.errOcrLoad"),
                     );
-                    setError(
-                        "OCR motoru yüklenemedi. İlk kullanımda dil modeli için internet bağlantısı gerekir.",
-                    );
+                    setError(t("translator.errOcrModel"));
                     setIsTranslating(false);
                     setIsLoadingOcr(false);
                 }
@@ -641,7 +669,7 @@ export function SubtitleTranslatorView() {
             );
         } catch (settingsError) {
             console.error("Altyazı penceresi ayarları kaydedilemedi:", settingsError);
-            setError("Altyazı penceresi ayarları kaydedilemedi.");
+            setError(t("translator.errSettingsSave"));
         }
 
         const timeout = window.setTimeout(() => {
@@ -649,12 +677,12 @@ export function SubtitleTranslatorView() {
                 ?.setSubtitleOverlaySettings(overlaySettings)
                 .then((updated) => {
                     if (!updated) {
-                        setError("Altyazı penceresi ayarları uygulanamadı.");
+                        setError(t("translator.errSettingsApply"));
                     }
                 })
                 .catch((settingsError: unknown) => {
                     console.error("Altyazı penceresi ayarları uygulanamadı:", settingsError);
-                    setError("Altyazı penceresi ayarları uygulanamadı.");
+                    setError(t("translator.errSettingsApply"));
                 });
         }, 300);
 
@@ -664,14 +692,14 @@ export function SubtitleTranslatorView() {
     const setOverlayVisibility = async (visible: boolean) => {
         const setVisible = window.electronAPI?.setSubtitleOverlayVisible;
         if (!setVisible) {
-            setError("Oyun üstü çeviri penceresi yalnızca masaüstü uygulamasında kullanılabilir.");
+            setError(t("translator.errDesktopOnly"));
             return false;
         }
 
         try {
             const updated = await setVisible(visible);
             if (!updated) {
-                throw new Error("Oyun üstü çeviri penceresi açılamadı.");
+                throw new Error(t("translator.errOverlayOpen"));
             }
             setIsOverlayVisible(visible);
             return true;
@@ -680,7 +708,7 @@ export function SubtitleTranslatorView() {
             setError(
                 overlayError instanceof Error
                     ? overlayError.message
-                    : "Oyun üstü çeviri penceresi güncellenemedi.",
+                    : t("translator.errOverlayUpdate"),
             );
             return false;
         }
@@ -720,9 +748,7 @@ export function SubtitleTranslatorView() {
                 return;
             }
             console.error("Ekran paylaşımı başlatılamadı:", captureError);
-            setError(
-                "Ekran görüntüsü alınamadı. Uygulamanın ekran yakalama iznini kontrol edip yeniden deneyin.",
-            );
+            setError(t("translator.errCapture"));
         }
     };
 
@@ -783,14 +809,14 @@ export function SubtitleTranslatorView() {
                 <div>
                     <div className="flex items-center gap-2.5">
                         <h1 className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
-                            Oyun Altyazı Çevirisi
+                            {t("translator.title")}
                         </h1>
                         <span className="ui-control border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2.5 py-0.5 text-xs font-mono font-semibold text-[var(--accent-text)]">
-                            OCR · CANLI
+                            OCR · LIVE
                         </span>
                     </div>
                     <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        Ekranda bir alan seçin; altyazılar cihazınızda okunup Türkçeye çevrilsin.
+                        {t("translator.subtitle")}
                     </p>
                 </div>
             </div>
@@ -805,7 +831,7 @@ export function SubtitleTranslatorView() {
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
                             <Monitor className="h-4 w-4 text-[var(--accent-text)]" />
-                            Ekran alanı
+                            {t("translator.screenArea")}
                         </div>
                         {stream ? (
                             <motion.button
@@ -815,7 +841,7 @@ export function SubtitleTranslatorView() {
                                 className="flex items-center gap-1.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
                             >
                                 <Square className="h-3 w-3" />
-                                Ekran paylaşımını durdur
+                                {t("translator.stopScreenShare")}
                             </motion.button>
                         ) : (
                             <motion.button
@@ -826,7 +852,7 @@ export function SubtitleTranslatorView() {
                                 className="btn-accent flex items-center gap-1.5 ui-control px-4 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
                             >
                                 <Monitor className="h-3.5 w-3.5" />
-                                Ekran seç
+                                {t("translator.selectScreen")}
                             </motion.button>
                         )}
                     </div>
@@ -839,7 +865,7 @@ export function SubtitleTranslatorView() {
                                 onPointerMove={handlePointerMove}
                                 onPointerUp={finishSelection}
                                 onPointerCancel={finishSelection}
-                                aria-label="Altyazı alanını seçmek için ekran önizlemesine sürükleyin"
+                                aria-label={t("translator.screenAreaPrompt")}
                                 className="max-h-[55vh] max-w-full cursor-crosshair touch-none"
                                 style={{ width: "100%", height: "auto" }}
                             />
@@ -847,7 +873,7 @@ export function SubtitleTranslatorView() {
                             <div className="flex max-w-xs flex-col items-center gap-2.5 p-6 text-center">
                                 <Monitor className="h-8 w-8 text-[var(--text-muted)]" />
                                 <p className="text-xs sm:text-[13px] text-[var(--text-secondary)]">
-                                    Ekran paylaşımını başlatın, ardından altyazıların bulunduğu alanı sürükleyerek seçin.
+                                    {t("translator.screenAreaPrompt")}
                                 </p>
                             </div>
                         )}
@@ -856,8 +882,8 @@ export function SubtitleTranslatorView() {
                     {stream && (
                         <p className="text-xs text-[var(--text-secondary)]">
                             {hasValidSelection
-                                ? "Altyazı alanı seçildi."
-                                : "Altyazıların etrafında bir dikdörtgen çizerek alanı seçin."}
+                                ? t("translator.selectionDone")
+                                : t("translator.selectionInstruction")}
                         </p>
                     )}
                 </motion.section>
@@ -873,7 +899,7 @@ export function SubtitleTranslatorView() {
                             htmlFor="subtitle-source-language"
                             className="text-xs font-semibold text-[var(--text-primary)]"
                         >
-                            Altyazı dili
+                            {t("translator.subtitleLang")}
                         </label>
                         <select
                             id="subtitle-source-language"
@@ -887,7 +913,7 @@ export function SubtitleTranslatorView() {
                         >
                             {Object.entries(OCR_LANGUAGES).map(([code, item]) => (
                                 <option key={code} value={code}>
-                                    {item.label}
+                                    {t(item.labelKey)}
                                 </option>
                             ))}
                         </select>
@@ -901,7 +927,7 @@ export function SubtitleTranslatorView() {
                             className="flex items-center justify-center gap-2 ui-control border border-rose-900/80 bg-rose-950/40 px-4 py-2.5 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-950 cursor-pointer"
                         >
                             <Square className="h-3.5 w-3.5" />
-                            Çeviriyi durdur
+                            {t("translator.stopTranslation")}
                         </motion.button>
                     ) : (
                         <motion.button
@@ -914,7 +940,7 @@ export function SubtitleTranslatorView() {
                                 setTranslatedText("");
                                 lastTranslatedTextRef.current = "";
                                 window.electronAPI?.updateSubtitleOverlay(
-                                    "Ekran metni aranıyor…",
+                                    t("translator.searchingText"),
                                 );
                                 void setOverlayVisibility(true);
                                 setIsTranslating(true);
@@ -926,7 +952,7 @@ export function SubtitleTranslatorView() {
                             ) : (
                                 <ScanText className="h-3.5 w-3.5" />
                             )}
-                            Canlı çeviriyi başlat
+                            {t("translator.startLiveTranslation")}
                         </motion.button>
                     )}
 
@@ -939,7 +965,7 @@ export function SubtitleTranslatorView() {
                                 className="overflow-hidden flex items-center gap-2 text-xs text-[var(--text-secondary)]"
                             >
                                 <LoaderCircle className="h-3.5 w-3.5 animate-spin text-[var(--accent-text)]" />
-                                OCR motoru ve dil modeli yükleniyor…
+                                {t("translator.loadingOcrModel")}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -953,7 +979,9 @@ export function SubtitleTranslatorView() {
                                 className="overflow-hidden flex items-center gap-2 text-xs text-[var(--accent-text)] font-medium"
                             >
                                 <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
-                                Ekran altyazıları izleniyor · %{Math.round(progress * 100)}
+                                {t("translator.trackingProgress", {
+                                    percent: Math.round(progress * 100),
+                                })}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -976,14 +1004,17 @@ export function SubtitleTranslatorView() {
                     <div className="flex min-h-24 flex-col gap-2 border-t border-[var(--border-subtle)] pt-3">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
                             <ScanText className="h-3.5 w-3.5" />
-                            Algılanan altyazı
+                            {t("translator.recognizedSubtitle")}
                         </div>
                         <p className="whitespace-pre-wrap text-xs sm:text-[13px] leading-relaxed text-[var(--text-primary)]">
-                            {recognizedText || "Altyazı algılandığında burada görünür."}
+                            {recognizedText ||
+                                t("translator.recognizedPlaceholder")}
                         </p>
                         {ocrConfidence !== null && ocrConfidence < 20 && (
                             <p className="text-xs text-amber-300">
-                                OCR metni okuyamadı (%{Math.round(ocrConfidence)} güven). Yalnızca altyazı satırını kapsayan alanı seçin.
+                                {t("translator.ocrLowConfidence", {
+                                    conf: Math.round(ocrConfidence),
+                                })}
                             </p>
                         )}
                     </div>
@@ -991,12 +1022,12 @@ export function SubtitleTranslatorView() {
                     <div className="flex min-h-28 flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-text)]">
                             <Languages className="h-3.5 w-3.5" />
-                            Oyun üstü altyazı
+                            {t("translator.inGameOverlay")}
                         </div>
                         <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
                             {translatedText
-                                ? "Türkçe çeviri ekranınızın sağ üst köşesindeki yapışkan notta gösteriliyor."
-                                : "Çeviri, oyun veya diğer uygulamaların üzerinde ayrı bir pencerede gösterilecek."}
+                                ? t("translator.inGameOverlayActive")
+                                : t("translator.inGameOverlayInactive")}
                         </p>
                         <motion.button
                             type="button"
@@ -1007,18 +1038,18 @@ export function SubtitleTranslatorView() {
                             className="flex items-center justify-center gap-2 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
                         >
                             {isOverlayVisible
-                                ? "Yapışkan notu gizle"
-                                : "Yapışkan notu göster"}
+                                ? t("translator.hideSticky")
+                                : t("translator.showSticky")}
                         </motion.button>
                         <p className="text-xs text-[var(--text-muted)]">
-                            Not tıklamaları oyuna geçirir. Ctrl + Shift + Y ile gösterip gizleyebilirsiniz.
+                            {t("translator.stickyHint")}
                         </p>
                     </div>
 
                     <div className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
                         <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-[var(--text-primary)]">
-                                Yapışkan not görünümü
+                                {t("translator.stickyAppearance")}
                             </span>
                             <button
                                 type="button"
@@ -1027,12 +1058,14 @@ export function SubtitleTranslatorView() {
                                 }
                                 className="text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
                             >
-                                Sıfırla
+                                {t("translator.reset")}
                             </button>
                         </div>
 
                         <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            Yatay konum · {overlaySettings.x}%
+                            {t("translator.horizontalPosition", {
+                                val: overlaySettings.x,
+                            })}
                             <input
                                 type="range"
                                 min="0"
@@ -1048,7 +1081,9 @@ export function SubtitleTranslatorView() {
                         </label>
 
                         <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            Dikey konum · {overlaySettings.y}%
+                            {t("translator.verticalPosition", {
+                                val: overlaySettings.y,
+                            })}
                             <input
                                 type="range"
                                 min="0"
@@ -1065,7 +1100,9 @@ export function SubtitleTranslatorView() {
 
                         <div className="grid grid-cols-2 gap-3">
                             <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                                Genişlik · {overlaySettings.width}px
+                                {t("translator.width", {
+                                    val: overlaySettings.width,
+                                })}
                                 <input
                                     type="range"
                                     min="360"
@@ -1081,7 +1118,9 @@ export function SubtitleTranslatorView() {
                                 />
                             </label>
                             <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                                Yükseklik · {overlaySettings.height}px
+                                {t("translator.height", {
+                                    val: overlaySettings.height,
+                                })}
                                 <input
                                     type="range"
                                     min="120"
@@ -1099,7 +1138,9 @@ export function SubtitleTranslatorView() {
                         </div>
 
                         <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            Yazı boyutu · {overlaySettings.fontSize}px
+                            {t("translator.fontSize", {
+                                val: overlaySettings.fontSize,
+                            })}
                             <input
                                 type="range"
                                 min="14"
@@ -1118,7 +1159,7 @@ export function SubtitleTranslatorView() {
             </div>
 
             <aside className="ui-inner border border-amber-900/50 bg-amber-950/20 px-4 py-3 text-xs leading-relaxed text-amber-100/80">
-                OCR cihazınızda çalışır. Dil modeli ilk kullanımda internetten indirilir; çeviri için yalnızca algılanan altyazı metni ücretsiz Google Translate endpoint’ine gönderilir. İnternet gerekir; bu anahtarsız endpoint’in kullanım koşulları ve erişilebilirliği değişebilir. Daha iyi sonuç için yalnızca altyazıları kapsayan dar bir alan seçin.
+                {t("translator.privacyNotice")}
             </aside>
         </div>
     );

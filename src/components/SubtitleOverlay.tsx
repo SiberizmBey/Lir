@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { SubtitleOverlaySettings } from "../types/sound";
+import { useTranslation } from "../i18n";
 
 export function SubtitleOverlay() {
-    const [translation, setTranslation] = useState(
-        "Canlı altyazı çevirisi burada görünecek.",
+    const { t } = useTranslation();
+    const [translation, setTranslation] = useState(() =>
+        t("translator.overlayPlaceholder"),
     );
     const [settings, setSettings] = useState<SubtitleOverlaySettings>({
         x: 100,
@@ -39,7 +41,7 @@ export function SubtitleOverlay() {
                     {translation || " "}
                 </p>
                 <span className="mt-1 shrink-0 text-[10px] font-medium tracking-wide text-emerald-300/80">
-                    LIR · CANLI ÇEVİRİ
+                    {t("translator.overlayBadge")}
                 </span>
             </div>
         </div>

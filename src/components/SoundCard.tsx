@@ -12,6 +12,7 @@ import {
   AudioLines,
 } from 'lucide-react';
 import { SoundItem } from '../types/sound';
+import { useTranslation } from '../i18n';
 
 interface SoundCardProps {
   sound: SoundItem;
@@ -36,6 +37,7 @@ export function SoundCard({
   onDelete,
   onOpenHotkeyModal,
 }: SoundCardProps) {
+  const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
 
   const formatDuration = (seconds: number) => {
@@ -44,6 +46,8 @@ export function SoundCard({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
+
+  const categoryLabel = t(`categories.${sound.category}`) || sound.category;
 
   return (
     <motion.div
@@ -87,7 +91,7 @@ export function SoundCard({
               {sound.title}
             </h3>
             <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
-              {sound.category}
+              {categoryLabel}
             </p>
           </div>
         </div>
@@ -98,7 +102,7 @@ export function SoundCard({
             type="button"
             whileTap={{ scale: 0.82 }}
             onClick={() => onToggleFavorite(sound.id)}
-            title={sound.isFavorite ? 'Favorilerden Kaldır' : 'Favorilere Ekle'}
+            title={sound.isFavorite ? t('soundCard.removeFavorite') : t('soundCard.addFavorite')}
             className={`p-1.5 ui-control hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer ${
               sound.isFavorite
                 ? 'text-rose-400'
@@ -112,7 +116,7 @@ export function SoundCard({
             type="button"
             whileTap={{ scale: 0.82, rotate: 90 }}
             onClick={() => onToggleLoop(sound.id)}
-            title={sound.loop ? 'Döngü Açık' : 'Döngü Kapalı'}
+            title={sound.loop ? t('soundCard.loopOn') : t('soundCard.loopOff')}
             className={`p-1.5 ui-control hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer ${
               sound.loop
                 ? 'text-[var(--accent-text)] bg-[var(--accent-subtle)]'
@@ -127,7 +131,7 @@ export function SoundCard({
               type="button"
               whileTap={{ scale: 0.85 }}
               onClick={() => setShowMenu(!showMenu)}
-              aria-label="Ses menüsü"
+              aria-label={t('soundCard.soundMenu')}
               className="p-1.5 ui-control text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
             >
               <MoreHorizontal className="w-4 h-4" />
@@ -151,7 +155,7 @@ export function SoundCard({
                     className="w-full px-3 py-2 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] flex items-center gap-2 cursor-pointer"
                   >
                     <Keyboard className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                    <span>Kısayol Ata</span>
+                    <span>{t('soundCard.assignHotkey')}</span>
                   </button>
 
                   <button
@@ -163,7 +167,7 @@ export function SoundCard({
                     className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-[var(--bg-card-hover)] flex items-center gap-2 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Sesi Sil</span>
+                    <span>{t('soundCard.deleteSound')}</span>
                   </button>
                 </motion.div>
               )}
@@ -179,17 +183,17 @@ export function SoundCard({
             type="button"
             whileTap={{ scale: 0.94 }}
             onClick={() => onOpenHotkeyModal(sound)}
-            title="Kısayolu Değiştir"
+            title={t('soundCard.changeHotkey')}
             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 ui-control border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)] text-xs font-mono font-semibold hover:brightness-110 transition-all cursor-pointer"
           >
             <Keyboard className="w-3 h-3" />
-            <kbd>{sound.hotkey || 'Tuş Ata'}</kbd>
+            <kbd>{sound.hotkey || t('soundCard.pressKey')}</kbd>
           </motion.button>
 
           <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] font-mono tabular-nums">
             {sound.loop && (
               <span className="text-[11px] font-sans font-medium text-[var(--accent-text)]">
-                Döngü
+                {t('soundCard.loopBadge')}
               </span>
             )}
             <span>{formatDuration(sound.duration)}</span>
@@ -207,7 +211,7 @@ export function SoundCard({
             value={sound.volume}
             onChange={(e) => onVolumeChange(sound.id, parseFloat(e.target.value))}
             className="w-full"
-            title={`Ses Seviyesi: %${Math.round(sound.volume * 100)}`}
+            title={t('soundCard.volumeLevel', { percent: Math.round(sound.volume * 100) })}
           />
           <span className="text-xs font-mono tabular-nums text-[var(--text-secondary)] w-9 text-right shrink-0">
             %{Math.round(sound.volume * 100)}
@@ -232,7 +236,7 @@ export function SoundCard({
                 : 'text-[var(--text-secondary)]'
             }
           >
-            {isPlaying ? 'Çalınıyor' : 'Hazır'}
+            {isPlaying ? t('soundCard.statusPlaying') : t('soundCard.statusReady')}
           </span>
         </div>
 
@@ -251,12 +255,12 @@ export function SoundCard({
           {isPlaying ? (
             <>
               <Square className="w-3 h-3 fill-current" />
-              <span>Durdur</span>
+              <span>{t('soundCard.stop')}</span>
             </>
           ) : (
             <>
               <Play className="w-3 h-3 fill-current" />
-              <span>Çal</span>
+              <span>{t('soundCard.play')}</span>
             </>
           )}
         </motion.button>

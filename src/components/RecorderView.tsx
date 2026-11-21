@@ -29,6 +29,7 @@ import {
     getAllSavedRecordings,
     putSavedRecording,
 } from "../utils/recordingStorage";
+import { useTranslation } from "../i18n";
 
 interface RecorderViewProps {
     onAddRecordedSound: (sound: Omit<SoundItem, "id" | "addedAt">) => void;
@@ -44,9 +45,9 @@ const formatDurationClock = (seconds: number) => {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
 };
 
-const formatTimestamp = (ts: number) => {
+const formatTimestamp = (ts: number, locale: string) => {
     try {
-        return new Date(ts).toLocaleString("tr-TR", {
+        return new Date(ts).toLocaleString(locale, {
             day: "2-digit",
             month: "short",
             hour: "2-digit",
@@ -63,6 +64,7 @@ export function RecorderView({
     voiceChangerConfig,
     onOpenVoiceChanger,
 }: RecorderViewProps) {
+    const { t, language } = useTranslation();
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
@@ -338,7 +340,7 @@ export function RecorderView({
             audioChunksRef.current = [];
 
             const capturedEffectName = willRecordWithEffect
-                ? activePreset?.name || "Özel Efekt"
+                ? activePreset?.name || t("recorder.customEffect")
                 : undefined;
 
             mediaRecorder.ondataavailable = (event) => {
@@ -378,8 +380,13 @@ export function RecorderView({
                     const newRec: SavedRecording = {
                         id: `rec-${now}-${Math.random().toString(36).slice(2, 6)}`,
                         title: capturedEffectName
-                            ? `${capturedEffectName} Kaydı #${nextNum}`
-                            : `Mikrofon Kaydı #${nextNum}`,
+                            ? t("recorder.defaultProcessedTitle", {
+                                  effect: capturedEffectName,
+                                  num: nextNum,
+                              })
+                            : t("recorder.defaultRecordingTitle", {
+                                  num: nextNum,
+                              }),
                         hotkey: `F${((nextNum - 1) % 4) + 9}`,
                         duration: Number(finalDurationSec.toFixed(1)),
                         createdAt: now,
@@ -421,7 +428,7 @@ export function RecorderView({
             setMicError(
                 err instanceof Error
                     ? err.message
-                    : "Mikrofona erişilemedi. Lütfen mikrofon izinlerini kontrol edin.",
+                    : t("recorder.micAccessError"),
             );
         }
     };
@@ -569,7 +576,7 @@ export function RecorderView({
 
     const handleAddToSoundboard = async (rec: SavedRecording) => {
         onAddRecordedSound({
-            title: rec.title.trim() || "Mikrofon Kaydı",
+            title: rec.title.trim() || t("recorder.micRecording"),
             category: "Özel",
             hotkey: rec.hotkey.trim().toUpperCase() || "F9",
             duration: Math.max(0.5, rec.duration),
@@ -609,7 +616,7 @@ export function RecorderView({
                     <div>
                         <div className="flex flex-wrap items-center gap-2.5">
                             <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                                Mikrofon Kaydedici
+                                {t("recorder.title")}
                             </h1>
                             <span
                                 className={`text-xs font-mono border px-2.5 py-0.5 ui-control font-semibold ${
@@ -622,13 +629,15 @@ export function RecorderView({
                             >
                                 {isRecording
                                     ? isPaused
-                                        ? "DURAKLATILDI"
-                                        : "KAYITTA"
-                                    : `${savedRecordings.length} KAYIT`}
+                                        ? t("recorder.paused")
+                                        : t("recorder.recording")
+                                    : t("recorder.recordingsCount", {
+                                          count: savedRecordings.length,
+                                      })}
                             </span>
                         </div>
                         <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                            Canlı ses spektrumuyla kayıt alın, aktif ses değiştirici efektlerini kayda işleyin ve dilediğiniz zaman Soundboard&apos;a ekleyin.
+                            {t("recorder.subtitle")}
                         </p>
                     </div>
                 </div>
@@ -650,15 +659,19 @@ export function RecorderView({
                             <AudioWaveform className="w-3.5 h-3.5" />
                             <span>
                                 {isVoiceEffectReady
-                                    ? `Efekt: ${activePreset?.name ?? "Özel"}`
-                                    : "Ses Değiştirici Kapalı"}
+                                    ? t("recorder.effectLabel", {
+                                          name:
+                                              activePreset?.name ??
+                                              t("recorder.customEffect"),
+                                      })
+                                    : t("recorder.voiceEngineOff")}
                             </span>
                         </motion.button>
                     )}
 
                     <div className="flex items-center gap-2.5 px-3.5 py-1.5 ui-control bg-[var(--bg-island)] border border-[var(--border-card)]">
                         <span className="text-xs font-medium text-[var(--text-primary)]">
-                            Kayda Efekti Uygula
+                            {t("recorder.applyEffects")}
                         </span>
                         <motion.button
                             type="button"
@@ -667,7 +680,7 @@ export function RecorderView({
                             onClick={() =>
                                 setIncludeVoiceEffects((prev) => !prev)
                             }
-                            aria-label="Kayda aktif ses efektlerini uygula"
+                            aria-label={t("recorder.applyEffects")}
                             className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
                                 includeVoiceEffects
                                     ? "bg-[var(--accent)] justify-end"
@@ -709,7 +722,7 @@ export function RecorderView({
                                 onClick={() => setMicError(null)}
                                 className="text-rose-300 hover:text-white text-xs px-3 py-1 ui-control bg-rose-900/50 hover:bg-rose-900 transition-colors cursor-pointer"
                             >
-                                Kapat
+                                {t("common.close")}
                             </motion.button>
                         </div>
                     </motion.div>
@@ -731,7 +744,7 @@ export function RecorderView({
                             <span className="truncate max-w-[220px] text-[var(--text-primary)] font-medium">
                                 {activeMicLabel ||
                                     routingConfig.micDeviceLabel ||
-                                    "Varsayılan Mikrofon"}
+                                    t("routing.defaultMicOption")}
                             </span>
                         </span>
 
@@ -739,22 +752,25 @@ export function RecorderView({
                             <span className="flex items-center gap-1.5 px-3 py-1 ui-control bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] font-medium">
                                 <Sparkles className="w-3.5 h-3.5" />
                                 <span>
-                                    İşlenmiş Kayıt:{" "}
-                                    {activePreset?.name ?? "Özel Efekt"}
+                                    {t("recorder.processedRecording", {
+                                        name:
+                                            activePreset?.name ??
+                                            t("recorder.customEffect"),
+                                    })}
                                 </span>
                             </span>
                         ) : (
                             <span className="px-3 py-1 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
                                 {isVoiceEffectReady && !includeVoiceEffects
-                                    ? "Ham Mikrofon (Efekt Hariç)"
-                                    : "Doğal Temiz Kayıt"}
+                                    ? t("recorder.rawRecording")
+                                    : t("recorder.naturalRecording")}
                             </span>
                         )}
                     </div>
 
                     <div className="flex items-center gap-3">
                         <span className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
-                            Pik:{" "}
+                            {t("recorder.peak")}{" "}
                             <strong className="text-[var(--accent-text)]">
                                 %{peakLevel}
                             </strong>
@@ -774,7 +790,7 @@ export function RecorderView({
                     {!isRecording && !playingId && (
                         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                             <span className="px-3.5 py-1.5 ui-control bg-[var(--bg-card)]/85 border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-muted)]">
-                                Kayda başladığınızda ses spektrumu burada canlı görünür
+                                {t("recorder.spectrumPrompt")}
                             </span>
                         </div>
                     )}
@@ -785,11 +801,11 @@ export function RecorderView({
                     <div className="text-xs text-[var(--text-secondary)]">
                         {isRecording
                             ? isPaused
-                                ? "Kayıt duraklatıldı — devam edebilir veya kaydedip bitirebilirsiniz."
+                                ? t("recorder.hintPaused")
                                 : willRecordWithEffect
-                                  ? "Sesiniz aktif efekt zincirinden geçerek kaydediliyor..."
-                                  : "Mikrofonunuz doğrudan kaydediliyor..."
-                            : "Kayıt tamamlandığında aşağıdaki Kaydedilen Sesler listesine eklenir."}
+                                  ? t("recorder.hintProcessed")
+                                  : t("recorder.hintRaw")
+                            : t("recorder.hintIdle")}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2.5">
@@ -807,7 +823,7 @@ export function RecorderView({
                                 className="btn-accent flex items-center gap-2 px-5 py-2.5 ui-control text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
                             >
                                 <Mic className="w-4 h-4" />
-                                <span>Kaydı Başlat</span>
+                                <span>{t("recorder.startRecording")}</span>
                             </motion.button>
                         ) : (
                             <>
@@ -818,7 +834,7 @@ export function RecorderView({
                                     className="flex items-center gap-1.5 px-4 py-2.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
                                 >
                                     <X className="w-4 h-4" />
-                                    <span>İptal</span>
+                                    <span>{t("common.cancel")}</span>
                                 </motion.button>
 
                                 <motion.button
@@ -830,12 +846,12 @@ export function RecorderView({
                                     {isPaused ? (
                                         <>
                                             <Play className="w-3.5 h-3.5 fill-current text-[var(--accent-text)]" />
-                                            <span>Devam Et</span>
+                                            <span>{t("recorder.resumeRecording")}</span>
                                         </>
                                     ) : (
                                         <>
                                             <Pause className="w-3.5 h-3.5 text-amber-400" />
-                                            <span>Duraklat</span>
+                                            <span>{t("recorder.pauseRecording")}</span>
                                         </>
                                     )}
                                 </motion.button>
@@ -848,7 +864,7 @@ export function RecorderView({
                                     className="flex items-center gap-2 px-5 py-2.5 ui-control bg-rose-600 hover:bg-rose-500 text-white keep-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
                                 >
                                     <Square className="w-3.5 h-3.5 fill-current" />
-                                    <span>Durdur ve Kaydet</span>
+                                    <span>{t("recorder.stopAndSave")}</span>
                                 </motion.button>
                             </>
                         )}
@@ -871,7 +887,7 @@ export function RecorderView({
                     <div className="flex items-center gap-2.5">
                         <Volume2 className="w-4 h-4 text-[var(--accent-text)]" />
                         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                            Kaydedilen Sesler
+                            {t("recorder.savedRecordingsTitle")}
                         </h2>
                         <span className="text-[11px] font-mono px-2 py-0.5 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
                             {savedRecordings.length}
@@ -883,14 +899,14 @@ export function RecorderView({
                             {isConfirmClearAll ? (
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-xs text-rose-300">
-                                        Tümünü sil?
+                                        {t("recorder.clearAllConfirmPrompt")}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={handleClearAllRecordings}
                                         className="px-2.5 py-1 ui-control bg-rose-600 hover:bg-rose-500 text-white keep-white text-xs font-semibold cursor-pointer"
                                     >
-                                        Evet, Sil
+                                        {t("recorder.confirmDelete")}
                                     </button>
                                     <button
                                         type="button"
@@ -899,7 +915,7 @@ export function RecorderView({
                                         }
                                         className="px-2.5 py-1 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] cursor-pointer"
                                     >
-                                        Vazgeç
+                                        {t("common.giveUp")}
                                     </button>
                                 </div>
                             ) : (
@@ -909,7 +925,7 @@ export function RecorderView({
                                     className="flex items-center gap-1.5 px-3 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-rose-950/40 border border-[var(--border-subtle)] hover:border-rose-800/60 text-xs text-[var(--text-secondary)] hover:text-rose-300 transition-colors cursor-pointer"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Geçmişi Temizle</span>
+                                    <span>{t("recorder.clearAllButton")}</span>
                                 </button>
                             )}
                         </div>
@@ -918,7 +934,7 @@ export function RecorderView({
 
                 {isLoadingLibrary ? (
                     <div className="p-8 text-center text-xs text-[var(--text-muted)] font-mono">
-                        Kayıtlar yükleniyor...
+                        {t("recorder.loadingRecordings")}
                     </div>
                 ) : savedRecordings.length === 0 ? (
                     <div className="p-8 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col items-center justify-center text-center gap-2">
@@ -926,10 +942,10 @@ export function RecorderView({
                             <Mic className="w-5 h-5" />
                         </div>
                         <p className="text-xs font-medium text-[var(--text-primary)]">
-                            Henüz kaydedilmiş bir ses yok
+                            {t("recorder.noRecordingsTitle")}
                         </p>
                         <p className="text-xs text-[var(--text-secondary)] max-w-md">
-                            Yukarıdan kayıt aldığınızda sesler burada saklanır; istediğiniz zaman dinleyebilir, silebilir veya Soundboard&apos;a ekleyebilirsiniz.
+                            {t("recorder.noRecordingsSubtitle")}
                         </p>
                     </div>
                 ) : (
@@ -964,8 +980,8 @@ export function RecorderView({
                                                 disabled={isRecording}
                                                 title={
                                                     isPlayingThis
-                                                        ? "Durdur"
-                                                        : "Dinle"
+                                                        ? t("soundCard.stop")
+                                                        : t("recorder.listen")
                                                 }
                                                 className={`w-10 h-10 ui-control flex items-center justify-center shrink-0 border transition-colors cursor-pointer disabled:opacity-40 ${
                                                     isPlayingThis
@@ -993,7 +1009,9 @@ export function RecorderView({
                                                             },
                                                         )
                                                     }
-                                                    aria-label="Kayıt başlığı"
+                                                    aria-label={t(
+                                                        "recorder.recordingTitle",
+                                                    )}
                                                     className="w-full bg-transparent text-xs sm:text-sm font-semibold text-[var(--text-primary)] border-b border-transparent focus:border-[var(--accent)] focus:outline-none pb-0.5 truncate"
                                                 />
 
@@ -1006,6 +1024,9 @@ export function RecorderView({
                                                     <span>
                                                         {formatTimestamp(
                                                             rec.createdAt,
+                                                            language === "tr"
+                                                                ? "tr-TR"
+                                                                : "en-US",
                                                         )}
                                                     </span>
                                                     {rec.effectName && (
@@ -1015,7 +1036,9 @@ export function RecorderView({
                                                     )}
                                                     {rec.addedToSoundboard && (
                                                         <span className="px-1.5 py-0.2 ui-control bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
-                                                            Soundboard&apos;da
+                                                            {t(
+                                                                "recorder.inSoundboard",
+                                                            )}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1036,7 +1059,7 @@ export function RecorderView({
                                         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="text-[11px] text-[var(--text-muted)]">
-                                                    Kısayol:
+                                                    {t("recorder.hotkeyLabel")}
                                                 </span>
                                                 <input
                                                     type="text"
@@ -1063,7 +1086,7 @@ export function RecorderView({
                                                             rec,
                                                         )
                                                     }
-                                                    title="Bilgisayara İndir (.webm)"
+                                                    title={t("recorder.downloadTitle")}
                                                     className="p-2 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                                                 >
                                                     <Download className="w-3.5 h-3.5" />
@@ -1077,7 +1100,7 @@ export function RecorderView({
                                                             rec.id,
                                                         )
                                                     }
-                                                    title="Kaydı Sil"
+                                                    title={t("recorder.deleteTitle")}
                                                     className="p-2 ui-control bg-[var(--bg-card)] hover:bg-rose-950/50 border border-[var(--border-subtle)] hover:border-rose-800/60 text-[var(--text-secondary)] hover:text-rose-300 transition-colors cursor-pointer"
                                                 >
                                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1097,15 +1120,23 @@ export function RecorderView({
                                                     {isJustAdded ? (
                                                         <>
                                                             <Check className="w-3.5 h-3.5" />
-                                                            <span>Eklendi</span>
+                                                            <span>
+                                                                {t(
+                                                                    "recorder.added",
+                                                                )}
+                                                            </span>
                                                         </>
                                                     ) : (
                                                         <>
                                                             <Plus className="w-3.5 h-3.5" />
                                                             <span>
                                                                 {rec.addedToSoundboard
-                                                                    ? "Tekrar Ekle"
-                                                                    : "Soundboard'a Ekle"}
+                                                                    ? t(
+                                                                          "recorder.addAgain",
+                                                                      )
+                                                                    : t(
+                                                                          "recorder.addToSoundboard",
+                                                                      )}
                                                             </span>
                                                         </>
                                                     )}

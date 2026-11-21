@@ -21,6 +21,7 @@ import {
     VoicePresetDefinition,
 } from "../utils/voicePresets";
 import { audioEngine } from "../utils/audioEngine";
+import { useTranslation } from "../i18n";
 
 interface VoiceChangerViewProps {
     config: VoiceChangerConfig;
@@ -81,6 +82,7 @@ export function VoiceChangerView({
     onEditPresetHotkey,
     onEditToggleHotkey,
 }: VoiceChangerViewProps) {
+    const { t } = useTranslation();
     const [micLevel, setMicLevel] = useState(0);
     const [micStatus, setMicStatus] = useState<{
         active: boolean;
@@ -182,14 +184,14 @@ export function VoiceChangerView({
             if (!res.success) {
                 setMicError(
                     res.error ||
-                        "Mikrofona erişilemedi. Lütfen mikrofon izinlerini kontrol edin.",
+                        t("voiceChanger.micAccessError"),
                 );
             }
         } catch (err) {
             setMicError(
                 err instanceof Error
                     ? err.message
-                    : "Mikrofon başlatılırken beklenmeyen bir hata oluştu.",
+                    : t("voiceChanger.micStartError"),
             );
         } finally {
             setIsStartingMic(false);
@@ -207,7 +209,7 @@ export function VoiceChangerView({
                     <div>
                         <div className="flex flex-wrap items-center gap-2.5">
                             <h1 className="text-lg font-bold text-[var(--text-primary)] tracking-tight">
-                                Ses Değiştirici
+                                {t("voiceChanger.title")}
                             </h1>
                             <span
                                 className={`text-xs font-mono px-2.5 py-0.5 ui-control border font-semibold ${
@@ -217,12 +219,12 @@ export function VoiceChangerView({
                                 }`}
                             >
                                 {isEffectRunning
-                                    ? `AKTİF · ${activePreset?.name ?? "Özel"}${isPresetCustomized ? " *" : ""}`
-                                    : "DEVRE DIŞI"}
+                                    ? `${t("voiceChanger.statusActive")} · ${activePreset ? (t(`voicePresets.${activePreset.id}_name`) || activePreset.name) : "Custom"}${isPresetCustomized ? " *" : ""}`
+                                    : t("voiceChanger.statusInactive")}
                             </span>
                         </div>
                         <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                            Gerçek zamanlı Web Audio DSP motoruyla mikrofon tonunu telsiz, robot, mağara veya stüdyo sesine dönüştürün.
+                            {t("voiceChanger.subtitle")}
                         </p>
                     </div>
                 </div>
@@ -237,7 +239,7 @@ export function VoiceChangerView({
                         className="flex items-center gap-1.5 px-3.5 py-2 ui-control bg-[var(--bg-island)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                     >
                         <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Doğala Sıfırla</span>
+                        <span>{t("voiceChanger.resetToNatural")}</span>
                     </motion.button>
 
                     <motion.button
@@ -245,7 +247,7 @@ export function VoiceChangerView({
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.96 }}
                         onClick={onEditToggleHotkey}
-                        title="Efekt motorunu açıp kapatmak için kısayol tuşu ata"
+                        title={t("voiceChanger.toggleHotkeyTitle")}
                         className={`flex items-center gap-1.5 px-3 py-2 ui-control border text-xs font-mono transition-colors cursor-pointer ${
                             config.toggleHotkey
                                 ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold"
@@ -255,14 +257,16 @@ export function VoiceChangerView({
                         <Keyboard className="w-3.5 h-3.5" />
                         <span>
                             {config.toggleHotkey
-                                ? `Aç/Kapat: ${config.toggleHotkey}`
-                                : "Aç/Kapat Kısayolu"}
+                                ? t("voiceChanger.toggleHotkeyPrefix", {
+                                      hotkey: config.toggleHotkey,
+                                  })
+                                : t("voiceChanger.toggleHotkeyDefault")}
                         </span>
                     </motion.button>
 
                     <div className="flex items-center gap-3 px-3.5 py-1.5 ui-control bg-[var(--bg-island)] border border-[var(--border-card)]">
                         <span className="text-xs font-semibold text-[var(--text-primary)]">
-                            Efekt Motoru
+                            {t("voiceChanger.engineLabel")}
                         </span>
                         <motion.button
                             type="button"
@@ -286,7 +290,7 @@ export function VoiceChangerView({
                                     enabled: nextEnabled,
                                 });
                             }}
-                            aria-label="Ses değiştiriciyi aç veya kapat"
+                            aria-label={t("voiceChanger.engineToggle")}
                             className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 ${
                                 config.enabled
                                     ? "bg-[var(--accent)] justify-end"
@@ -320,10 +324,10 @@ export function VoiceChangerView({
                             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                             <div className="flex flex-col gap-1">
                                 <span className="text-xs sm:text-sm font-semibold text-amber-200">
-                                    Mikrofon Geçişi Kapalı
+                                    {t("voiceChanger.micPassthroughOffTitle")}
                                 </span>
                                 <p className="text-xs text-amber-200/80 leading-relaxed">
-                                    Ses değiştiricinin sesinizi işleyip sanal kabloya (veya kulaklık monitörüne) aktarabilmesi için Mikrofon Geçişi açık olmalıdır.
+                                    {t("voiceChanger.micPassthroughOffDesc")}
                                 </p>
                             </div>
                         </div>
@@ -338,8 +342,8 @@ export function VoiceChangerView({
                             <Mic className="w-4 h-4" />
                             <span>
                                 {isStartingMic
-                                    ? "Bağlanıyor..."
-                                    : "Mikrofon Geçişini Başlat"}
+                                    ? t("voiceChanger.micPassthroughConnecting")
+                                    : t("voiceChanger.micPassthroughStart")}
                             </span>
                         </motion.button>
                     </div>
@@ -357,7 +361,7 @@ export function VoiceChangerView({
                                         }`}
                                     />
                                     <span className="text-[var(--text-primary)] font-semibold">
-                                        İşlenen Mikrofon Çıkışı
+                                        {t("voiceChanger.processedOutput")}
                                     </span>
                                     <span className="text-[11px] text-[var(--text-secondary)] truncate max-w-[240px]">
                                         ({micStatus.label || routingConfig.micDeviceLabel})
@@ -366,7 +370,7 @@ export function VoiceChangerView({
                                 <div className="flex items-center gap-2">
                                     {micStatus.muted && (
                                         <span className="text-red-400 bg-red-950/70 border border-red-800/60 px-2 py-0.5 ui-control text-[11px]">
-                                            Windows Sessizde
+                                            {t("routing.windowsMuted")}
                                         </span>
                                     )}
                                     <span className="text-[var(--accent-text)] font-bold tabular-nums">
@@ -390,12 +394,15 @@ export function VoiceChangerView({
                                 <Headphones className="w-4 h-4 text-[var(--accent-text)] shrink-0 mt-0.5" />
                                 <div className="flex flex-col">
                                     <span className="text-xs font-semibold text-[var(--text-primary)]">
-                                        Kendimi Dinle (Monitör)
+                                        {t("voiceChanger.selfMonitorTitle")}
                                     </span>
                                     <span className="text-[11px] text-[var(--text-secondary)] leading-snug mt-0.5">
                                         {isSameMonitorDevice
-                                            ? "Hoparlör/birincil aygıtla aynı; yankı yapabilir."
-                                            : `Sesini "${routingConfig.secondaryDeviceLabel}" üzerinden test et.`}
+                                            ? t("voiceChanger.selfMonitorWarnEcho")
+                                            : t("voiceChanger.selfMonitorTestVia", {
+                                                  device:
+                                                      routingConfig.secondaryDeviceLabel,
+                                              })}
                                     </span>
                                 </div>
                             </div>
@@ -408,7 +415,7 @@ export function VoiceChangerView({
                                         selfMonitor: !config.selfMonitor,
                                     })
                                 }
-                                aria-label="Kendimi dinleme monitörünü aç veya kapat"
+                                aria-label={t("voiceChanger.selfMonitorAria")}
                                 className={`w-10 h-6 flex items-center ui-control p-0.5 transition-colors cursor-pointer shrink-0 ${
                                     config.selfMonitor
                                         ? "bg-[var(--accent)] justify-end"
@@ -442,19 +449,8 @@ export function VoiceChangerView({
                                 <div className="p-3 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs flex items-start gap-2 leading-relaxed">
                                     <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                                     <span>
-                                        Birincil çıkış şu an{" "}
-                                        <strong className="text-[var(--text-primary)]">
-                                            Varsayılan Hoparlör/Kulaklık
-                                        </strong>{" "}
-                                        olarak görünüyor (VB-CABLE seçili değil). Kendinizi duymamanız ve yankı oluşmaması için mikrofon hoparlöre kapalı tutuluyor; kulaklıkta test için{" "}
-                                        <strong className="text-[var(--text-primary)]">
-                                            Kendimi Dinle
-                                        </strong>{" "}
-                                        anahtarını açabilir veya Discord&apos;a aktarmak için{" "}
-                                        <strong className="text-[var(--text-primary)]">
-                                            Ses Yönlendirme
-                                        </strong>{" "}
-                                        sekmesinden <strong>CABLE Input</strong> seçebilirsiniz.
+                                        {t("voiceChanger.primaryOutputNotice")}{" "}
+                                        {t("voiceChanger.primaryOutputNoticeAction")}
                                     </span>
                                 </div>
                             </motion.div>
@@ -490,11 +486,11 @@ export function VoiceChangerView({
                     <div className="flex items-center gap-2.5">
                         <Sparkles className="w-4 h-4 text-[var(--accent-text)]" />
                         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                            Hazır Ses Profilleri
+                            {t("voiceChanger.presetsTitle")}
                         </h2>
                     </div>
                     <span className="text-xs font-mono text-[var(--text-muted)]">
-                        Tıkla veya Kısayolla Anlık Geçiş Yap
+                        {t("voiceChanger.presetsSubtitle")}
                     </span>
                 </div>
 
@@ -531,7 +527,8 @@ export function VoiceChangerView({
                                                 : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-muted)]"
                                         }`}
                                     >
-                                        {preset.badge}
+                                        {t(`voicePresets.${preset.id}_badge`) ||
+                                            preset.badge}
                                     </span>
 
                                     <div className="flex items-center gap-1.5">
@@ -541,7 +538,9 @@ export function VoiceChangerView({
                                                 e.stopPropagation();
                                                 onEditPresetHotkey(preset);
                                             }}
-                                            title="Bu ses efektine kısayol tuşu ata"
+                                            title={t(
+                                                "voiceChanger.assignPresetHotkeyTitle",
+                                            )}
                                             className={`flex items-center gap-1 px-2 py-0.5 ui-control text-[10px] font-mono border transition-colors cursor-pointer ${
                                                 assignedHotkey
                                                     ? "bg-[var(--bg-card)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold hover:brightness-110"
@@ -550,7 +549,8 @@ export function VoiceChangerView({
                                         >
                                             <Keyboard className="w-2.5 h-2.5" />
                                             <span>
-                                                {assignedHotkey || "+ Kısayol"}
+                                                {assignedHotkey ||
+                                                    t("voiceChanger.setHotkeyBadge")}
                                             </span>
                                         </button>
 
@@ -563,10 +563,12 @@ export function VoiceChangerView({
                                 </div>
                                 <div>
                                     <div className="text-xs sm:text-[13px] font-semibold text-[var(--text-primary)]">
-                                        {preset.name}
+                                        {t(`voicePresets.${preset.id}_name`) ||
+                                            preset.name}
                                     </div>
                                     <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed mt-1">
-                                        {preset.subtitle}
+                                        {t(`voicePresets.${preset.id}_subtitle`) ||
+                                            preset.subtitle}
                                     </p>
                                 </div>
                             </motion.div>
@@ -586,11 +588,11 @@ export function VoiceChangerView({
                     <div className="flex items-center gap-2.5">
                         <Sliders className="w-4 h-4 text-[var(--accent-text)]" />
                         <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                            İnce Ayarlar (Gerçek Zamanlı DSP Parametreleri)
+                            {t("voiceChanger.fineTuningTitle")}
                         </h2>
                     </div>
                     <span className="text-xs text-[var(--text-secondary)]">
-                        Herhangi bir kaydırıcıyı oynattığınızda efekt otomatik aktifleşir
+                        {t("voiceChanger.fineTuningSubtitle")}
                     </span>
                 </div>
 
@@ -600,12 +602,12 @@ export function VoiceChangerView({
                         <div className="flex items-center gap-2 pb-2 border-b border-[var(--border-subtle)]">
                             <Waves className="w-4 h-4 text-[var(--accent-text)]" />
                             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                                Frekans Bandı &amp; Ekolayzer
+                                {t("voiceChanger.freqBandTitle")}
                             </h3>
                         </div>
 
                         <SliderRow
-                            label="Alt Frekans Kesimi (High-Pass)"
+                            label={t("voiceChanger.highpass")}
                             valueText={`${Math.round(config.highpassHz)} Hz`}
                             value={config.highpassHz}
                             min={20}
@@ -614,7 +616,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("highpassHz", v)}
                         />
                         <SliderRow
-                            label="Üst Frekans Kesimi (Low-Pass)"
+                            label={t("voiceChanger.lowpass")}
                             valueText={`${Math.round(config.lowpassHz)} Hz`}
                             value={config.lowpassHz}
                             min={800}
@@ -623,7 +625,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("lowpassHz", v)}
                         />
                         <SliderRow
-                            label="Bas / Tokluk (140 Hz)"
+                            label={t("voiceChanger.bass")}
                             valueText={`${config.bassBoostDb > 0 ? "+" : ""}${config.bassBoostDb.toFixed(1)} dB`}
                             value={config.bassBoostDb}
                             min={-12}
@@ -632,7 +634,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("bassBoostDb", v)}
                         />
                         <SliderRow
-                            label="Vokal Netliği (2.4 kHz)"
+                            label={t("voiceChanger.clarity")}
                             valueText={`${config.clarityBoostDb > 0 ? "+" : ""}${config.clarityBoostDb.toFixed(1)} dB`}
                             value={config.clarityBoostDb}
                             min={-6}
@@ -647,16 +649,18 @@ export function VoiceChangerView({
                         <div className="flex items-center gap-2 pb-2 border-b border-[var(--border-subtle)]">
                             <AudioWaveform className="w-4 h-4 text-[var(--accent-text)]" />
                             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                                Ses Perdesi (Pitch), Doygunluk &amp; Modülasyon
+                                {t("voiceChanger.pitchModTitle")}
                             </h3>
                         </div>
 
                         <SliderRow
-                            label="Ses Perdesi (İnce / Kalın)"
+                            label={t("voiceChanger.pitch")}
                             valueText={
                                 (config.pitchSemitones ?? 0) === 0
-                                    ? "Doğal (0)"
-                                    : `${(config.pitchSemitones ?? 0) > 0 ? "+" : ""}${(config.pitchSemitones ?? 0).toFixed(1)} yarım ton`
+                                    ? t("voiceChanger.pitchNatural")
+                                    : t("voiceChanger.pitchSemitones", {
+                                          val: `${(config.pitchSemitones ?? 0) > 0 ? "+" : ""}${(config.pitchSemitones ?? 0).toFixed(1)}`,
+                                      })
                             }
                             value={config.pitchSemitones ?? 0}
                             min={-12}
@@ -665,7 +669,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("pitchSemitones", v)}
                         />
                         <SliderRow
-                            label="Doygunluk / Telsiz Kirliliği"
+                            label={t("voiceChanger.distortion")}
                             valueText={`%${Math.round(config.distortionAmount)}`}
                             value={config.distortionAmount}
                             min={0}
@@ -674,11 +678,11 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("distortionAmount", v)}
                         />
                         <SliderRow
-                            label="Halka Modülasyon Frekansı"
+                            label={t("voiceChanger.ringModFreq")}
                             valueText={
                                 config.ringModHz > 0
                                     ? `${Math.round(config.ringModHz)} Hz`
-                                    : "Kapalı"
+                                    : t("common.inactive")
                             }
                             value={config.ringModHz}
                             min={0}
@@ -687,7 +691,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("ringModHz", v)}
                         />
                         <SliderRow
-                            label="Robotik Modülasyon Oranı"
+                            label={t("voiceChanger.ringModMix")}
                             valueText={`%${Math.round(config.ringModMix * 100)}`}
                             value={Math.round(config.ringModMix * 100)}
                             min={0}
@@ -702,12 +706,12 @@ export function VoiceChangerView({
                         <div className="flex items-center gap-2 pb-2 border-b border-[var(--border-subtle)]">
                             <Volume2 className="w-4 h-4 text-[var(--accent-text)]" />
                             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                                Yankı &amp; Oda Akustiği
+                                {t("voiceChanger.echoReverbTitle")}
                             </h3>
                         </div>
 
                         <SliderRow
-                            label="Yankı Gecikmesi (Echo)"
+                            label={t("voiceChanger.echoDelay")}
                             valueText={`${Math.round(config.echoDelayMs)} ms`}
                             value={config.echoDelayMs}
                             min={0}
@@ -716,7 +720,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("echoDelayMs", v)}
                         />
                         <SliderRow
-                            label="Yankı Geri Beslemesi"
+                            label={t("voiceChanger.echoFeedback")}
                             valueText={`%${Math.round(config.echoFeedback * 100)}`}
                             value={Math.round(config.echoFeedback * 100)}
                             min={0}
@@ -725,7 +729,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("echoFeedback", v / 100)}
                         />
                         <SliderRow
-                            label="Yankı Seviyesi"
+                            label={t("voiceChanger.echoMix")}
                             valueText={`%${Math.round(config.echoMix * 100)}`}
                             value={Math.round(config.echoMix * 100)}
                             min={0}
@@ -734,7 +738,7 @@ export function VoiceChangerView({
                             onChange={(v) => updateParam("echoMix", v / 100)}
                         />
                         <SliderRow
-                            label="Oda / Mağara Yankısı (Reverb)"
+                            label={t("voiceChanger.reverbMix")}
                             valueText={`%${Math.round(config.reverbMix * 100)}`}
                             value={Math.round(config.reverbMix * 100)}
                             min={0}
@@ -750,12 +754,12 @@ export function VoiceChangerView({
                             <div className="flex items-center gap-2 pb-2 border-b border-[var(--border-subtle)]">
                                 <Sparkles className="w-4 h-4 text-[var(--accent-text)]" />
                                 <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                                    Genel Efekt Miksajı (Wet / Dry)
+                                    {t("voiceChanger.overallMixTitle")}
                                 </h3>
                             </div>
 
                             <SliderRow
-                                label="Efekt Yoğunluğu (Wet Mix)"
+                                label={t("voiceChanger.wetMix")}
                                 valueText={`%${Math.round(config.wetMix * 100)}`}
                                 value={Math.round(config.wetMix * 100)}
                                 min={0}
@@ -772,12 +776,10 @@ export function VoiceChangerView({
                         </div>
 
                         <div className="p-3 ui-inner bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                            <strong className="text-[var(--text-primary)]">İpucu:</strong>{" "}
-                            Efekt yoğunluğu ham sesinizle işlenmiş ses arasındaki karışımı belirler. Ses efekti oynatırken{" "}
-                            <span className="text-[var(--accent-text)] font-medium">
-                                Yankı Önleyici
-                            </span>{" "}
-                            aktifse mikrofonunuz otomatik kısılır.
+                            <strong className="text-[var(--text-primary)]">
+                                {t("voiceChanger.tipTitle")}
+                            </strong>{" "}
+                            {t("voiceChanger.tipBody")}
                         </div>
                     </div>
                 </div>

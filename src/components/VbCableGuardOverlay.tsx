@@ -9,6 +9,7 @@ import {
     Minus,
     X,
 } from "lucide-react";
+import { useTranslation } from "../i18n";
 
 export type VbCableStatus =
     | "checking"
@@ -38,6 +39,7 @@ export function VbCableGuardOverlay({
     isElectron,
     onStatusChange,
 }: VbCableGuardOverlayProps) {
+    const { t } = useTranslation();
     const [status, setStatus] = useState<VbCableStatus>("checking");
     const [isScanning, setIsScanning] = useState(false);
     const [detectedOutputsCount, setDetectedOutputsCount] = useState(0);
@@ -63,9 +65,7 @@ export function VbCableGuardOverlay({
                             });
                         tempStream.getTracks().forEach((track) => track.stop());
                     } catch {
-                        setErrorDetail(
-                            "Tarayıcı ses aygıtı etiketlerini görebilmek için mikrofon izni verilmedi. İzin vererek veya masaüstü uygulamasından açarak sürücü kontrolünü tamamlayın.",
-                        );
+                        setErrorDetail(t("vbCableGuard.micPermissionNeeded"));
                     }
                 }
 
@@ -164,7 +164,7 @@ export function VbCableGuardOverlay({
                     <button
                         type="button"
                         onClick={() => window.electronAPI?.minimizeWindow?.()}
-                        title="Simge Durumuna Küçült"
+                        title={t("header.minimize")}
                         className="w-8 h-8 flex items-center justify-center ui-control border border-[var(--border-subtle)] bg-[var(--bg-island)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
                     >
                         <Minus className="w-4 h-4" />
@@ -172,7 +172,7 @@ export function VbCableGuardOverlay({
                     <button
                         type="button"
                         onClick={() => window.electronAPI?.closeWindow?.()}
-                        title="Uygulamayı Kapat"
+                        title={t("header.close")}
                         className="w-8 h-8 flex items-center justify-center ui-control border border-[var(--border-subtle)] bg-[var(--bg-island)] text-[var(--text-secondary)] hover:bg-rose-600 hover:text-white cursor-pointer"
                     >
                         <X className="w-4 h-4" />
@@ -197,22 +197,18 @@ export function VbCableGuardOverlay({
                                 id="vb-cable-gate-title"
                                 className="text-base sm:text-lg font-bold text-[var(--text-primary)] tracking-tight"
                             >
-                                VB-CABLE Audio Sürücüsü Gerekli
+                                {t("vbCableGuard.title")}
                             </h2>
                             <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 ui-control bg-amber-950/40 border border-amber-700/50 text-amber-300">
                                 {status === "checking"
-                                    ? "DENETLENİYOR"
+                                    ? t("common.loading").toUpperCase()
                                     : status === "permission-needed"
-                                      ? "AYGIT İZNİ BEKLENİYOR"
-                                      : "SÜRÜCÜ BULUNAMADI"}
+                                      ? t("vbCableGuard.permissionNeeded")
+                                      : t("vbCableGuard.missing")}
                             </span>
                         </div>
                         <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-1.5 leading-relaxed">
-                            Bu program, ses efektlerini ve mikrofonunuzu Discord ile oyunlara sanal hat üzerinden iletebilmek için{" "}
-                            <strong className="text-[var(--text-primary)]">
-                                VB-Audio Virtual Cable (VB-CABLE)
-                            </strong>{" "}
-                            sürücüsünü gerektirir. Sürücü sistemde algılanana kadar uygulama kullanılamaz.
+                            {t("vbCableGuard.description")}
                         </p>
                     </div>
                 </div>
@@ -222,40 +218,18 @@ export function VbCableGuardOverlay({
                     <div className="flex items-center justify-between text-xs">
                         <span className="flex items-center gap-2 font-semibold text-[var(--text-primary)]">
                             <Cable className="w-4 h-4 text-[var(--accent-text)]" />
-                            Kurulum Adımları
+                            {t("guide.title")}
                         </span>
                         <span className="font-mono text-[11px] text-[var(--text-muted)]">
-                            {detectedOutputsCount} çıkış aygıtı tarandı
+                            {t("vbCableGuard.outputsScanned", {
+                                count: detectedOutputsCount,
+                            })}
                         </span>
                     </div>
 
-                    <ol className="flex flex-col gap-2 text-xs text-[var(--text-secondary)] leading-relaxed list-decimal list-inside">
-                        <li>
-                            Aşağıdaki düğmeden{" "}
-                            <strong className="text-[var(--text-primary)]">
-                                VB-CABLE Virtual Audio Device
-                            </strong>{" "}
-                            sürücüsünü indirin.
-                        </li>
-                        <li>
-                            Arşivi çıkarıp{" "}
-                            <code className="font-mono text-[var(--accent-text)] bg-[var(--bg-card)] px-1.5 py-0.5 rounded">
-                                VBCABLE_Setup_x64.exe
-                            </code>{" "}
-                            dosyasını{" "}
-                            <strong className="text-[var(--text-primary)]">
-                                Yönetici olarak çalıştır
-                            </strong>{" "}
-                            seçeneğiyle kurun.
-                        </li>
-                        <li>
-                            Kurulum tamamlandığında sistem sanal ses aygıtları otomatik algılanır veya{" "}
-                            <strong className="text-[var(--text-primary)]">
-                                Tekrar Denetle
-                            </strong>{" "}
-                            butonuna bastığınızda bu ekran kapanır.
-                        </li>
-                    </ol>
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                        {t("vbCableGuard.instruction")}
+                    </p>
                 </div>
 
                 {errorDetail && (
@@ -275,7 +249,7 @@ export function VbCableGuardOverlay({
                         className="flex items-center justify-center gap-2 px-4 py-2.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] hover:border-[var(--accent-border)] text-xs font-semibold text-[var(--text-primary)] transition-colors cursor-pointer"
                     >
                         <Download className="w-4 h-4 text-[var(--accent-text)]" />
-                        <span>VB-CABLE Sürücüsünü İndir</span>
+                        <span>{t("vbCableGuard.downloadButton")}</span>
                     </a>
 
                     <motion.button
@@ -291,10 +265,10 @@ export function VbCableGuardOverlay({
                         />
                         <span>
                             {status === "permission-needed"
-                                ? "Ses Aygıtlarını Tara ve Doğrula"
+                                ? t("vbCableGuard.recheckButton")
                                 : isScanning
-                                  ? "Denetleniyor..."
-                                  : "Kurulumu Tekrar Denetle"}
+                                  ? t("common.loading")
+                                  : t("vbCableGuard.recheckButton")}
                         </span>
                     </motion.button>
                 </div>

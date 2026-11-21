@@ -7,6 +7,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { SoundCategory, SoundItem } from '../types/sound';
+import { useTranslation } from '../i18n';
 
 interface AddSoundModalProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ export function AddSoundModal({
   onOpenElectronFilePicker,
   existingSoundCount = 8,
 }: AddSoundModalProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<SoundCategory>('Meme & Eğlence');
   const [hotkey, setHotkey] = useState(`F${(existingSoundCount % 12) + 1}`);
@@ -133,10 +135,10 @@ export function AddSoundModal({
             </div>
             <div>
               <h2 className="text-sm font-bold text-[var(--text-primary)]">
-                Yeni Ses Ekle
+                {t('addSoundModal.title')}
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Bilgisayarınızdan ses dosyası yükleyin veya dahili efekt seçin.
+                {t('addSoundModal.subtitle')}
               </p>
             </div>
           </div>
@@ -144,7 +146,7 @@ export function AddSoundModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Kapat"
+            aria-label={t('common.close')}
             className="p-1.5 ui-control text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -180,10 +182,10 @@ export function AddSoundModal({
             />
             <Upload className="w-6 h-6 text-[var(--accent-text)] mb-2" />
             <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
-              {fileName || 'Ses dosyasını buraya sürükleyin veya tıklayın'}
+              {fileName || t('addSoundModal.dropzoneTitle')}
             </p>
             <p className="text-xs text-[var(--text-secondary)]">
-              MP3, WAV, OGG, FLAC veya M4A formatları desteklenir
+              {t('addSoundModal.dropzoneFormats')}
             </p>
           </div>
 
@@ -194,7 +196,7 @@ export function AddSoundModal({
               className="flex items-center justify-center gap-2 py-2 px-4 ui-input bg-[var(--bg-inner)] border border-[var(--border-subtle)] hover:border-[var(--border-hover)] text-xs font-medium text-[var(--text-primary)] transition-colors cursor-pointer"
             >
               <FolderOpen className="w-4 h-4 text-[var(--accent-text)]" />
-              <span>Sistem Dosya Seçicisinden Çoklu Ses Ekle</span>
+              <span>{t('addSoundModal.browseComputer')}</span>
             </button>
           )}
 
@@ -202,13 +204,13 @@ export function AddSoundModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-[var(--text-secondary)]">
-                Ses Başlığı
+                {t('addSoundModal.soundTitle')}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Örn: Zafer Müziği"
+                placeholder={t('addSoundModal.soundTitlePlaceholder')}
                 required
                 className="px-3.5 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
               />
@@ -216,13 +218,13 @@ export function AddSoundModal({
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-[var(--text-secondary)]">
-                Kısayol Tuşu
+                {t('addSoundModal.hotkey')}
               </label>
               <input
                 type="text"
                 value={hotkey}
                 onChange={(e) => setHotkey(e.target.value.toUpperCase())}
-                placeholder="F1, CTRL+1, NUMPAD1"
+                placeholder={t('addSoundModal.hotkeyPlaceholder')}
                 required
                 className="px-3.5 py-2.5 ui-input bg-[var(--bg-input)] border border-[var(--border-input)] text-sm font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] uppercase"
               />
@@ -232,7 +234,7 @@ export function AddSoundModal({
           {/* Category selection */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold text-[var(--text-secondary)]">
-              Kategori
+              {t('addSoundModal.category')}
             </label>
             <div className="flex flex-wrap gap-1.5">
               {categories.map((c) => (
@@ -246,7 +248,7 @@ export function AddSoundModal({
                       : 'bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  {c}
+                  {t(`categories.${c}`) || c}
                 </button>
               ))}
             </div>
@@ -255,7 +257,7 @@ export function AddSoundModal({
           {/* Built-in Presets */}
           <div className="flex flex-col gap-2 pt-3 border-t border-[var(--border-subtle)]">
             <label className="text-xs font-semibold text-[var(--text-secondary)]">
-              Veya Dahili SFX Seçin
+              {t('addSoundModal.orPreset')}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {presetCatalog.map((p) => (
@@ -285,14 +287,14 @@ export function AddSoundModal({
               onClick={onClose}
               className="px-4 py-2 ui-control text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
             >
-              Vazgeç
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={!title.trim()}
               className="btn-accent px-5 py-2 ui-control disabled:opacity-50 text-xs font-semibold transition-colors cursor-pointer"
             >
-              Sesi Ekle
+              {t('addSoundModal.saveButton')}
             </button>
           </div>
         </form>

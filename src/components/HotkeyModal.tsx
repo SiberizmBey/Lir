@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { Keyboard, X, Check, AlertCircle } from "lucide-react";
 import { HotkeyTarget } from "../types/sound";
+import { useTranslation } from "../i18n";
 
 export interface ExistingHotkeyBinding {
     targetKey: string;
@@ -35,6 +36,7 @@ export function HotkeyModal({
     onClose,
     onSaveHotkey,
 }: HotkeyModalProps) {
+    const { t } = useTranslation();
     const [currentHotkey, setCurrentHotkey] = useState(target?.hotkey || "");
 
     useEffect(() => {
@@ -160,10 +162,10 @@ export function HotkeyModal({
                         <div className="min-w-0">
                             <h2 className="text-sm font-bold text-[var(--text-primary)]">
                                 {target.kind === "sound"
-                                    ? "Kısayol Tuşu Ata"
+                                    ? t('hotkeyModal.title')
                                     : target.kind === "voice-toggle"
-                                      ? "Efekt Motoru Kısayolu"
-                                      : "Ses Efekti Kısayolu"}
+                                      ? t('hotkeyModal.targetToggle')
+                                      : t('hotkeyModal.targetPreset')}
                             </h2>
                             <p className="text-xs text-[var(--text-secondary)] truncate">
                                 {target.title}
@@ -173,7 +175,7 @@ export function HotkeyModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label="Kapat"
+                        aria-label={t('common.close')}
                         className="p-1.5 ui-control text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
                     >
                         <X className="w-4 h-4" />
@@ -183,13 +185,13 @@ export function HotkeyModal({
                 {/* Listening Box */}
                 <div className="flex flex-col items-center justify-center py-6 px-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-center gap-2.5">
                     <span className="text-xs text-[var(--text-secondary)]">
-                        Herhangi bir tuşa veya tuş kombinasyonuna basın:
+                        {t('hotkeyModal.pressKeyInstruction')}
                     </span>
                     <div className="px-5 py-2.5 ui-input bg-[var(--bg-card)] border border-[var(--accent-border)] text-[var(--accent-text)] text-lg font-mono font-semibold tracking-wide">
-                        {currentHotkey || "Bir Tuşa Basın..."}
+                        {currentHotkey || t('common.pressKey')}
                     </div>
                     <span className="text-xs text-[var(--text-muted)] font-mono">
-                        F1-F12 · Numpad · CTRL / ALT / SHIFT Kombinasyonları
+                        {t('hotkeyModal.hint')}
                     </span>
                 </div>
 
@@ -198,12 +200,7 @@ export function HotkeyModal({
                     <div className="flex items-start gap-2.5 p-3 ui-inner bg-amber-950/30 border border-amber-800/60 text-amber-300 text-xs">
                         <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                         <div>
-                            <strong>Çakışma:</strong> Bu kısayol{" "}
-                            <span className="underline">
-                                {conflictBinding.label}
-                            </span>{" "}
-                            için kullanılıyor. Kaydedilirse önceki atamadan
-                            kaldırılıp buraya atanır.
+                            {t('hotkeyModal.conflictWarning', { conflict: conflictBinding.label })}
                         </div>
                     </div>
                 )}
@@ -211,7 +208,7 @@ export function HotkeyModal({
                 {/* Presets */}
                 <div className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-[var(--text-secondary)]">
-                        Hızlı Seçim
+                        {t('common.default')}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                         {commonPresets.map((preset) => (
@@ -239,14 +236,14 @@ export function HotkeyModal({
                         onClick={() => setCurrentHotkey("")}
                         className="px-3 py-1.5 ui-control text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                     >
-                        Kaldır
+                        {t('hotkeyModal.clearHotkey')}
                     </button>
                     <button
                         type="button"
                         onClick={onClose}
                         className="px-3.5 py-1.5 ui-control text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer"
                     >
-                        İptal
+                        {t('common.cancel')}
                     </button>
                     <button
                         type="button"
@@ -254,7 +251,7 @@ export function HotkeyModal({
                         className="btn-accent flex items-center gap-1.5 px-4 py-1.5 ui-control text-xs font-semibold transition-colors cursor-pointer"
                     >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Kaydet</span>
+                        <span>{t('hotkeyModal.save')}</span>
                     </button>
                 </div>
             </motion.div>
