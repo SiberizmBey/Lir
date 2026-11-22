@@ -11,6 +11,9 @@ const {
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { execFile, spawn } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFile);
 
 // Allow audio autoplay, unthrottled Web Audio, and automatic frameless media permissions
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -25,6 +28,22 @@ Menu.setApplicationMenu(null);
 let mainWindow = null;
 let subtitleOverlayWindow = null;
 let registeredShortcuts = new Set();
+let lastRequestedHotkeys = [];
+let hotkeyFilterConfig = {
+    enabled: true,
+    manuallyPaused: false,
+    pauseInTextInputs: true,
+    pausedApps: [],
+};
+let hotkeyFilterStatus = {
+    paused: false,
+    reason: undefined,
+    activeProcess: undefined,
+    activeTitle: undefined,
+    matchedRuleName: undefined,
+};
+let fgWatcherTimer = null;
+let fgPsProcess = null;
 let subtitleOverlayVisible = false;
 let subtitleOverlayText = "";
 let subtitleOverlaySettings = {
@@ -481,6 +500,324 @@ function registerGlobalHotkeys(hotkeyList) {
     };
 }
 
+const ELECTRON_COMMON_APPS = [
+    { name: "Google Chrome", processName: "chrome.exe", source: "catalog" },
+    { name: "Microsoft Edge", processName: "msedge.exe", source: "catalog" },
+    { name: "Mozilla Firefox", processName: "firefox.exe", source: "catalog" },
+    { name: "Brave Browser", processName: "brave.exe", source: "catalog" },
+    { name: "Opera", processName: "opera.exe", source: "catalog" },
+    { name: "Opera GX", processName: "opera_gx.exe", source: "catalog" },
+    { name: "1Password", processName: "1Password.exe", source: "catalog" },
+    { name: "Bitwarden", processName: "Bitwarden.exe", source: "catalog" },
+    { name: "KeePassXC", processName: "KeePassXC.exe", source: "catalog" },
+    { name: "Discord", processName: "Discord.exe", source: "catalog" },
+    { name: "Steam", processName: "steam.exe", source: "catalog" },
+    { name: "Valorant", processName: "VALORANT-Win64-Shipping.exe", source: "catalog" },
+    { name: "Counter-Strike 2", processName: "cs2.exe", source: "catalog" },
+    { name: "League of Legends", processName: "League of Legends.exe", source: "catalog" },
+    { name: "Minecraft / Java", processName: "javaw.exe", source: "catalog" },
+    { name: "Roblox", processName: "RobloxPlayerBeta.exe", source: "catalog" },
+    { name: "Visual Studio Code", processName: "Code.exe", source: "catalog" },
+];
+
+function normProcName(name) {
+    return String(name || "").trim().toLowerCase().replace(/\.exe$/, "");
+}
+
+function sendHotkeyFilterStatus(nextStatus) {
+    const changed =
+        hotkeyFilterStatus.paused !== nextStatus.paused ||
+        hotkeyFilterStatus.reason !== nextStatus.reason ||
+        hotkeyFilterStatus.activeProcess !== nextStatus.activeProcess ||
+        hotkeyFilterStatus.matchedRuleName !== nextStatus.matchedRuleName;
+    hotkeyFilterStatus = nextStatus;
+    if (changed && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("shortcuts:filterStatus", hotkeyFilterStatus);
+    }
+}
+
+function applyEffectiveHotkeyState(nextStatus) {
+    const wasPaused = hotkeyFilterStatus.paused;
+    sendHotkeyFilterStatus(nextStatus);
+    if (nextStatus.paused && !wasPaused) {
+        globalShortcut.unregisterAll();
+        registeredShortcuts.clear();
+        registerSubtitleOverlayShortcut();
+    } else if (!nextStatus.paused && wasPaused) {
+        registerGlobalHotkeys(lastRequestedHotkeys);
+    }
+}
+
+function evaluateForegroundApp(activeProcess, activeTitle) {
+    if (hotkeyFilterConfig.manuallyPaused) {
+        applyEffectiveHotkeyState({
+            paused: true,
+            reason: "manual",
+            activeProcess,
+            activeTitle,
+        });
+        return;
+    }
+
+    if (!hotkeyFilterConfig.enabled) {
+        applyEffectiveHotkeyState({
+            paused: false,
+            activeProcess,
+            activeTitle,
+        });
+        return;
+    }
+
+    const enabledRules = (hotkeyFilterConfig.pausedApps || []).filter((r) => r && r.enabled);
+    const procNorm = normProcName(activeProcess);
+    const titleLower = String(activeTitle || "").toLowerCase();
+
+    const matchedRule = enabledRules.find((rule) => {
+        const ruleProc = normProcName(rule.processName);
+        if (!ruleProc || ruleProc !== procNorm) return false;
+        if (rule.titleMatch && rule.titleMatch.trim()) {
+            return titleLower.includes(rule.titleMatch.trim().toLowerCase());
+        }
+        return true;
+    });
+
+    if (matchedRule) {
+        applyEffectiveHotkeyState({
+            paused: true,
+            reason: "app",
+            activeProcess,
+            activeTitle,
+            matchedRuleName: matchedRule.name || matchedRule.processName,
+        });
+    } else {
+        applyEffectiveHotkeyState({
+            paused: false,
+            activeProcess,
+            activeTitle,
+        });
+    }
+}
+
+function stopForegroundWatcher() {
+    if (fgWatcherTimer) {
+        clearInterval(fgWatcherTimer);
+        fgWatcherTimer = null;
+    }
+    if (fgPsProcess) {
+        try {
+            fgPsProcess.kill();
+        } catch {}
+        fgPsProcess = null;
+    }
+}
+
+function startForegroundWatcherIfNeeded() {
+    const hasRules =
+        hotkeyFilterConfig.enabled &&
+        Array.isArray(hotkeyFilterConfig.pausedApps) &&
+        hotkeyFilterConfig.pausedApps.some((r) => r && r.enabled);
+
+    if (!hasRules) {
+        stopForegroundWatcher();
+        if (hotkeyFilterConfig.manuallyPaused) {
+            applyEffectiveHotkeyState({ paused: true, reason: "manual" });
+        } else {
+            applyEffectiveHotkeyState({ paused: false });
+        }
+        return;
+    }
+
+    if (fgWatcherTimer || fgPsProcess) return;
+
+    if (process.platform === "win32") {
+        const psScript = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class LirFg {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+}
+"@
+while ($true) {
+  try {
+    $hwnd = [LirFg]::GetForegroundWindow()
+    if ($hwnd -ne [IntPtr]::Zero) {
+      [uint32]$pid = 0
+      [void][LirFg]::GetWindowThreadProcessId($hwnd, [ref]$pid)
+      $sb = New-Object System.Text.StringBuilder 256
+      [void][LirFg]::GetWindowText($hwnd, $sb, 256)
+      $p = Get-Process -Id $pid -ErrorAction SilentlyContinue
+      if ($p) {
+        $obj = @{ proc = "$($p.ProcessName).exe"; title = $sb.ToString() } | ConvertTo-Json -Compress
+        Write-Output $obj
+      }
+    }
+  } catch {}
+  Start-Sleep -Milliseconds 650
+}
+`;
+        try {
+            const child = spawn("powershell", ["-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript], {
+                windowsHide: true,
+            });
+            fgPsProcess = child;
+            let buffer = "";
+            child.stdout.on("data", (chunk) => {
+                buffer += chunk.toString("utf8");
+                const lines = buffer.split(/\r?\n/);
+                buffer = lines.pop() || "";
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    try {
+                        const parsed = JSON.parse(trimmed);
+                        evaluateForegroundApp(parsed.proc, parsed.title);
+                    } catch {}
+                }
+            });
+            child.on("exit", () => {
+                if (fgPsProcess === child) fgPsProcess = null;
+            });
+            return;
+        } catch (err) {
+            console.warn("Foreground watcher fallback:", err);
+        }
+    }
+
+    // macOS / Linux lightweight poll fallback
+    fgWatcherTimer = setInterval(async () => {
+        try {
+            if (process.platform === "darwin") {
+                const { stdout } = await execFileAsync("osascript", [
+                    "-e",
+                    'tell application "System Events" to get {name of first application process whose frontmost is true, ""}',
+                ]);
+                const proc = stdout.split(",")[0]?.trim();
+                if (proc) evaluateForegroundApp(proc, "");
+            } else if (process.platform === "linux") {
+                const { stdout } = await execFileAsync("sh", [
+                    "-c",
+                    'wid=$(xprop -root _NET_ACTIVE_WINDOW 2>/dev/null | awk "{print \\$NF}"); if [ -n "$wid" ] && [ "$wid" != "0x0" ]; then pid=$(xprop -id "$wid" _NET_WM_PID 2>/dev/null | awk "{print \\$NF}"); title=$(xprop -id "$wid" _NET_WM_NAME 2>/dev/null | cut -d\\\" -f2); proc=$(ps -p "$pid" -o comm= 2>/dev/null); echo "$proc|$title"; fi',
+                ]);
+                const [proc, title] = stdout.trim().split("|");
+                if (proc) evaluateForegroundApp(proc, title || "");
+            }
+        } catch {}
+    }, 800);
+}
+
+async function scanElectronSystemApps() {
+    const appMap = new Map();
+    const put = (item) => {
+        if (!item || !item.processName) return;
+        const key = normProcName(item.processName);
+        if (!key) return;
+        const existing = appMap.get(key);
+        if (!existing || (existing.source === "catalog" && item.source !== "catalog")) {
+            appMap.set(key, item);
+        }
+    };
+
+    try {
+        if (process.platform === "win32") {
+            const { stdout } = await execFileAsync(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select-Object ProcessName,MainWindowTitle,Path | ConvertTo-Json -Compress",
+                ],
+                { timeout: 4500, windowsHide: true },
+            );
+            const parsed = JSON.parse(stdout || "[]");
+            const list = Array.isArray(parsed) ? parsed : [parsed];
+            for (const p of list) {
+                if (!p || !p.ProcessName) continue;
+                put({
+                    name: p.ProcessName,
+                    processName: `${p.ProcessName}.exe`,
+                    windowTitle: p.MainWindowTitle || undefined,
+                    path: p.Path || undefined,
+                    source: "running",
+                });
+            }
+
+            // Start Menu shortcuts
+            const { stdout: lnkOut } = await execFileAsync(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "$sh=New-Object -ComObject WScript.Shell; @(\"$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\",\"$env:AppData\\Microsoft\\Windows\\Start Menu\\Programs\") | ForEach-Object { if (Test-Path $_) { Get-ChildItem $_ -Filter *.lnk -Recurse -ErrorAction SilentlyContinue } } | Select-Object -First 80 | ForEach-Object { try { $s=$sh.CreateShortcut($_.FullName); if($s.TargetPath -like '*.exe'){ [PSCustomObject]@{Name=$_.BaseName;Exe=[System.IO.Path]::GetFileName($s.TargetPath);Path=$s.TargetPath} } } catch {} } | ConvertTo-Json -Compress",
+                ],
+                { timeout: 6000, windowsHide: true },
+            );
+            const lnkParsed = JSON.parse(lnkOut || "[]");
+            const lnkList = Array.isArray(lnkParsed) ? lnkParsed : [lnkParsed];
+            for (const item of lnkList) {
+                if (!item || !item.Exe) continue;
+                put({
+                    name: item.Name || item.Exe.replace(/\.exe$/i, ""),
+                    processName: item.Exe,
+                    path: item.Path,
+                    source: "installed",
+                });
+            }
+        } else if (process.platform === "darwin") {
+            if (fs.existsSync("/Applications")) {
+                for (const entry of fs.readdirSync("/Applications")) {
+                    if (entry.endsWith(".app")) {
+                        const base = entry.replace(/\.app$/, "");
+                        put({
+                            name: base,
+                            processName: base,
+                            path: `/Applications/${entry}`,
+                            source: "installed",
+                        });
+                    }
+                }
+            }
+        } else {
+            const { stdout } = await execFileAsync("ps", ["-e", "-o", "comm="], { timeout: 2500 });
+            for (const line of stdout.split(/\r?\n/)) {
+                const comm = line.trim();
+                if (comm && !comm.startsWith("kworker")) {
+                    put({ name: comm, processName: comm, source: "running" });
+                }
+            }
+            for (const dir of ["/usr/share/applications", path.join(os.homedir(), ".local/share/applications")]) {
+                if (!fs.existsSync(dir)) continue;
+                for (const file of fs.readdirSync(dir)) {
+                    if (!file.endsWith(".desktop")) continue;
+                    try {
+                        const txt = fs.readFileSync(path.join(dir, file), "utf8");
+                        const nm = txt.match(/^Name=(.+)$/m)?.[1]?.trim();
+                        const ex = txt.match(/^Exec=(.+)$/m)?.[1]?.trim()?.split(/\s+/)[0];
+                        if (nm && ex) {
+                            put({ name: nm, processName: path.basename(ex), source: "installed" });
+                        }
+                    } catch {}
+                }
+            }
+        }
+    } catch (err) {
+        console.warn("App scan error:", err);
+    }
+
+    for (const c of ELECTRON_COMMON_APPS) {
+        put(c);
+    }
+
+    const rank = { running: 0, installed: 1, catalog: 2 };
+    return Array.from(appMap.values()).sort((a, b) => {
+        if (rank[a.source] !== rank[b.source]) return rank[a.source] - rank[b.source];
+        return a.name.localeCompare(b.name);
+    });
+}
+
 // App lifecycle
 app.whenReady().then(() => {
     if (process.platform === "win32") {
@@ -609,13 +946,43 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle("shortcuts:registerAll", (_event, hotkeyList) => {
-        return registerGlobalHotkeys(hotkeyList);
+        lastRequestedHotkeys = Array.isArray(hotkeyList) ? hotkeyList : [];
+        if (hotkeyFilterStatus.paused) {
+            return {
+                success: true,
+                registeredCount: 0,
+                failedKeys: [],
+            };
+        }
+        return registerGlobalHotkeys(lastRequestedHotkeys);
     });
 
     ipcMain.handle("shortcuts:unregisterAll", () => {
+        lastRequestedHotkeys = [];
         globalShortcut.unregisterAll();
         registeredShortcuts.clear();
         registerSubtitleOverlayShortcut();
+        return true;
+    });
+
+    ipcMain.handle("apps:listInstalled", async () => {
+        return await scanElectronSystemApps();
+    });
+
+    ipcMain.handle("shortcuts:setFilterConfig", (_event, cfg) => {
+        if (!cfg || typeof cfg !== "object") return false;
+        hotkeyFilterConfig = {
+            enabled: Boolean(cfg.enabled),
+            manuallyPaused: Boolean(cfg.manuallyPaused),
+            pauseInTextInputs: Boolean(cfg.pauseInTextInputs),
+            pausedApps: Array.isArray(cfg.pausedApps) ? cfg.pausedApps : [],
+        };
+        if (hotkeyFilterConfig.manuallyPaused) {
+            applyEffectiveHotkeyState({ paused: true, reason: "manual" });
+        } else if (!hotkeyFilterConfig.enabled) {
+            applyEffectiveHotkeyState({ paused: false });
+        }
+        startForegroundWatcherIfNeeded();
         return true;
     });
 
@@ -752,6 +1119,7 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+    stopForegroundWatcher();
     // Clean up Discord RPC
     if (rpcClient) {
         try {

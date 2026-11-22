@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Play,
@@ -11,12 +11,13 @@ import {
   Volume2,
   AudioLines,
 } from 'lucide-react';
-import { SoundItem } from '../types/sound';
+import { PlaybackTrackInfo, SoundItem } from '../types/sound';
 import { useTranslation } from '../i18n';
 
 interface SoundCardProps {
   sound: SoundItem;
   isPlaying: boolean;
+  playbackTrack?: PlaybackTrackInfo;
   onPlay: (sound: SoundItem) => void;
   onStop: (soundId: string) => void;
   onToggleFavorite: (soundId: string) => void;
@@ -29,6 +30,7 @@ interface SoundCardProps {
 export function SoundCard({
   sound,
   isPlaying,
+  playbackTrack,
   onPlay,
   onStop,
   onToggleFavorite,
@@ -39,6 +41,25 @@ export function SoundCard({
 }: SoundCardProps) {
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
+  const [progressPct, setProgressPct] = useState(0);
+
+  useEffect(() => {
+    if (!isPlaying || !playbackTrack) {
+      setProgressPct(0);
+      return;
+    }
+
+    const updateProgress = () => {
+      const dur = Math.max(0.4, playbackTrack.duration || sound.duration || 1);
+      const rawElapsed = Math.max(0, (Date.now() - playbackTrack.startedAt) / 1000);
+      const elapsed = playbackTrack.loop ? rawElapsed % dur : Math.min(dur, rawElapsed);
+      setProgressPct(Math.min(100, Math.max(0, (elapsed / dur) * 100)));
+    };
+
+    updateProgress();
+    const timer = window.setInterval(updateProgress, 60);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, playbackTrack, sound.duration]);
 
   const formatDuration = (seconds: number) => {
     if (!seconds || seconds <= 0) return '0:01';
@@ -58,14 +79,46 @@ export function SoundCard({
       whileHover={{ y: -2 }}
       transition={{ type: 'spring', stiffness: 380, damping: 28 }}
       onMouseLeave={() => setShowMenu(false)}
-      className={`app-card ui-card card-ambient-glow group relative flex flex-col justify-between gap-3.5 p-4 transition-colors border ${
+      className={`app-card ui-card ${
+        isPlaying ? '' : 'card-ambient-glow'
+      } group relative overflow-hidden flex flex-col justify-between gap-3.5 p-4 transition-all border ${
         isPlaying
-          ? 'border-[var(--accent)] ring-1 ring-[var(--accent-border)]'
+          ? 'border-[var(--accent)] ring-1 ring-[var(--accent-border)] shadow-[0_12px_36px_-12px_rgba(var(--accent-rgb),0.42)]'
           : 'border-[var(--border-card)] hover:border-[var(--border-hover)]'
       }`}
     >
+      {/* Dramatic Spotlight Layers behind Playing Card */}
+      <AnimatePresence>
+        {isPlaying && (
+          <motion.div
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          >
+            {/* Top-right angled spotlight cone */}
+            <motion.div
+              animate={{ opacity: [0.82, 1, 0.86] }}
+              transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+              className="absolute inset-0 card-spotlight-beam"
+            />
+            {/* Floor illumination pool behind center controls */}
+            <div className="absolute inset-0 card-spotlight-floor" />
+            {/* Focused emitter lens hotspot at upper right corner */}
+            <div
+              className="absolute -top-6 right-5 w-24 h-24 rounded-full blur-2xl"
+              style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.36)' }}
+            />
+            {/* Crisp illuminated top rim */}
+            <div className="absolute top-0 left-0 right-0 h-[1.5px] card-spotlight-rim" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Row: Icon + Title + Actions */}
-      <div className="flex items-start justify-between gap-2.5">
+      <div className="relative z-10 flex items-start justify-between gap-2.5">
         <div className="flex items-center gap-3 min-w-0">
           <motion.div
             animate={isPlaying ? { scale: [1, 1.07, 1] } : { scale: 1 }}
@@ -76,7 +129,7 @@ export function SoundCard({
             }
             className={`w-10 h-10 ui-input border flex items-center justify-center shrink-0 transition-colors ${
               isPlaying
-                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]'
+                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] shadow-[0_0_16px_rgba(var(--accent-rgb),0.3)]'
                 : 'bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] group-hover:text-[var(--accent-text)]'
             }`}
           >
@@ -177,7 +230,7 @@ export function SoundCard({
       </div>
 
       {/* Middle Inner Info Box */}
-      <div className="ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] px-3.5 py-2.5 flex flex-col gap-2.5">
+      <div className="relative z-10 ui-inner bg-[var(--bg-inner)]/90 border border-[var(--border-subtle)] px-3.5 py-2.5 flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-2">
           <motion.button
             type="button"
@@ -220,12 +273,12 @@ export function SoundCard({
       </div>
 
       {/* Bottom Footer Row: Status + Play/Stop Pill */}
-      <div className="flex items-center justify-between gap-3 pt-0.5">
+      <div className="relative z-10 flex items-center justify-between gap-3 pt-0.5">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <span
             className={`w-2 h-2 rounded-full ${
               isPlaying
-                ? 'bg-[var(--accent)] animate-pulse'
+                ? 'bg-[var(--accent)] animate-pulse shadow-[0_0_8px_var(--accent)]'
                 : 'bg-[var(--accent)] opacity-60'
             }`}
           />
@@ -265,6 +318,19 @@ export function SoundCard({
           )}
         </motion.button>
       </div>
+
+      {/* Subtle Bottom Progress Edge when Playing */}
+      {isPlaying && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2.5px] bg-black/25 z-20"
+        >
+          <div
+            className="h-full bg-[var(--accent)] transition-[width] duration-75"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      )}
     </motion.div>
   );
 }

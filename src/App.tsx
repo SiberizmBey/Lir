@@ -20,6 +20,12 @@ import {
     VoiceChangerConfig,
     HotkeyTarget,
     VoicePresetId,
+    HotkeyFilterConfig,
+    HotkeyFilterStatus,
+    PlaybackTrackInfo,
+    RemoteConnectedClient,
+    RelayBridgeConfig,
+    RelayBridgeConnectionState,
 } from "./types/sound";
 import { STARTER_SOUNDS } from "./utils/starterSounds";
 import {
@@ -28,9 +34,15 @@ import {
     VoicePresetDefinition,
 } from "./utils/voicePresets";
 import { audioEngine } from "./utils/audioEngine";
+import {
+    normalizeHotkey,
+    extractHotkeyFromKeyboardEvent,
+    isTextEntryElement,
+} from "./utils/hotkeys";
 import { Sidebar, NavTab } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { SoundCard } from "./components/SoundCard";
+import { PlaybackBar } from "./components/PlaybackBar";
 import { HotkeyModal, ExistingHotkeyBinding } from "./components/HotkeyModal";
 import { AddSoundModal } from "./components/AddSoundModal";
 import { AudioRoutingView } from "./components/AudioRoutingView";
@@ -41,6 +53,7 @@ import { GuideView } from "./components/GuideView";
 import { SettingsView } from "./components/SettingsView";
 import { SubtitleTranslatorView } from "./components/SubtitleTranslatorView";
 import { Footer } from "./components/Footer";
+import { KoruBanner } from "./components/KoruBanner";
 import { VbCableGuardOverlay } from "./components/VbCableGuardOverlay";
 import {
     getStoredBackgroundImage,
@@ -56,10 +69,52 @@ import { useTranslation } from "./i18n";
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
 const STORAGE_KEY_VOICE_CHANGER = "lir_voice_changer_v1";
+const STORAGE_KEY_HOTKEY_FILTER = "lir_hotkey_filter_v1";
 const STORAGE_KEY_THEME = "lir_theme_v1";
 const STORAGE_KEY_ACCENT = "lir_accent_color_v1";
 const STORAGE_KEY_UI_STYLE = "lir_ui_style_v1";
 const STORAGE_KEY_APPEARANCE = "lir_appearance_v1";
+const STORAGE_KEY_RELAY_BRIDGE = "lir_relay_bridge_v1";
+const DEFAULT_RELAY_URL = "https://lirandroid.anticvalley.com.tr";
+
+function generateRandomRoomCode(): string {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i += 1) {
+        code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return code;
+}
+
+function generateRandomSixDigitPin(): string {
+    return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function generateHostSecret(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID().replace(/-/g, "");
+    }
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function createDefaultRelayBridgeConfig(): RelayBridgeConfig {
+    return {
+        enabled: true,
+        relayUrl: DEFAULT_RELAY_URL,
+        roomCode: generateRandomRoomCode(),
+        hostSecret: generateHostSecret(),
+        deviceName: "Lir Masaüstü",
+        requirePin: true,
+        pin: generateRandomSixDigitPin(),
+    };
+}
+
+const DEFAULT_HOTKEY_FILTER: HotkeyFilterConfig = {
+    enabled: true,
+    manuallyPaused: false,
+    pauseInTextInputs: true,
+    pausedApps: [],
+};
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
     backgroundImage: null,
@@ -100,13 +155,6 @@ const CATEGORIES: SoundCategory[] = [
     "Özel",
 ];
 
-const normalizeHotkey = (hotkey: string) =>
-    hotkey
-        .trim()
-        .toUpperCase()
-        .replace(/^ESCAPE$/, "ESC")
-        .replace(/\bNUMPAD\s+([0-9])\b/g, "NUMPAD$1");
-
 export default function App() {
     const { t, language } = useTranslation();
     const [theme, setTheme] = useState<AppTheme>(() => {
@@ -123,7 +171,7 @@ export default function App() {
         } catch (error) {
             console.warn("Tema tercihi okunamadı:", error);
         }
-        return "amoled";
+        return "system";
     });
 
     const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
@@ -386,6 +434,52 @@ export default function App() {
     const [selectedCategory, setSelectedCategory] = useState<SoundCategory>("Tümü");
     const [searchQuery, setSearchQuery] = useState("");
     const [activePlayingIds, setActivePlayingIds] = useState<string[]>([]);
+    const [activePlaybackTracks, setActivePlaybackTracks] = useState<PlaybackTrackInfo[]>([]);
+    const [hotkeyFilterConfig, setHotkeyFilterConfig] = useState<HotkeyFilterConfig>(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_HOTKEY_FILTER);
+            if (saved) {
+                const parsed = JSON.parse(saved) as Partial<HotkeyFilterConfig>;
+                return {
+                    enabled: parsed.enabled ?? true,
+                    manuallyPaused: parsed.manuallyPaused ?? false,
+                    pauseInTextInputs: parsed.pauseInTextInputs ?? true,
+                    pausedApps: Array.isArray(parsed.pausedApps) ? parsed.pausedApps : [],
+                };
+            }
+        } catch {
+            // fallback
+        }
+        return DEFAULT_HOTKEY_FILTER;
+    });
+    const [electronFilterStatus, setElectronFilterStatus] = useState<HotkeyFilterStatus>({
+        paused: false,
+    });
+    const [remoteHostConnected, setRemoteHostConnected] = useState(false);
+    const [remoteClients, setRemoteClients] = useState<RemoteConnectedClient[]>([]);
+    const [relayBridgeConfig, setRelayBridgeConfig] = useState<RelayBridgeConfig>(() => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_RELAY_BRIDGE);
+            if (raw) {
+                const parsed = JSON.parse(raw) as Partial<RelayBridgeConfig>;
+                return {
+                    enabled: parsed.enabled ?? true,
+                    relayUrl: parsed.relayUrl || DEFAULT_RELAY_URL,
+                    roomCode: parsed.roomCode || generateRandomRoomCode(),
+                    hostSecret: parsed.hostSecret || generateHostSecret(),
+                    deviceName: parsed.deviceName || "Lir Masaüstü",
+                    requirePin: parsed.requirePin ?? true,
+                    pin: parsed.pin || generateRandomSixDigitPin(),
+                };
+            }
+        } catch {
+            // fallback to default
+        }
+        return createDefaultRelayBridgeConfig();
+    });
+    const [relayBridgeStatus, setRelayBridgeStatus] =
+        useState<RelayBridgeConnectionState>("disabled");
+    const [relayClients, setRelayClients] = useState<RemoteConnectedClient[]>([]);
     const [isCapturingStopHotkey, setIsCapturingStopHotkey] = useState(false);
     const [editingHotkeyTarget, setEditingHotkeyTarget] =
         useState<HotkeyTarget | null>(null);
@@ -662,8 +756,33 @@ export default function App() {
     }, [detectAndSyncAudioDevices]);
 
     useEffect(() => {
+        try {
+            localStorage.setItem(
+                STORAGE_KEY_HOTKEY_FILTER,
+                JSON.stringify(hotkeyFilterConfig),
+            );
+        } catch (e) {
+            console.warn("Hotkey filter save error:", e);
+        }
+        if (isElectron && window.electronAPI?.setHotkeyFilterConfig) {
+            void window.electronAPI.setHotkeyFilterConfig(hotkeyFilterConfig);
+        }
+    }, [hotkeyFilterConfig, isElectron]);
+
+    useEffect(() => {
+        if (!isElectron || !window.electronAPI?.onHotkeyFilterStatus) return;
+        const unsub = window.electronAPI.onHotkeyFilterStatus((status) => {
+            setElectronFilterStatus(status);
+        });
+        return () => unsub?.();
+    }, [isElectron]);
+
+    useEffect(() => {
         audioEngine.setPlaybackListener((playingIds) => {
             setActivePlayingIds(playingIds);
+        });
+        audioEngine.setPlaybackDetailListener((tracks) => {
+            setActivePlaybackTracks(tracks);
         });
 
         const handleUserGesture = () => {
@@ -748,19 +867,22 @@ export default function App() {
     const handleToggleVoiceEngine = useCallback(() => {
         setVoiceChangerConfig((prev) => {
             const nextEnabled = !prev.enabled;
-            if (
-                nextEnabled &&
-                prev.preset === "natural" &&
-                prev.wetMix === 0
-            ) {
+            if (nextEnabled && prev.wetMix === 0) {
                 const fallbackPreset =
                     VOICE_PRESETS.find((p) => p.id === "studio") ??
                     VOICE_PRESETS[1];
+                if (prev.preset === "natural") {
+                    return {
+                        ...prev,
+                        enabled: true,
+                        preset: fallbackPreset.id,
+                        ...fallbackPreset.params,
+                    };
+                }
                 return {
                     ...prev,
                     enabled: true,
-                    preset: fallbackPreset.id,
-                    ...fallbackPreset.params,
+                    wetMix: 0.75,
                 };
             }
             return {
@@ -771,14 +893,14 @@ export default function App() {
     }, []);
 
     const handleTriggerByKey = useCallback(
-        (keyString: string) => {
-            if (!keyString) return;
+        (keyString: string): boolean => {
+            if (!keyString) return false;
             const cleanKey = normalizeHotkey(keyString);
 
             if (cleanKey === normalizeHotkey(routingConfig.stopAllHotkey)) {
                 handleStopAll();
                 showTriggeredToast(cleanKey, t("soundboard.stopAll"));
-                return;
+                return true;
             }
 
             if (
@@ -787,13 +909,16 @@ export default function App() {
             ) {
                 const nextEnabled = !voiceChangerConfig.enabled;
                 handleToggleVoiceEngine();
+                if (nextEnabled && !routingConfig.micPassThrough) {
+                    void handleEnableMicFromVoiceChanger();
+                }
                 showTriggeredToast(
                     cleanKey,
                     nextEnabled
                         ? `${t("voiceChanger.title")} (${t("common.active")})`
                         : `${t("voiceChanger.title")} (${t("common.inactive")})`,
                 );
-                return;
+                return true;
             }
 
             const matchedPresetEntry = Object.entries(
@@ -838,17 +963,20 @@ export default function App() {
                             enabled: true,
                             ...matchedPreset.params,
                         }));
+                        if (!routingConfig.micPassThrough) {
+                            void handleEnableMicFromVoiceChanger();
+                        }
                         showTriggeredToast(
                             cleanKey,
                             `${presetName} (${t("common.active")})`,
                         );
                     }
-                    return;
+                    return true;
                 }
             }
 
             const matchedSound = sounds.find(
-                (s) => normalizeHotkey(s.hotkey) === cleanKey,
+                (s) => s.hotkey.trim() !== "" && normalizeHotkey(s.hotkey) === cleanKey,
             );
 
             if (matchedSound) {
@@ -862,7 +990,10 @@ export default function App() {
                 } else {
                     handlePlaySound(matchedSound);
                 }
+                return true;
             }
+
+            return false;
         },
         [
             sounds,
@@ -871,17 +1002,23 @@ export default function App() {
             handleStopSound,
             handleStopAll,
             routingConfig.stopAllHotkey,
+            routingConfig.micPassThrough,
             voiceChangerConfig.toggleHotkey,
             voiceChangerConfig.presetHotkeys,
             voiceChangerConfig.enabled,
             voiceChangerConfig.preset,
             handleToggleVoiceEngine,
+            handleEnableMicFromVoiceChanger,
             showTriggeredToast,
+            t,
         ],
     );
 
     const isHotkeyPausedForModal =
         isCapturingStopHotkey || editingHotkeyTarget !== null;
+    const isHotkeysGloballyPaused =
+        hotkeyFilterConfig.manuallyPaused ||
+        (isElectron && electronFilterStatus.paused);
 
     useEffect(() => {
         let unsubscribeElectron: (() => void) | undefined;
@@ -912,7 +1049,7 @@ export default function App() {
             window.electronAPI.registerHotkeys(hotkeyList);
 
             unsubscribeElectron = window.electronAPI.onTriggerHotkey((key) => {
-                if (isHotkeyPausedForModal) return;
+                if (isHotkeyPausedForModal || hotkeyFilterConfig.manuallyPaused) return;
                 handleTriggerByKey(key);
             });
         } else if (isElectron && window.electronAPI && isHotkeyPausedForModal) {
@@ -920,39 +1057,20 @@ export default function App() {
         }
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (isHotkeyPausedForModal) return;
-
-            const target = e.target as HTMLElement;
+            if (e.repeat) return;
+            if (isHotkeyPausedForModal || isHotkeysGloballyPaused) return;
             if (
-                target &&
-                (target.tagName === "INPUT" ||
-                    target.tagName === "TEXTAREA" ||
-                    target.tagName === "SELECT")
+                hotkeyFilterConfig.pauseInTextInputs &&
+                isTextEntryElement(e.target)
             ) {
                 return;
             }
 
-            const modifiers: string[] = [];
-            if (e.ctrlKey) modifiers.push("CTRL");
-            if (e.altKey) modifiers.push("ALT");
-            if (e.shiftKey) modifiers.push("SHIFT");
-
-            let mainKey = e.key.toUpperCase();
-            if (e.code.startsWith("F") && !isNaN(parseInt(e.code.slice(1)))) {
-                mainKey = e.code.toUpperCase();
-            } else if (e.code.startsWith("Numpad")) {
-                mainKey = e.code.toUpperCase();
-            } else if (mainKey === " " || e.code === "Space") {
-                mainKey = "SPACE";
-            } else if (["CONTROL", "ALT", "SHIFT", "META"].includes(mainKey)) {
-                return;
+            const keyCombo = extractHotkeyFromKeyboardEvent(e);
+            if (!keyCombo) return;
+            if (handleTriggerByKey(keyCombo)) {
+                e.preventDefault();
             }
-
-            const keyCombo =
-                modifiers.length > 0
-                    ? `${modifiers.join("+")}+${mainKey}`
-                    : mainKey;
-            handleTriggerByKey(keyCombo);
         };
 
         window.addEventListener("keydown", handleKeyDown, true);
@@ -968,28 +1086,783 @@ export default function App() {
         voiceChangerConfig.toggleHotkey,
         voiceChangerConfig.presetHotkeys,
         isHotkeyPausedForModal,
+        isHotkeysGloballyPaused,
+        hotkeyFilterConfig.manuallyPaused,
+        hotkeyFilterConfig.pauseInTextInputs,
         handleTriggerByKey,
     ]);
 
-    const handleToggleFavorite = (soundId: string) => {
+    const handleToggleFavorite = useCallback((soundId: string) => {
         setSounds((prev) =>
             prev.map((s) =>
                 s.id === soundId ? { ...s, isFavorite: !s.isFavorite } : s,
             ),
         );
+    }, []);
+
+    const handleToggleLoop = useCallback((soundId: string) => {
+        setSounds((prev) =>
+            prev.map((s) => {
+                if (s.id !== soundId) return s;
+                const nextLoop = !s.loop;
+                audioEngine.updateSoundLoop(soundId, nextLoop);
+                return { ...s, loop: nextLoop };
+            }),
+        );
+    }, []);
+
+    const handleVolumeChange = useCallback((soundId: string, volume: number) => {
+        const clamped = Math.max(0, Math.min(1, volume));
+        audioEngine.updateSoundVolume(soundId, clamped);
+        setSounds((prev) =>
+            prev.map((s) => (s.id === soundId ? { ...s, volume: clamped } : s)),
+        );
+    }, []);
+
+    // Real-time Host WebSocket bridge for Android LAN companion clients
+    const remoteWsRef = useRef<WebSocket | null>(null);
+    const buildRemoteSnapshot = useCallback(() => {
+        return {
+            sounds: sounds.map((s) => ({
+                id: s.id,
+                title: s.title,
+                category: s.category,
+                hotkey: s.hotkey,
+                duration: s.duration,
+                volume: s.volume,
+                isFavorite: s.isFavorite,
+                loop: s.loop,
+                addedAt: s.addedAt,
+            })),
+            activePlaying: activePlaybackTracks,
+            routing: {
+                masterVolume: routingConfig.masterVolume,
+                playbackMode: routingConfig.playbackMode,
+                primaryDeviceLabel: routingConfig.primaryDeviceLabel,
+                dualOutputEnabled: routingConfig.dualOutputEnabled,
+            },
+            voiceChanger: {
+                enabled: isVoiceChangerActive,
+                preset: voiceChangerConfig.preset,
+                presets: VOICE_PRESETS.map((p) => ({
+                    id: p.id,
+                    name: t(`voicePresets.${p.id}_name`) || p.name,
+                    badge: t(`voicePresets.${p.id}_badge`) || p.badge,
+                })),
+            },
+            updatedAt: Date.now(),
+        };
+    }, [
+        sounds,
+        activePlaybackTracks,
+        routingConfig.masterVolume,
+        routingConfig.playbackMode,
+        routingConfig.primaryDeviceLabel,
+        routingConfig.dualOutputEnabled,
+        isVoiceChangerActive,
+        voiceChangerConfig.preset,
+        t,
+    ]);
+
+    const snapshotRef = useRef(buildRemoteSnapshot);
+    snapshotRef.current = buildRemoteSnapshot;
+
+    const remoteActionsRef = useRef({
+        handlePlaySound,
+        handleStopSound,
+        handleStopAll,
+        handleToggleFavorite,
+        handleToggleLoop,
+        handleVolumeChange,
+        handleToggleVoiceEngine,
+        handleSelectVoicePreset,
+        handleEnableMicFromVoiceChanger,
+        setRoutingConfig,
+        sounds,
+        routingConfig,
+        voiceChangerConfig,
+    });
+    remoteActionsRef.current = {
+        handlePlaySound,
+        handleStopSound,
+        handleStopAll,
+        handleToggleFavorite,
+        handleToggleLoop,
+        handleVolumeChange,
+        handleToggleVoiceEngine,
+        handleSelectVoicePreset,
+        handleEnableMicFromVoiceChanger,
+        setRoutingConfig,
+        sounds,
+        routingConfig,
+        voiceChangerConfig,
     };
 
-    const handleToggleLoop = (soundId: string) => {
-        setSounds((prev) =>
-            prev.map((s) => (s.id === soundId ? { ...s, loop: !s.loop } : s)),
-        );
-    };
+    const relayWsRef = useRef<WebSocket | null>(null);
+    const relayConfigRef = useRef(relayBridgeConfig);
+    relayConfigRef.current = relayBridgeConfig;
 
-    const handleVolumeChange = (soundId: string, volume: number) => {
-        setSounds((prev) =>
-            prev.map((s) => (s.id === soundId ? { ...s, volume } : s)),
-        );
-    };
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                STORAGE_KEY_RELAY_BRIDGE,
+                JSON.stringify(relayBridgeConfig),
+            );
+        } catch {
+            // ignore storage errors
+        }
+    }, [relayBridgeConfig]);
+
+    const executeRemoteCommand = useCallback((msg: Record<string, unknown>) => {
+        const action = String(msg.action || "");
+        const actions = remoteActionsRef.current;
+
+        if (action === "sound:play" && typeof msg.soundId === "string") {
+            const sound = actions.sounds.find((s) => s.id === msg.soundId);
+            if (sound) actions.handlePlaySound(sound);
+        } else if (action === "sound:stop" && typeof msg.soundId === "string") {
+            actions.handleStopSound(msg.soundId);
+        } else if (action === "sound:stopAll") {
+            actions.handleStopAll();
+        } else if (action === "sound:toggleFavorite" && typeof msg.soundId === "string") {
+            actions.handleToggleFavorite(msg.soundId);
+        } else if (action === "sound:toggleLoop" && typeof msg.soundId === "string") {
+            actions.handleToggleLoop(msg.soundId);
+        } else if (
+            action === "sound:volume" &&
+            typeof msg.soundId === "string" &&
+            typeof msg.volume === "number"
+        ) {
+            actions.handleVolumeChange(msg.soundId, msg.volume);
+        } else if (action === "master:volume" && typeof msg.volume === "number") {
+            const vol = Math.max(0, Math.min(1, msg.volume));
+            actions.setRoutingConfig((prev) => ({
+                ...prev,
+                masterVolume: vol,
+            }));
+        } else if (action === "voice:toggle") {
+            const nextOn = !actions.voiceChangerConfig.enabled;
+            actions.handleToggleVoiceEngine();
+            if (nextOn && !actions.routingConfig.micPassThrough) {
+                void actions.handleEnableMicFromVoiceChanger();
+            }
+        } else if (action === "voice:preset" && typeof msg.presetId === "string") {
+            const preset = VOICE_PRESETS.find((p) => p.id === msg.presetId);
+            if (preset) {
+                actions.handleSelectVoicePreset(preset);
+                if (preset.id !== "natural" && !actions.routingConfig.micPassThrough) {
+                    void actions.handleEnableMicFromVoiceChanger();
+                }
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const host = window.location.host;
+        if (!host || window.location.protocol === "file:") return;
+
+        let disposed = false;
+        let reconnectTimer: number | null = null;
+
+        const connect = () => {
+            if (disposed) return;
+            try {
+                const ws = new WebSocket(`${protocol}//${host}/ws/remote?role=host`);
+                remoteWsRef.current = ws;
+
+                ws.onopen = () => {
+                    if (disposed) {
+                        ws.close();
+                        return;
+                    }
+                    setRemoteHostConnected(true);
+                    ws.send(
+                        JSON.stringify({
+                            type: "host:sync",
+                            snapshot: snapshotRef.current(),
+                        }),
+                    );
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+                        if (msg.type === "host:clients" && Array.isArray(msg.connectedClients)) {
+                            setRemoteClients(msg.connectedClients as RemoteConnectedClient[]);
+                            return;
+                        }
+                        if (msg.type !== "remote:command") return;
+                        executeRemoteCommand(msg);
+                    } catch {
+                        // ignore invalid remote payload
+                    }
+                };
+
+                ws.onclose = () => {
+                    setRemoteHostConnected(false);
+                    if (remoteWsRef.current === ws) {
+                        remoteWsRef.current = null;
+                    }
+                    if (!disposed) {
+                        reconnectTimer = window.setTimeout(connect, 3500);
+                    }
+                };
+
+                ws.onerror = () => {
+                    // handled via onclose
+                };
+            } catch {
+                if (!disposed) {
+                    reconnectTimer = window.setTimeout(connect, 5000);
+                }
+            }
+        };
+
+        connect();
+        return () => {
+            disposed = true;
+            if (reconnectTimer) window.clearTimeout(reconnectTimer);
+            try {
+                remoteWsRef.current?.close();
+            } catch {
+                // ignore
+            }
+            remoteWsRef.current = null;
+        };
+    }, [executeRemoteCommand]);
+
+    // Outbound Cloud/Domain Bridge: supports BOTH Vercel Serverless WebRTC (/api/webrtc/signal)
+    // AND optional Node WSS Relay (/ws/relay). Works everywhere including Electron file://
+    const rtcPeersRef = useRef<
+        Map<
+            string,
+            {
+                pc: RTCPeerConnection;
+                dc: RTCDataChannel | null;
+                name: string;
+                connectedAt: number;
+            }
+        >
+    >(new Map());
+    const pairedRtcTokensRef = useRef<Set<string>>(new Set());
+    const [wsRelayClients, setWsRelayClients] = useState<RemoteConnectedClient[]>([]);
+    const [rtcClients, setRtcClients] = useState<RemoteConnectedClient[]>([]);
+    const [wsRelayStatus, setWsRelayStatus] = useState<RelayBridgeConnectionState>("disabled");
+    const [rtcSignalStatus, setRtcSignalStatus] = useState<RelayBridgeConnectionState>("disabled");
+
+    useEffect(() => {
+        if (!relayBridgeConfig.enabled) {
+            setRelayBridgeStatus("disabled");
+            setRelayClients([]);
+            return;
+        }
+        if (wsRelayStatus === "connected" || rtcSignalStatus === "connected") {
+            setRelayBridgeStatus("connected");
+        } else if (wsRelayStatus === "connecting" || rtcSignalStatus === "connecting") {
+            setRelayBridgeStatus("connecting");
+        } else {
+            setRelayBridgeStatus("error");
+        }
+        setRelayClients([...rtcClients, ...wsRelayClients]);
+    }, [relayBridgeConfig.enabled, wsRelayStatus, rtcSignalStatus, rtcClients, wsRelayClients]);
+
+    // Clear paired WebRTC tokens if PIN or roomCode changes
+    useEffect(() => {
+        pairedRtcTokensRef.current.clear();
+    }, [relayBridgeConfig.pin, relayBridgeConfig.roomCode]);
+
+    // 1) WebRTC Host Signaling (works 100% serverless on Vercel + Upstash/KV)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (!relayBridgeConfig.enabled || typeof RTCPeerConnection === "undefined") {
+            for (const entry of rtcPeersRef.current.values()) {
+                try {
+                    entry.dc?.close();
+                    entry.pc.close();
+                } catch {
+                    // ignore
+                }
+            }
+            rtcPeersRef.current.clear();
+            setRtcClients([]);
+            setRtcSignalStatus("disabled");
+            return;
+        }
+
+        let signalEndpoint = "";
+        try {
+            const raw = relayBridgeConfig.relayUrl.trim() || DEFAULT_RELAY_URL;
+            const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+            const parsed = new URL(normalized);
+            signalEndpoint = `${parsed.origin}/api/webrtc/signal`;
+        } catch {
+            setRtcSignalStatus("error");
+            return;
+        }
+
+        let disposed = false;
+        let pollTimer: number | null = null;
+        setRtcSignalStatus("connecting");
+
+        const refreshRtcClientsList = () => {
+            const list: RemoteConnectedClient[] = [];
+            for (const [id, entry] of rtcPeersRef.current.entries()) {
+                if (entry.dc && entry.dc.readyState === "open") {
+                    list.push({
+                        id,
+                        name: entry.name,
+                        ip: "WebRTC P2P",
+                        connectedAt: entry.connectedAt,
+                    });
+                }
+            }
+            setRtcClients(list);
+        };
+
+        const handleIncomingOffer = async (offer: {
+            sessionId: string;
+            deviceName?: string;
+            pin?: string;
+            pairToken?: string;
+            sdp: RTCSessionDescriptionInit;
+        }) => {
+            const cfg = relayConfigRef.current;
+            const hasValidToken =
+                typeof offer.pairToken === "string" &&
+                pairedRtcTokensRef.current.has(offer.pairToken);
+            const hasValidPin = (offer.pin || "").trim() === cfg.pin;
+
+            if (cfg.requirePin && !hasValidToken && !hasValidPin) {
+                await fetch(signalEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "host-answer",
+                        roomCode: cfg.roomCode,
+                        hostSecret: cfg.hostSecret,
+                        sessionId: offer.sessionId,
+                        status: "rejected",
+                        reason: "Geçersiz eşleştirme PIN kodu.",
+                    }),
+                }).catch(() => {});
+                return;
+            }
+
+            const existing = rtcPeersRef.current.get(offer.sessionId);
+            if (existing) {
+                try {
+                    existing.dc?.close();
+                    existing.pc.close();
+                } catch {
+                    // ignore
+                }
+                rtcPeersRef.current.delete(offer.sessionId);
+            }
+
+            const pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" },
+                ],
+            });
+
+            const entry = {
+                pc,
+                dc: null as RTCDataChannel | null,
+                name: offer.deviceName?.trim().slice(0, 48) || "Android Web Kumanda",
+                connectedAt: Date.now(),
+            };
+            rtcPeersRef.current.set(offer.sessionId, entry);
+
+            const cleanupPeer = () => {
+                const cur = rtcPeersRef.current.get(offer.sessionId);
+                if (cur && cur.pc === pc) {
+                    rtcPeersRef.current.delete(offer.sessionId);
+                    refreshRtcClientsList();
+                }
+                try {
+                    pc.close();
+                } catch {
+                    // ignore
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (
+                    pc.connectionState === "failed" ||
+                    pc.connectionState === "closed" ||
+                    pc.connectionState === "disconnected"
+                ) {
+                    cleanupPeer();
+                }
+            };
+
+            pc.ondatachannel = (event) => {
+                const dc = event.channel;
+                entry.dc = dc;
+
+                dc.onopen = () => {
+                    const pairToken = generateHostSecret();
+                    pairedRtcTokensRef.current.add(pairToken);
+                    const currentCfg = relayConfigRef.current;
+                    try {
+                        dc.send(JSON.stringify({ type: "auth:paired", pairToken }));
+                        dc.send(
+                            JSON.stringify({
+                                type: "state:init",
+                                roomCode: currentCfg.roomCode,
+                                deviceId: `lir-${currentCfg.roomCode}`,
+                                deviceName: currentCfg.deviceName || "Lir Masaüstü",
+                                hostConnected: true,
+                                ...snapshotRef.current(),
+                            }),
+                        );
+                    } catch {
+                        // ignore send errors
+                    }
+                    refreshRtcClientsList();
+                };
+
+                dc.onmessage = (msgEvent) => {
+                    try {
+                        const msg = JSON.parse(String(msgEvent.data)) as Record<string, unknown>;
+                        const msgType = typeof msg.type === "string" ? msg.type : "";
+                        if (msgType === "ping") {
+                            dc.send(JSON.stringify({ type: "pong", ts: Date.now() }));
+                            return;
+                        }
+                        if (msgType === "state:request") {
+                            const currentCfg = relayConfigRef.current;
+                            dc.send(
+                                JSON.stringify({
+                                    type: "state:init",
+                                    roomCode: currentCfg.roomCode,
+                                    deviceId: `lir-${currentCfg.roomCode}`,
+                                    deviceName: currentCfg.deviceName || "Lir Masaüstü",
+                                    hostConnected: true,
+                                    ...snapshotRef.current(),
+                                }),
+                            );
+                            return;
+                        }
+                        const action = typeof msg.action === "string" ? msg.action : msgType;
+                        if (action) {
+                            executeRemoteCommand({ ...msg, action });
+                        }
+                    } catch {
+                        // ignore invalid datachannel payloads
+                    }
+                };
+
+                dc.onclose = cleanupPeer;
+            };
+
+            try {
+                await pc.setRemoteDescription(offer.sdp);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                await new Promise<void>((resolve) => {
+                    if (pc.iceGatheringState === "complete") {
+                        resolve();
+                        return;
+                    }
+                    const timeout = window.setTimeout(resolve, 1400);
+                    const onState = () => {
+                        if (pc.iceGatheringState === "complete") {
+                            window.clearTimeout(timeout);
+                            pc.removeEventListener("icegatheringstatechange", onState);
+                            resolve();
+                        }
+                    };
+                    pc.addEventListener("icegatheringstatechange", onState);
+                });
+
+                await fetch(signalEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "host-answer",
+                        roomCode: cfg.roomCode,
+                        hostSecret: cfg.hostSecret,
+                        sessionId: offer.sessionId,
+                        status: "ok",
+                        sdp: pc.localDescription,
+                    }),
+                });
+            } catch {
+                cleanupPeer();
+            }
+        };
+
+        const pollSignal = async () => {
+            if (disposed) return;
+            const cfg = relayConfigRef.current;
+            try {
+                const res = await fetch(signalEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "host-poll",
+                        roomCode: cfg.roomCode,
+                        hostSecret: cfg.hostSecret,
+                        deviceId: `lir-${cfg.roomCode}`,
+                        deviceName: cfg.deviceName || "Lir Masaüstü",
+                        requirePin: cfg.requirePin,
+                        soundCount: remoteActionsRef.current.sounds.length,
+                    }),
+                });
+                if (!res.ok) {
+                    if (!disposed) setRtcSignalStatus("error");
+                } else {
+                    if (!disposed) setRtcSignalStatus("connected");
+                    const data = (await res.json()) as {
+                        offers?: Array<{
+                            sessionId: string;
+                            deviceName?: string;
+                            pin?: string;
+                            pairToken?: string;
+                            sdp: RTCSessionDescriptionInit;
+                        }>;
+                    };
+                    if (Array.isArray(data.offers)) {
+                        for (const offer of data.offers) {
+                            void handleIncomingOffer(offer);
+                        }
+                    }
+                }
+            } catch {
+                if (!disposed) setRtcSignalStatus("error");
+            } finally {
+                if (!disposed) {
+                    pollTimer = window.setTimeout(() => void pollSignal(), 2800);
+                }
+            }
+        };
+
+        void pollSignal();
+
+        return () => {
+            disposed = true;
+            if (pollTimer) window.clearTimeout(pollTimer);
+            for (const entry of rtcPeersRef.current.values()) {
+                try {
+                    entry.dc?.close();
+                    entry.pc.close();
+                } catch {
+                    // ignore
+                }
+            }
+            rtcPeersRef.current.clear();
+            setRtcClients([]);
+        };
+    }, [
+        relayBridgeConfig.enabled,
+        relayBridgeConfig.relayUrl,
+        relayBridgeConfig.roomCode,
+        relayBridgeConfig.hostSecret,
+        executeRemoteCommand,
+    ]);
+
+    // 2) Optional WSS Relay (active when relayUrl hosts a persistent Node relay server)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (!relayBridgeConfig.enabled) {
+            relayWsRef.current?.close();
+            relayWsRef.current = null;
+            setWsRelayStatus("disabled");
+            setWsRelayClients([]);
+            return;
+        }
+
+        let wsUrl = "";
+        let healthUrl = "";
+        try {
+            const raw = relayBridgeConfig.relayUrl.trim() || DEFAULT_RELAY_URL;
+            const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+            const parsed = new URL(normalized);
+            const wsProto = parsed.protocol === "https:" ? "wss:" : "ws:";
+            const params = new URLSearchParams({
+                role: "host",
+                room: relayBridgeConfig.roomCode,
+                secret: relayBridgeConfig.hostSecret,
+                deviceId: `lir-${relayBridgeConfig.roomCode}`,
+                deviceName: relayBridgeConfig.deviceName || "Lir Masaüstü",
+            });
+            wsUrl = `${wsProto}//${parsed.host}/ws/relay?${params.toString()}`;
+            healthUrl = `${parsed.origin}/api/relay/health`;
+        } catch {
+            setWsRelayStatus("error");
+            return;
+        }
+
+        let disposed = false;
+        let reconnectTimer: number | null = null;
+
+        const connectRelay = async () => {
+            if (disposed) return;
+            setWsRelayStatus("connecting");
+
+            // Avoid spurious WebSocket handshake errors on Vercel static/serverless deployments
+            try {
+                const probe = await fetch(healthUrl);
+                const data = probe.ok ? ((await probe.json().catch(() => null)) as { ok?: boolean } | null) : null;
+                if (!data?.ok) {
+                    if (!disposed) setWsRelayStatus("disabled");
+                    return;
+                }
+            } catch {
+                if (!disposed) setWsRelayStatus("disabled");
+                return;
+            }
+
+            if (disposed) return;
+
+            try {
+                const ws = new WebSocket(wsUrl);
+                relayWsRef.current = ws;
+
+                ws.onopen = () => {
+                    if (disposed) {
+                        ws.close();
+                        return;
+                    }
+                    setWsRelayStatus("connected");
+                    const cfg = relayConfigRef.current;
+                    ws.send(
+                        JSON.stringify({
+                            type: "host:config",
+                            deviceId: `lir-${cfg.roomCode}`,
+                            deviceName: cfg.deviceName || "Lir Masaüstü",
+                            requirePin: cfg.requirePin,
+                            pin: cfg.pin,
+                        }),
+                    );
+                    ws.send(
+                        JSON.stringify({
+                            type: "host:sync",
+                            snapshot: snapshotRef.current(),
+                        }),
+                    );
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+                        if (msg.type === "ping") {
+                            if (ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ type: "pong", ts: Date.now() }));
+                            }
+                            return;
+                        }
+                        if (msg.type === "host:clients" && Array.isArray(msg.connectedClients)) {
+                            setWsRelayClients(msg.connectedClients as RemoteConnectedClient[]);
+                            return;
+                        }
+                        if (msg.type === "remote:command") {
+                            executeRemoteCommand(msg);
+                        }
+                    } catch {
+                        // ignore invalid relay frames
+                    }
+                };
+
+                ws.onclose = () => {
+                    if (relayWsRef.current === ws) {
+                        relayWsRef.current = null;
+                    }
+                    if (!disposed) {
+                        setWsRelayStatus("error");
+                        reconnectTimer = window.setTimeout(() => void connectRelay(), 8000);
+                    }
+                };
+
+                ws.onerror = () => {
+                    if (!disposed) {
+                        setWsRelayStatus("error");
+                    }
+                };
+            } catch {
+                if (!disposed) {
+                    setWsRelayStatus("error");
+                    reconnectTimer = window.setTimeout(() => void connectRelay(), 10000);
+                }
+            }
+        };
+
+        void connectRelay();
+        return () => {
+            disposed = true;
+            if (reconnectTimer) window.clearTimeout(reconnectTimer);
+            try {
+                relayWsRef.current?.close();
+            } catch {
+                // ignore
+            }
+            relayWsRef.current = null;
+        };
+    }, [
+        relayBridgeConfig.enabled,
+        relayBridgeConfig.relayUrl,
+        relayBridgeConfig.roomCode,
+        relayBridgeConfig.hostSecret,
+        executeRemoteCommand,
+    ]);
+
+    useEffect(() => {
+        const relayWs = relayWsRef.current;
+        if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+            relayWs.send(
+                JSON.stringify({
+                    type: "host:config",
+                    deviceId: `lir-${relayBridgeConfig.roomCode}`,
+                    deviceName: relayBridgeConfig.deviceName || "Lir Masaüstü",
+                    requirePin: relayBridgeConfig.requirePin,
+                    pin: relayBridgeConfig.pin,
+                }),
+            );
+        }
+    }, [
+        relayBridgeConfig.deviceName,
+        relayBridgeConfig.requirePin,
+        relayBridgeConfig.pin,
+        relayBridgeConfig.roomCode,
+    ]);
+
+    useEffect(() => {
+        const snapshot = buildRemoteSnapshot();
+        const payload = JSON.stringify({
+            type: "host:sync",
+            snapshot,
+        });
+        const ws = remoteWsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(payload);
+        }
+        const relayWs = relayWsRef.current;
+        if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+            relayWs.send(payload);
+        }
+        const rtcPayload = JSON.stringify({
+            type: "state:update",
+            roomCode: relayBridgeConfig.roomCode,
+            deviceId: `lir-${relayBridgeConfig.roomCode}`,
+            deviceName: relayBridgeConfig.deviceName || "Lir Masaüstü",
+            hostConnected: true,
+            ...snapshot,
+        });
+        for (const entry of rtcPeersRef.current.values()) {
+            if (entry.dc && entry.dc.readyState === "open") {
+                try {
+                    entry.dc.send(rtcPayload);
+                } catch {
+                    // ignore closed channel
+                }
+            }
+        }
+    }, [buildRemoteSnapshot, relayBridgeConfig.roomCode, relayBridgeConfig.deviceName]);
 
     const handleDeleteSound = (soundId: string) => {
         audioEngine.stopSound(soundId);
@@ -1221,6 +2094,14 @@ export default function App() {
                     onOpenVoiceChangerTab={() => setCurrentTab("voice")}
                     activePlayingCount={activePlayingIds.length}
                     onOpenRoutingTab={() => setCurrentTab("routing")}
+                    hotkeyManuallyPaused={hotkeyFilterConfig.manuallyPaused}
+                    hotkeyFilterStatus={electronFilterStatus}
+                    onTogglePauseHotkeys={() =>
+                        setHotkeyFilterConfig((prev) => ({
+                            ...prev,
+                            manuallyPaused: !prev.manuallyPaused,
+                        }))
+                    }
                     backgroundImageEnabled={Boolean(appearance.backgroundImage)}
                     transparency={appearance.headerTransparency}
                     uiStyle={uiStyle}
@@ -1367,6 +2248,9 @@ export default function App() {
                                         </div>
                                     </div>
 
+                                    {/* Announcement Carousel (Koru Store / Lir Mobile) */}
+                                    <KoruBanner />
+
                                     {/* Category Filter Pills */}
                                     <div className="flex flex-wrap items-center gap-1.5">
                                         {CATEGORIES.map((category) => {
@@ -1414,6 +2298,9 @@ export default function App() {
                                                         sound={sound}
                                                         isPlaying={activePlayingIds.includes(
                                                             sound.id,
+                                                        )}
+                                                        playbackTrack={activePlaybackTracks.find(
+                                                            (track) => track.soundId === sound.id,
                                                         )}
                                                         onPlay={handlePlaySound}
                                                         onStop={handleStopSound}
@@ -1554,6 +2441,15 @@ export default function App() {
                                     }
                                     onToggleVoiceEngine={handleToggleVoiceEngine}
                                     onPlaySound={handlePlaySound}
+                                    hotkeyManuallyPaused={hotkeyFilterConfig.manuallyPaused}
+                                    hotkeyFilterStatus={electronFilterStatus}
+                                    onTogglePauseHotkeys={() =>
+                                        setHotkeyFilterConfig((prev) => ({
+                                            ...prev,
+                                            manuallyPaused: !prev.manuallyPaused,
+                                        }))
+                                    }
+                                    onOpenSettingsFilter={() => setCurrentTab("settings")}
                                     isElectron={isElectron}
                                 />
                             )}
@@ -1593,6 +2489,15 @@ export default function App() {
                                         onUiStyleChange={setUiStyle}
                                         appearance={appearance}
                                         onAppearanceChange={handleAppearanceChange}
+                                        hotkeyFilterConfig={hotkeyFilterConfig}
+                                        onHotkeyFilterConfigChange={setHotkeyFilterConfig}
+                                        hotkeyFilterStatus={electronFilterStatus}
+                                        remoteHostConnected={remoteHostConnected}
+                                        remoteClients={remoteClients}
+                                        relayBridgeConfig={relayBridgeConfig}
+                                        onRelayBridgeConfigChange={setRelayBridgeConfig}
+                                        relayBridgeStatus={relayBridgeStatus}
+                                        relayClients={relayClients}
                                     />
                                     <Footer />
                                 </div>
@@ -1602,6 +2507,26 @@ export default function App() {
                         </motion.div>
                     </AnimatePresence>
                 </main>
+
+                {/* Live Playback Bar */}
+                <PlaybackBar
+                    sounds={sounds}
+                    activeTracks={activePlaybackTracks}
+                    masterVolume={routingConfig.masterVolume}
+                    stopAllHotkey={routingConfig.stopAllHotkey}
+                    onMasterVolumeChange={(volume) =>
+                        setRoutingConfig((prev) => ({
+                            ...prev,
+                            masterVolume: volume,
+                        }))
+                    }
+                    onStopSound={handleStopSound}
+                    onStopAll={handleStopAll}
+                    onToggleLoop={handleToggleLoop}
+                    backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                    transparency={appearance.headerTransparency}
+                    uiStyle={uiStyle}
+                />
             </div>
 
             {/* Floating Hotkey Indicator */}
@@ -1612,7 +2537,9 @@ export default function App() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.94 }}
                         transition={{ type: "spring", stiffness: 460, damping: 30 }}
-                        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs"
+                        className={`fixed right-4 z-50 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs transition-all ${
+                            activePlaybackTracks.length > 0 ? "bottom-24" : "bottom-4"
+                        }`}
                     >
                         <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
                         <span className="text-[var(--text-secondary)]">

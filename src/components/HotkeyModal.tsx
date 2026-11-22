@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Keyboard, X, Check, AlertCircle } from "lucide-react";
 import { HotkeyTarget } from "../types/sound";
 import { useTranslation } from "../i18n";
+import { extractHotkeyFromKeyboardEvent, normalizeHotkey } from "../utils/hotkeys";
 
 export interface ExistingHotkeyBinding {
     targetKey: string;
@@ -23,12 +24,7 @@ const getTargetKey = (t: HotkeyTarget) => {
     return "voice-toggle";
 };
 
-const normalizeShortcutString = (raw: string) =>
-    raw
-        .trim()
-        .toUpperCase()
-        .replace(/^ESCAPE$/, "ESC")
-        .replace(/\bNUMPAD\s+([0-9])\b/g, "NUMPAD$1");
+const normalizeShortcutString = normalizeHotkey;
 
 export function HotkeyModal({
     target,
@@ -69,28 +65,10 @@ export function HotkeyModal({
                 return;
             }
 
-            const modifiers: string[] = [];
-            if (e.ctrlKey) modifiers.push("CTRL");
-            if (e.altKey) modifiers.push("ALT");
-            if (e.shiftKey) modifiers.push("SHIFT");
-
-            let mainKey = e.key.toUpperCase();
-
-            if (e.code.startsWith("F") && !isNaN(parseInt(e.code.slice(1)))) {
-                mainKey = e.code.toUpperCase();
-            } else if (e.code.startsWith("Numpad")) {
-                mainKey = e.code.toUpperCase();
-            } else if (mainKey === " " || e.code === "Space") {
-                mainKey = "SPACE";
-            } else if (["CONTROL", "ALT", "SHIFT", "META"].includes(mainKey)) {
-                return;
+            const combined = extractHotkeyFromKeyboardEvent(e);
+            if (combined) {
+                setCurrentHotkey(combined);
             }
-
-            const combined =
-                modifiers.length > 0
-                    ? `${modifiers.join("+")}+${mainKey}`
-                    : mainKey;
-            setCurrentHotkey(combined);
         };
 
         window.addEventListener("keydown", handleKeyDown, true);

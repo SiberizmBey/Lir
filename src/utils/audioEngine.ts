@@ -1,4 +1,4 @@
-import { SoundItem, VoiceChangerConfig } from '../types/sound';
+import { PlaybackTrackInfo, SoundItem, VoiceChangerConfig } from '../types/sound';
 import { DEFAULT_VOICE_CHANGER_CONFIG } from './voicePresets';
 import { createPitchShifterNode, ensurePitchShifterWorklet } from './pitchWorklet';
 
@@ -68,13 +68,16 @@ class AudioEngine {
 
   // Active playing sources & concurrency protection
   private activeSources: Map<string, AudioBufferSourceNode[]> = new Map();
+  private activeSoundGains: Map<string, GainNode[]> = new Map();
   private allLiveSources: Set<AudioBufferSourceNode> = new Set();
   private pendingTokens: Map<string, number> = new Map();
   private currentPlayInstance: Map<string, number> = new Map();
   private tokenCounter: number = 0;
   private audioBuffers: Map<string, AudioBuffer> = new Map();
   private onPlaybackStateChange?: (playingIds: string[]) => void;
+  private onPlaybackDetailChange?: (tracks: PlaybackTrackInfo[]) => void;
   private currentlyPlaying: Set<string> = new Set();
+  private playbackMeta: Map<string, PlaybackTrackInfo> = new Map();
 
   private primaryDeviceId: string = 'default';
   private secondaryDeviceId: string = 'default';
@@ -1328,6 +1331,51 @@ class AudioEngine {
     this.onPlaybackStateChange = callback;
   }
 
+  public setPlaybackDetailListener(callback: (tracks: PlaybackTrackInfo[]) => void) {
+    this.onPlaybackDetailChange = callback;
+  }
+
+  public getPlaybackTracks(): PlaybackTrackInfo[] {
+    return Array.from(this.playbackMeta.values());
+  }
+
+  private emitPlaybackListeners() {
+    if (this.onPlaybackStateChange) {
+      this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
+    }
+    if (this.onPlaybackDetailChange) {
+      this.onPlaybackDetailChange(Array.from(this.playbackMeta.values()));
+    }
+  }
+
+  public updateSoundLoop(soundId: string, loop: boolean) {
+    const sources = this.activeSources.get(soundId);
+    if (sources) {
+      sources.forEach((src) => {
+        src.loop = loop;
+      });
+    }
+    const meta = this.playbackMeta.get(soundId);
+    if (meta) {
+      this.playbackMeta.set(soundId, { ...meta, loop });
+      this.emitPlaybackListeners();
+    }
+  }
+
+  public updateSoundVolume(soundId: string, volume: number) {
+    const clamped = Math.max(0, Math.min(1, volume));
+    const gains = this.activeSoundGains.get(soundId);
+    if (gains) {
+      gains.forEach((g) => {
+        try {
+          g.gain.setValueAtTime(clamped, g.context.currentTime);
+        } catch {
+          g.gain.value = clamped;
+        }
+      });
+    }
+  }
+
   public setMasterVolume(volume: number) {
     this.masterVolume = Math.max(0, Math.min(1, volume));
     this.initContexts();
@@ -1425,6 +1473,7 @@ class AudioEngine {
 
     const soundVolume = sound.volume ?? 1;
     const sourcesToTrack: AudioBufferSourceNode[] = [];
+    const gainsToTrack: GainNode[] = [];
     const instanceId = requestToken;
 
     // 1. Play on Cable Context (Discord / Stream mixer)
@@ -1439,6 +1488,7 @@ class AudioEngine {
     cableSoundGain.connect(this.cableEffectsGain);
 
     sourcesToTrack.push(cableSource);
+    gainsToTrack.push(cableSoundGain);
     this.allLiveSources.add(cableSource);
 
     // 2. Play on Monitor Context if dual output is enabled (User's Headphones)
@@ -1464,6 +1514,7 @@ class AudioEngine {
         monitorSoundGain.connect(this.monitorEffectsGain);
 
         sourcesToTrack.push(monitorSource);
+        gainsToTrack.push(monitorSoundGain);
         this.allLiveSources.add(monitorSource);
 
         monitorSource.onended = () => {
@@ -1479,25 +1530,29 @@ class AudioEngine {
         // Only remove playing state if this exact instance is the active one!
         if (this.currentPlayInstance.get(sound.id) === instanceId) {
           this.activeSources.delete(sound.id);
+          this.activeSoundGains.delete(sound.id);
           this.currentlyPlaying.delete(sound.id);
+          this.playbackMeta.delete(sound.id);
           this.currentPlayInstance.delete(sound.id);
-          if (this.onPlaybackStateChange) {
-            this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
-          }
+          this.emitPlaybackListeners();
         }
         this.checkAndApplyMicDucking();
       };
 
       this.activeSources.set(sound.id, sourcesToTrack);
+      this.activeSoundGains.set(sound.id, gainsToTrack);
       this.currentPlayInstance.set(sound.id, instanceId);
       this.currentlyPlaying.add(sound.id);
+      this.playbackMeta.set(sound.id, {
+        soundId: sound.id,
+        startedAt: Date.now(),
+        duration: buffer.duration || sound.duration || 1,
+        loop: !!sound.loop,
+      });
 
       // Apply mic ducking immediately when playback starts to eradicate acoustic echo
       this.checkAndApplyMicDucking();
-
-      if (this.onPlaybackStateChange) {
-        this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
-      }
+      this.emitPlaybackListeners();
 
       try {
         cableSource.start(0);
@@ -1526,11 +1581,11 @@ class AudioEngine {
       });
       this.activeSources.delete(soundId);
     }
+    this.activeSoundGains.delete(soundId);
     this.currentlyPlaying.delete(soundId);
+    this.playbackMeta.delete(soundId);
     this.checkAndApplyMicDucking();
-    if (this.onPlaybackStateChange) {
-      this.onPlaybackStateChange(Array.from(this.currentlyPlaying));
-    }
+    this.emitPlaybackListeners();
   }
 
   public stopAll() {
@@ -1547,6 +1602,7 @@ class AudioEngine {
       });
     });
     this.activeSources.clear();
+    this.activeSoundGains.clear();
 
     // Universal failsafe: Terminate and disconnect all live sources
     this.allLiveSources.forEach((source) => {
@@ -1559,10 +1615,9 @@ class AudioEngine {
     this.allLiveSources.clear();
 
     this.currentlyPlaying.clear();
+    this.playbackMeta.clear();
     this.checkAndApplyMicDucking();
-    if (this.onPlaybackStateChange) {
-      this.onPlaybackStateChange([]);
-    }
+    this.emitPlaybackListeners();
   }
 
   public isPlaying(soundId: string): boolean {

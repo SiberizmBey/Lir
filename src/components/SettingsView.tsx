@@ -19,6 +19,16 @@ import {
     Moon,
     Sun,
     Languages,
+    ShieldAlert,
+    Plus,
+    Search,
+    Smartphone,
+    Wifi,
+    Copy,
+    KeyRound,
+    X,
+    Globe,
+    Link2,
 } from "lucide-react";
 import { useTranslation } from "../i18n";
 import {
@@ -27,12 +37,20 @@ import {
     AppTheme,
     UIStyle,
     DiscordStatus,
+    HotkeyFilterConfig,
+    HotkeyFilterStatus,
+    InstalledAppInfo,
+    RemoteConnectedClient,
+    RemoteHostStatus,
+    RelayBridgeConfig,
+    RelayBridgeConnectionState,
 } from "../types/sound";
 import {
     ACCENT_PRESETS,
     DEFAULT_ACCENT_COLOR,
     normalizeHexColor,
 } from "../utils/accentColors";
+import { extractHotkeyFromKeyboardEvent } from "../utils/hotkeys";
 
 interface SettingsViewProps {
     routingConfig: AudioRoutingConfig;
@@ -51,6 +69,15 @@ interface SettingsViewProps {
     onUiStyleChange: (style: UIStyle) => void;
     appearance: AppearanceSettings;
     onAppearanceChange: (appearance: AppearanceSettings) => Promise<boolean>;
+    hotkeyFilterConfig: HotkeyFilterConfig;
+    onHotkeyFilterConfigChange: (config: HotkeyFilterConfig) => void;
+    hotkeyFilterStatus: HotkeyFilterStatus;
+    remoteHostConnected: boolean;
+    remoteClients: RemoteConnectedClient[];
+    relayBridgeConfig: RelayBridgeConfig;
+    onRelayBridgeConfigChange: (config: RelayBridgeConfig) => void;
+    relayBridgeStatus: RelayBridgeConnectionState;
+    relayClients: RemoteConnectedClient[];
 }
 
 const MAX_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
@@ -134,6 +161,15 @@ export function SettingsView({
     onUiStyleChange,
     appearance,
     onAppearanceChange,
+    hotkeyFilterConfig,
+    onHotkeyFilterConfigChange,
+    hotkeyFilterStatus,
+    remoteHostConnected,
+    remoteClients,
+    relayBridgeConfig,
+    onRelayBridgeConfigChange,
+    relayBridgeStatus,
+    relayClients,
 }: SettingsViewProps) {
     const { t, language, setLanguage, languages } = useTranslation();
     const [feedbackMessage, setFeedbackMessage] = useState<{
@@ -143,6 +179,128 @@ export function SettingsView({
     const [isPreparingBackground, setIsPreparingBackground] = useState(false);
     const [isCapturingStopHotkey, setIsCapturingStopHotkey] = useState(false);
 
+    // Hotkey App Filter states
+    const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
+    const [installedApps, setInstalledApps] = useState<InstalledAppInfo[]>([]);
+    const [isLoadingApps, setIsLoadingApps] = useState(false);
+    const [appSearchQuery, setAppSearchQuery] = useState("");
+    const [manualRuleName, setManualRuleName] = useState("");
+    const [manualRuleProcess, setManualRuleProcess] = useState("");
+    const [manualRuleTitle, setManualRuleTitle] = useState("");
+
+    // Remote Companion LAN Bridge states
+    const [remoteStatus, setRemoteStatus] = useState<RemoteHostStatus | null>(null);
+    const [remoteDeviceNameDraft, setRemoteDeviceNameDraft] = useState("");
+    const [isUpdatingRemote, setIsUpdatingRemote] = useState(false);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    const loadRemoteHostStatus = async () => {
+        try {
+            const res = await fetch("/api/remote/host-status");
+            if (!res.ok) return;
+            const data = (await res.json()) as RemoteHostStatus;
+            setRemoteStatus(data);
+            setRemoteDeviceNameDraft((prev) => prev || data.deviceName);
+        } catch {
+            // Backend remote API may not be running in pure static mode
+        }
+    };
+
+    useEffect(() => {
+        void loadRemoteHostStatus();
+    }, [remoteHostConnected]);
+
+    const updateRemoteHostConfig = async (patch: {
+        enabled?: boolean;
+        deviceName?: string;
+        requirePin?: boolean;
+        regeneratePin?: boolean;
+    }) => {
+        setIsUpdatingRemote(true);
+        try {
+            const res = await fetch("/api/remote/host-config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch),
+            });
+            if (res.ok) {
+                const data = (await res.json()) as RemoteHostStatus;
+                setRemoteStatus(data);
+                setRemoteDeviceNameDraft(data.deviceName);
+            }
+        } catch (err) {
+            console.warn("Remote host config update failed:", err);
+        } finally {
+            setIsUpdatingRemote(false);
+        }
+    };
+
+    const handleCopyText = (key: string, value: string) => {
+        void navigator.clipboard?.writeText(value);
+        setCopiedField(key);
+        window.setTimeout(() => {
+            setCopiedField((cur) => (cur === key ? null : cur));
+        }, 1600);
+    };
+
+    const loadSystemApps = async () => {
+        setIsLoadingApps(true);
+        try {
+            if (isElectron && window.electronAPI?.getInstalledApps) {
+                const list = await window.electronAPI.getInstalledApps();
+                setInstalledApps(Array.isArray(list) ? list : []);
+            } else {
+                const res = await fetch("/api/system/apps");
+                if (res.ok) {
+                    const data = (await res.json()) as { apps?: InstalledAppInfo[] };
+                    setInstalledApps(Array.isArray(data.apps) ? data.apps : []);
+                }
+            }
+        } catch (err) {
+            console.warn("System apps scan failed:", err);
+        } finally {
+            setIsLoadingApps(false);
+        }
+    };
+
+    const handleOpenAppsModal = () => {
+        setIsAppsModalOpen(true);
+        void loadSystemApps();
+    };
+
+    const handleAddAppRule = (
+        name: string,
+        processName: string,
+        titleMatch?: string,
+    ) => {
+        const cleanProc = processName.trim();
+        if (!cleanProc) return;
+        const cleanTitle = titleMatch?.trim() || undefined;
+        const norm = (v: string) => v.trim().toLowerCase().replace(/\.exe$/, "");
+
+        const exists = hotkeyFilterConfig.pausedApps.some(
+            (r) =>
+                norm(r.processName) === norm(cleanProc) &&
+                (r.titleMatch || "").toLowerCase() === (cleanTitle || "").toLowerCase(),
+        );
+        if (exists) return;
+
+        onHotkeyFilterConfigChange({
+            ...hotkeyFilterConfig,
+            pausedApps: [
+                {
+                    id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    name: name.trim() || cleanProc,
+                    processName: cleanProc,
+                    titleMatch: cleanTitle,
+                    enabled: true,
+                    addedAt: Date.now(),
+                },
+                ...hotkeyFilterConfig.pausedApps,
+            ],
+        });
+    };
+
     useEffect(() => {
         if (!isCapturingStopHotkey) return;
 
@@ -150,32 +308,9 @@ export function SettingsView({
             event.preventDefault();
             event.stopPropagation();
 
-            const key = event.key.toUpperCase();
-            if (["CONTROL", "ALT", "SHIFT", "META"].includes(key)) return;
+            const hotkey = extractHotkeyFromKeyboardEvent(event);
+            if (!hotkey) return;
 
-            const modifiers: string[] = [];
-            if (event.ctrlKey) modifiers.push("CTRL");
-            if (event.altKey) modifiers.push("ALT");
-            if (event.shiftKey) modifiers.push("SHIFT");
-
-            let mainKey = key;
-            if (
-                event.code.startsWith("F") &&
-                !Number.isNaN(Number.parseInt(event.code.slice(1), 10))
-            ) {
-                mainKey = event.code.toUpperCase();
-            } else if (event.code.startsWith("Numpad")) {
-                mainKey = event.code.toUpperCase();
-            } else if (key === " " || event.code === "Space") {
-                mainKey = "SPACE";
-            } else if (key === "ESCAPE") {
-                mainKey = "ESC";
-            }
-
-            const hotkey =
-                modifiers.length > 0
-                    ? `${modifiers.join("+")}+${mainKey}`
-                    : mainKey;
             onRoutingConfigChange({ ...routingConfig, stopAllHotkey: hotkey });
             setIsCapturingStopHotkey(false);
             void onStopAllHotkeyCaptureChange(false);
@@ -1027,6 +1162,929 @@ export function SettingsView({
                     </div>
                 </div>
             </motion.section>
+
+            {/* 5. APP HOTKEY FILTER */}
+            <motion.section
+                {...sectionTransition(0.16)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-5"
+            >
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border-subtle)]">
+                    <div className="flex items-center gap-2.5">
+                        <ShieldAlert className="w-4 h-4 text-[var(--accent-text)]" />
+                        <div>
+                            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                                {t("hotkeyFilter.sectionTitle")}
+                            </h2>
+                            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                {t("hotkeyFilter.sectionDesc")}
+                            </p>
+                        </div>
+                    </div>
+
+                    <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={handleOpenAppsModal}
+                        className="btn-accent flex items-center gap-1.5 px-3.5 py-2 ui-control text-xs font-semibold cursor-pointer"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{t("hotkeyFilter.browseAppsBtn")}</span>
+                    </motion.button>
+                </div>
+
+                {/* Live Filter Status Banner */}
+                <div
+                    className={`px-3.5 py-2.5 ui-inner border text-xs flex flex-wrap items-center justify-between gap-2 ${
+                        hotkeyFilterConfig.manuallyPaused || hotkeyFilterStatus.paused
+                            ? "bg-amber-950/30 border-amber-700/60 text-amber-200"
+                            : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                    }`}
+                >
+                    <span>
+                        {hotkeyFilterConfig.manuallyPaused
+                            ? t("hotkeyFilter.statusPausedManual")
+                            : hotkeyFilterStatus.paused
+                              ? t("hotkeyFilter.statusPausedByApp", {
+                                    app: hotkeyFilterStatus.activeProcess || "",
+                                    rule: hotkeyFilterStatus.matchedRuleName || "",
+                                })
+                              : t("hotkeyFilter.statusWatching", {
+                                    count: hotkeyFilterConfig.pausedApps.filter((r) => r.enabled).length,
+                                })}
+                    </span>
+                    {!isElectron && (
+                        <span className="text-[11px] text-[var(--text-muted)]">
+                            {t("hotkeyFilter.webDesktopNotice")}
+                        </span>
+                    )}
+                </div>
+
+                {/* Quick Filter Switches */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {(
+                        [
+                            {
+                                key: "enabled",
+                                title: t("hotkeyFilter.enableFilterTitle"),
+                                desc: t("hotkeyFilter.enableFilterDesc"),
+                                value: hotkeyFilterConfig.enabled,
+                            },
+                            {
+                                key: "manuallyPaused",
+                                title: t("hotkeyFilter.manualPauseTitle"),
+                                desc: t("hotkeyFilter.manualPauseDesc"),
+                                value: hotkeyFilterConfig.manuallyPaused,
+                            },
+                            {
+                                key: "pauseInTextInputs",
+                                title: t("hotkeyFilter.pauseInInputsTitle"),
+                                desc: t("hotkeyFilter.pauseInInputsDesc"),
+                                value: hotkeyFilterConfig.pauseInTextInputs,
+                            },
+                        ] as const
+                    ).map((item) => (
+                        <div
+                            key={item.key}
+                            className="p-3.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-start justify-between gap-3"
+                        >
+                            <div>
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {item.title}
+                                </p>
+                                <p className="text-[11px] text-[var(--text-secondary)] mt-1 leading-relaxed">
+                                    {item.desc}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={item.value}
+                                onClick={() =>
+                                    onHotkeyFilterConfigChange({
+                                        ...hotkeyFilterConfig,
+                                        [item.key]: !item.value,
+                                    })
+                                }
+                                className={`relative shrink-0 h-6 w-11 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                    item.value
+                                        ? "bg-[var(--accent)] justify-end"
+                                        : "bg-zinc-700 justify-start"
+                                }`}
+                            >
+                                <motion.span
+                                    layout
+                                    transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                                    className="h-5 w-5 ui-control bg-white"
+                                />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Manual Rule Form */}
+                <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-3">
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                        {t("hotkeyFilter.addRuleTitle")}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                        <input
+                            type="text"
+                            value={manualRuleName}
+                            onChange={(e) => setManualRuleName(e.target.value)}
+                            placeholder={t("hotkeyFilter.ruleNamePlaceholder")}
+                            className="ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-border)]"
+                        />
+                        <input
+                            type="text"
+                            value={manualRuleProcess}
+                            onChange={(e) => setManualRuleProcess(e.target.value)}
+                            placeholder={t("hotkeyFilter.processPlaceholder")}
+                            className="ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-border)]"
+                        />
+                        <input
+                            type="text"
+                            value={manualRuleTitle}
+                            onChange={(e) => setManualRuleTitle(e.target.value)}
+                            placeholder={t("hotkeyFilter.titleMatchPlaceholder")}
+                            className="ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-border)]"
+                        />
+                        <button
+                            type="button"
+                            disabled={!manualRuleProcess.trim()}
+                            onClick={() => {
+                                handleAddAppRule(
+                                    manualRuleName || manualRuleProcess,
+                                    manualRuleProcess,
+                                    manualRuleTitle,
+                                );
+                                setManualRuleName("");
+                                setManualRuleProcess("");
+                                setManualRuleTitle("");
+                            }}
+                            className="btn-accent px-3 py-2 ui-control text-xs font-semibold disabled:opacity-40 cursor-pointer"
+                        >
+                            {t("hotkeyFilter.addRuleBtn")}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Paused Apps Rules List */}
+                <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                        {t("hotkeyFilter.rulesListTitle", {
+                            count: hotkeyFilterConfig.pausedApps.length,
+                        })}
+                    </p>
+                    {hotkeyFilterConfig.pausedApps.length === 0 ? (
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-dashed border-[var(--border-subtle)] text-xs text-[var(--text-muted)] text-center">
+                            {t("hotkeyFilter.noRules")}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            {hotkeyFilterConfig.pausedApps.map((rule) => (
+                                <div
+                                    key={rule.id}
+                                    className="px-3.5 py-2.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                                            {rule.name}
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-[var(--text-muted)] font-mono">
+                                            <span className="truncate">{rule.processName}</span>
+                                            <span>·</span>
+                                            <span className="font-sans">
+                                                {rule.titleMatch
+                                                    ? `"${rule.titleMatch}"`
+                                                    : t("hotkeyFilter.allTitleMatch")}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={rule.enabled}
+                                            onClick={() =>
+                                                onHotkeyFilterConfigChange({
+                                                    ...hotkeyFilterConfig,
+                                                    pausedApps: hotkeyFilterConfig.pausedApps.map((r) =>
+                                                        r.id === rule.id
+                                                            ? { ...r, enabled: !r.enabled }
+                                                            : r,
+                                                    ),
+                                                })
+                                            }
+                                            className={`relative h-5 w-9 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                                rule.enabled
+                                                    ? "bg-[var(--accent)] justify-end"
+                                                    : "bg-zinc-700 justify-start"
+                                            }`}
+                                        >
+                                            <span className="h-4 w-4 ui-control bg-white" />
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onHotkeyFilterConfigChange({
+                                                    ...hotkeyFilterConfig,
+                                                    pausedApps: hotkeyFilterConfig.pausedApps.filter(
+                                                        (r) => r.id !== rule.id,
+                                                    ),
+                                                })
+                                            }
+                                            className="p-1.5 ui-control text-[var(--text-muted)] hover:text-rose-400 hover:bg-[var(--bg-card-hover)] cursor-pointer"
+                                            title={t("common.remove")}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </motion.section>
+
+            {/* 6. ANDROID COMPANION & LAN BRIDGE */}
+            <motion.section
+                {...sectionTransition(0.18)}
+                className="app-card ui-card border border-[var(--border-card)] p-5 sm:p-6 flex flex-col gap-5"
+            >
+                {/* Android Companion Bridge (Web Relay + Local LAN) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border-subtle)]">
+                    <div className="flex items-center gap-2.5">
+                        <Globe className="w-4 h-4 text-[var(--accent-text)]" />
+                        <div>
+                            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                                {t("remoteControl.relayTitle")}
+                            </h2>
+                            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                {t("remoteControl.relayDesc")}
+                            </p>
+                        </div>
+                    </div>
+
+                    <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 ui-control text-[11px] font-mono border ${
+                            relayBridgeStatus === "connected"
+                                ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                : relayBridgeStatus === "error"
+                                  ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                                  : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                        }`}
+                    >
+                        <Wifi className="w-3 h-3" />
+                        <span>
+                            {relayBridgeStatus === "connected"
+                                ? t("remoteControl.relayStatusConnected")
+                                : relayBridgeStatus === "connecting"
+                                  ? t("remoteControl.relayStatusConnecting")
+                                  : relayBridgeStatus === "error"
+                                    ? t("remoteControl.relayStatusError")
+                                    : t("remoteControl.relayStatusDisabled")}
+                        </span>
+                    </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.relayTitle")}
+                                </p>
+                                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 font-mono">
+                                    {relayBridgeConfig.relayUrl}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={relayBridgeConfig.enabled}
+                                onClick={() =>
+                                    onRelayBridgeConfigChange({
+                                        ...relayBridgeConfig,
+                                        enabled: !relayBridgeConfig.enabled,
+                                    })
+                                }
+                                className={`relative shrink-0 h-6 w-11 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                    relayBridgeConfig.enabled
+                                        ? "bg-[var(--accent)] justify-end"
+                                        : "bg-zinc-700 justify-start"
+                                }`}
+                            >
+                                <span className="h-5 w-5 ui-control bg-white" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.requirePinTitle")}
+                                </p>
+                                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                                    {t("remoteControl.requirePinDesc")}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={relayBridgeConfig.requirePin}
+                                onClick={() =>
+                                    onRelayBridgeConfigChange({
+                                        ...relayBridgeConfig,
+                                        requirePin: !relayBridgeConfig.requirePin,
+                                    })
+                                }
+                                className={`relative shrink-0 h-6 w-11 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                    relayBridgeConfig.requirePin
+                                        ? "bg-[var(--accent)] justify-end"
+                                        : "bg-zinc-700 justify-start"
+                                }`}
+                            >
+                                <span className="h-5 w-5 ui-control bg-white" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Relay Room Code */}
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.relayRoomCodeLabel")}
+                                </p>
+                                <p className="mt-1 text-xl font-mono font-bold tracking-[0.22em] text-[var(--accent-text)]">
+                                    {relayBridgeConfig.roomCode}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        handleCopyText("relay-code", relayBridgeConfig.roomCode)
+                                    }
+                                    className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>
+                                        {copiedField === "relay-code"
+                                            ? t("remoteControl.copied")
+                                            : t("remoteControl.relayCopyCode")}
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+                                        let nextCode = "";
+                                        for (let i = 0; i < 6; i += 1) {
+                                            nextCode +=
+                                                alphabet[Math.floor(Math.random() * alphabet.length)];
+                                        }
+                                        onRelayBridgeConfigChange({
+                                            ...relayBridgeConfig,
+                                            roomCode: nextCode,
+                                        });
+                                    }}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                    title={t("remoteControl.relayNewCode")}
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Relay 6-Digit PIN */}
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                                    <KeyRound className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                                    <span>{t("remoteControl.pairingPinLabel")}</span>
+                                </p>
+                                <p className="mt-1 text-xl font-mono font-bold tracking-[0.22em] text-[var(--accent-text)]">
+                                    {relayBridgeConfig.pin}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopyText("relay-pin", relayBridgeConfig.pin)}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>
+                                        {copiedField === "relay-pin"
+                                            ? t("remoteControl.copied")
+                                            : t("remoteControl.copyPin")}
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onRelayBridgeConfigChange({
+                                            ...relayBridgeConfig,
+                                            pin: String(Math.floor(100000 + Math.random() * 900000)),
+                                        })
+                                    }
+                                    className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                    title={t("remoteControl.regeneratePin")}
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Quick Mobile URL + Host Settings */}
+                    {(() => {
+                        const base = relayBridgeConfig.relayUrl.trim().replace(/\/+$/, "") || "https://lirandroid.anticvalley.com.tr";
+                        const quickUrl = relayBridgeConfig.requirePin
+                            ? `${base}/?room=${encodeURIComponent(relayBridgeConfig.roomCode)}&pin=${encodeURIComponent(relayBridgeConfig.pin)}`
+                            : `${base}/?room=${encodeURIComponent(relayBridgeConfig.roomCode)}`;
+                        return (
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                                        <Link2 className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                                        <span>{t("remoteControl.relayQuickLinkLabel")}</span>
+                                    </p>
+                                    <p className="mt-1 text-xs font-mono text-[var(--text-secondary)] truncate">
+                                        {quickUrl}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopyText("relay-link", quickUrl)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] shrink-0 cursor-pointer"
+                                >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>
+                                        {copiedField === "relay-link"
+                                            ? t("remoteControl.copied")
+                                            : t("remoteControl.relayCopyLink")}
+                                    </span>
+                                </button>
+                            </div>
+                        );
+                    })()}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-[var(--text-primary)]">
+                                {t("remoteControl.deviceNameLabel")}
+                            </label>
+                            <input
+                                type="text"
+                                value={relayBridgeConfig.deviceName}
+                                onChange={(e) =>
+                                    onRelayBridgeConfigChange({
+                                        ...relayBridgeConfig,
+                                        deviceName: e.target.value,
+                                    })
+                                }
+                                className="w-full ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-border)]"
+                            />
+                        </div>
+
+                        <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-[var(--text-primary)]">
+                                {t("remoteControl.relayServerUrlLabel")}
+                            </label>
+                            <input
+                                type="url"
+                                value={relayBridgeConfig.relayUrl}
+                                onChange={(e) =>
+                                    onRelayBridgeConfigChange({
+                                        ...relayBridgeConfig,
+                                        relayUrl: e.target.value,
+                                    })
+                                }
+                                className="w-full ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-border)]"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Connected Mobile Clients via Relay */}
+                    <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">
+                            {t("remoteControl.connectedClientsLabel", {
+                                count: relayClients.length,
+                            })}
+                        </p>
+                        {relayClients.length === 0 ? (
+                            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                                {t("remoteControl.relayNoClients")}
+                            </p>
+                        ) : (
+                            <div className="flex flex-col gap-1.5">
+                                {relayClients.map((client) => (
+                                    <div
+                                        key={client.id}
+                                        className="flex items-center justify-between px-2.5 py-1.5 ui-control bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs"
+                                    >
+                                        <span className="font-medium text-[var(--text-primary)]">
+                                            {client.name}
+                                        </span>
+                                        <span className="font-mono text-[11px] text-[var(--accent-text)]">
+                                            {client.ip}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {remoteStatus && (
+                    <div className="pt-4 border-t border-[var(--border-subtle)] flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <Smartphone className="w-4 h-4 text-[var(--accent-text)]" />
+                                <div>
+                                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                                        {t("remoteControl.sectionTitle")}
+                                    </h3>
+                                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                        {t("remoteControl.sectionDesc")}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 ui-control text-[11px] font-mono border ${
+                                    remoteHostConnected
+                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                        : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                                }`}
+                            >
+                                <Wifi className="w-3 h-3" />
+                                <span>
+                                    {remoteHostConnected
+                                        ? t("remoteControl.hostBridgeOnline")
+                                        : t("remoteControl.hostBridgeConnecting")}
+                                </span>
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* Enable LAN Bridge */}
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                        {t("remoteControl.enableBridgeTitle")}
+                                    </p>
+                                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                                        {t("remoteControl.enableBridgeDesc")}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    disabled={isUpdatingRemote}
+                                    aria-checked={remoteStatus.enabled}
+                                    onClick={() =>
+                                        void updateRemoteHostConfig({
+                                            enabled: !remoteStatus.enabled,
+                                        })
+                                    }
+                                    className={`relative shrink-0 h-6 w-11 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                        remoteStatus.enabled
+                                            ? "bg-[var(--accent)] justify-end"
+                                            : "bg-zinc-700 justify-start"
+                                    }`}
+                                >
+                                    <span className="h-5 w-5 ui-control bg-white" />
+                                </button>
+                            </div>
+
+                            {/* Require Pairing PIN */}
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                        {t("remoteControl.requirePinTitle")}
+                                    </p>
+                                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                                        {t("remoteControl.requirePinDesc")}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    disabled={isUpdatingRemote}
+                                    aria-checked={remoteStatus.requirePin}
+                                    onClick={() =>
+                                        void updateRemoteHostConfig({
+                                            requirePin: !remoteStatus.requirePin,
+                                        })
+                                    }
+                                    className={`relative shrink-0 h-6 w-11 p-0.5 flex items-center ui-control transition-colors cursor-pointer ${
+                                        remoteStatus.requirePin
+                                            ? "bg-[var(--accent)] justify-end"
+                                            : "bg-zinc-700 justify-start"
+                                    }`}
+                                >
+                                    <span className="h-5 w-5 ui-control bg-white" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* Device Name */}
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.deviceNameLabel")}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={remoteDeviceNameDraft}
+                                        onChange={(e) => setRemoteDeviceNameDraft(e.target.value)}
+                                        className="flex-1 ui-input border border-[var(--border-input)] bg-[var(--bg-card)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-border)]"
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={
+                                            isUpdatingRemote ||
+                                            !remoteDeviceNameDraft.trim() ||
+                                            remoteDeviceNameDraft.trim() === remoteStatus.deviceName
+                                        }
+                                        onClick={() =>
+                                            void updateRemoteHostConfig({
+                                                deviceName: remoteDeviceNameDraft.trim(),
+                                            })
+                                        }
+                                        className="px-3 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] disabled:opacity-40 cursor-pointer"
+                                    >
+                                        {t("common.save")}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 6-Digit Pairing PIN */}
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                                        <KeyRound className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                                        <span>{t("remoteControl.pairingPinLabel")}</span>
+                                    </p>
+                                    <p className="mt-1 text-xl font-mono font-bold tracking-[0.22em] text-[var(--accent-text)]">
+                                        {remoteStatus.pin}
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCopyText("pin", remoteStatus.pin)}
+                                        className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                    >
+                                        <Copy className="w-3.5 h-3.5" />
+                                        <span>
+                                            {copiedField === "pin"
+                                                ? t("remoteControl.copied")
+                                                : t("remoteControl.copyPin")}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isUpdatingRemote}
+                                        onClick={() =>
+                                            void updateRemoteHostConfig({
+                                                regeneratePin: true,
+                                            })
+                                        }
+                                        className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] cursor-pointer"
+                                        title={t("remoteControl.regeneratePin")}
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* LAN Endpoints & Connected Android Clients */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.lanAddressesLabel")}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {(remoteStatus.lanIps.length > 0
+                                        ? remoteStatus.lanIps
+                                        : ["127.0.0.1"]
+                                    ).map((ip) => {
+                                        const url = `http://${ip}:${remoteStatus.port}`;
+                                        return (
+                                            <button
+                                                key={ip}
+                                                type="button"
+                                                onClick={() => handleCopyText(`ip-${ip}`, url)}
+                                                className="inline-flex items-center gap-1.5 px-2.5 py-1 ui-control bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-[11px] font-mono text-[var(--text-primary)] cursor-pointer"
+                                            >
+                                                <span>{url}</span>
+                                                <Copy className="w-3 h-3 text-[var(--text-muted)]" />
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-[11px] font-mono text-[var(--text-muted)]">
+                                    mDNS: {remoteStatus.mdnsService} · UDP: {remoteStatus.udpDiscoveryPort} · WS: {remoteStatus.wsPath}
+                                </p>
+                            </div>
+
+                            <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex flex-col gap-2">
+                                <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("remoteControl.connectedClientsLabel", {
+                                        count: (remoteClients.length > 0
+                                            ? remoteClients
+                                            : remoteStatus.connectedClients
+                                        ).length,
+                                    })}
+                                </p>
+                                {(remoteClients.length > 0
+                                    ? remoteClients
+                                    : remoteStatus.connectedClients
+                                ).length === 0 ? (
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                                        {t("remoteControl.noClients")}
+                                    </p>
+                                ) : (
+                                    <div className="flex flex-col gap-1.5">
+                                        {(remoteClients.length > 0
+                                            ? remoteClients
+                                            : remoteStatus.connectedClients
+                                        ).map((client) => (
+                                            <div
+                                                key={client.id}
+                                                className="flex items-center justify-between px-2.5 py-1.5 ui-control bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs"
+                                            >
+                                                <span className="font-medium text-[var(--text-primary)]">
+                                                    {client.name}
+                                                </span>
+                                                <span className="font-mono text-[11px] text-[var(--accent-text)]">
+                                                    {client.ip}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </motion.section>
+
+            {/* Installed Apps Picker Modal */}
+            <AnimatePresence>
+                {isAppsModalOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                        style={{ backgroundColor: "var(--modal-backdrop)" }}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                            className="w-full max-w-2xl max-h-[82vh] bg-[var(--bg-modal)] border border-[var(--border-card)] ui-modal p-5 sm:p-6 flex flex-col gap-4"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                                        {t("hotkeyFilter.modalTitle")}
+                                    </h3>
+                                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                        {t("hotkeyFilter.modalSubtitle")}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAppsModalOpen(false)}
+                                    className="p-1.5 ui-control text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input
+                                        type="text"
+                                        value={appSearchQuery}
+                                        onChange={(e) => setAppSearchQuery(e.target.value)}
+                                        placeholder={t("hotkeyFilter.modalSearchPlaceholder")}
+                                        className="w-full pl-9 pr-3 py-2 ui-input border border-[var(--border-input)] bg-[var(--bg-input)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-border)]"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => void loadSystemApps()}
+                                    disabled={isLoadingApps}
+                                    className="flex items-center gap-1.5 px-3 py-2 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] cursor-pointer"
+                                >
+                                    <RefreshCw
+                                        className={`w-3.5 h-3.5 ${isLoadingApps ? "animate-spin" : ""}`}
+                                    />
+                                    <span>{t("hotkeyFilter.refreshApps")}</span>
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto divide-y divide-[var(--border-subtle)] border border-[var(--border-subtle)] ui-inner bg-[var(--bg-inner)]">
+                                {isLoadingApps ? (
+                                    <div className="p-8 text-center text-xs text-[var(--text-secondary)]">
+                                        {t("hotkeyFilter.scanningApps")}
+                                    </div>
+                                ) : (
+                                    (() => {
+                                        const q = appSearchQuery.trim().toLowerCase();
+                                        const filtered = installedApps.filter(
+                                            (app) =>
+                                                !q ||
+                                                app.name.toLowerCase().includes(q) ||
+                                                app.processName.toLowerCase().includes(q) ||
+                                                (app.windowTitle || "").toLowerCase().includes(q),
+                                        );
+                                        if (filtered.length === 0) {
+                                            return (
+                                                <div className="p-8 text-center text-xs text-[var(--text-muted)]">
+                                                    {t("hotkeyFilter.noAppsFound")}
+                                                </div>
+                                            );
+                                        }
+                                        return filtered.map((app) => {
+                                            const norm = (v: string) =>
+                                                v.trim().toLowerCase().replace(/\.exe$/, "");
+                                            const isAdded = hotkeyFilterConfig.pausedApps.some(
+                                                (r) => norm(r.processName) === norm(app.processName),
+                                            );
+                                            const sourceLabel =
+                                                app.source === "running"
+                                                    ? t("hotkeyFilter.sourceRunning")
+                                                    : app.source === "installed"
+                                                      ? t("hotkeyFilter.sourceInstalled")
+                                                      : t("hotkeyFilter.sourceCatalog");
+
+                                            return (
+                                                <div
+                                                    key={`${app.source}-${app.processName}-${app.name}`}
+                                                    className="px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-[var(--bg-card-hover)] transition-colors"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                                                                {app.name}
+                                                            </span>
+                                                            <span
+                                                                className={`text-[10px] font-mono px-1.5 py-0.2 ui-control border ${
+                                                                    app.source === "running"
+                                                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                                                        : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                                                                }`}
+                                                            >
+                                                                {sourceLabel}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+                                                            {app.processName}
+                                                            {app.windowTitle ? ` · ${app.windowTitle}` : ""}
+                                                        </p>
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        disabled={isAdded}
+                                                        onClick={() =>
+                                                            handleAddAppRule(
+                                                                app.name,
+                                                                app.processName,
+                                                            )
+                                                        }
+                                                        className={`px-3 py-1.5 ui-control text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
+                                                            isAdded
+                                                                ? "bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] opacity-75 cursor-default"
+                                                                : "btn-accent"
+                                                        }`}
+                                                    >
+                                                        {isAdded
+                                                            ? t("hotkeyFilter.alreadyAdded")
+                                                            : t("hotkeyFilter.addApp")}
+                                                    </button>
+                                                </div>
+                                            );
+                                        });
+                                    })()
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

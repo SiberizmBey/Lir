@@ -260,6 +260,31 @@ html[data-theme="light"] {
   );
 }
 
+.card-spotlight-beam {
+  background:
+    radial-gradient(ellipse 68% 60% at 86% -6%, rgba(var(--accent-rgb), 0.42) 0%, rgba(var(--accent-rgb), 0.14) 45%, transparent 78%),
+    conic-gradient(from 196deg at 88% -8%, transparent 0deg, rgba(var(--accent-rgb), 0.24) 24deg, rgba(var(--accent-rgb), 0.36) 38deg, rgba(var(--accent-rgb), 0.14) 54deg, transparent 74deg);
+}
+
+.card-spotlight-floor {
+  background: radial-gradient(
+    ellipse 78% 58% at 54% 72%,
+    rgba(var(--accent-rgb), 0.22) 0%,
+    rgba(var(--accent-rgb), 0.06) 52%,
+    transparent 82%
+  );
+}
+
+.card-spotlight-rim {
+  background: linear-gradient(
+    90deg,
+    transparent 8%,
+    rgba(var(--accent-rgb), 0.78) 62%,
+    rgba(var(--accent-rgb), 0.92) 84%,
+    transparent 98%
+  );
+}
+
 .btn-accent {
   background-color: var(--btn-primary-bg);
   color: var(--btn-primary-text);

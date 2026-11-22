@@ -24,5 +24,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["lir-android-remote", "dist", "dist-electron"]
 }

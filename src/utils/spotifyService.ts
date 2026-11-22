@@ -1,4 +1,45 @@
-import { SpotifyTrack, SpotifyUser, SpotifyDevice, SpotifyAuthState } from '../types/sound';
+export interface SpotifyUser {
+  id?: string;
+  display_name?: string;
+  email?: string;
+  images?: Array<{ url: string }>;
+}
+
+export interface SpotifyDevice {
+  id: string | null;
+  is_active: boolean;
+  name: string;
+  type?: string;
+  volume_percent?: number | null;
+}
+
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  uri: string;
+  preview_url?: string | null;
+  duration_ms?: number;
+  artists?: Array<{ name: string }>;
+  album?: {
+    name?: string;
+    images?: Array<{ url: string }>;
+  };
+}
+
+export interface SpotifyAuthState {
+  isConnected: boolean;
+  accessToken: string | null;
+  refreshToken: string | null;
+  expiresAt: number | null;
+  user: SpotifyUser | null;
+  devices: SpotifyDevice[];
+  activeDeviceId: string | null;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  preferConnect: boolean;
+  error: string | null;
+}
 
 const STORAGE_KEY_SPOTIFY = 'lir_spotify_auth_v1';
 const VERIFIER_STORAGE_KEY = 'lir_spotify_code_verifier';

@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('hotkey:triggered', subscription);
     return () => ipcRenderer.removeListener('hotkey:triggered', subscription);
   },
+  getInstalledApps: () => ipcRenderer.invoke('apps:listInstalled'),
+  setHotkeyFilterConfig: (config) => ipcRenderer.invoke('shortcuts:setFilterConfig', config),
+  onHotkeyFilterStatus: (callback) => {
+    const subscription = (_event, status) => callback(status);
+    ipcRenderer.on('shortcuts:filterStatus', subscription);
+    return () => ipcRenderer.removeListener('shortcuts:filterStatus', subscription);
+  },
 
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window:minimize'),

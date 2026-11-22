@@ -1,8 +1,11 @@
 import express from 'express';
+import http from 'node:http';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
 import { handleSpotifyApi } from './server/spotifyApi.ts';
+import { scanSystemApps } from './server/systemApps.ts';
+import { remoteHub } from './server/remoteHub.ts';
 
 dotenv.config();
 
@@ -10,6 +13,17 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
+app.use((_req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  if (_req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 
 // 1. Spotify OAuth callback route (handles both with and without trailing slash)
 app.get(['/auth/callback', '/auth/callback/'], (req, res) => {
@@ -91,22 +105,36 @@ app.get('/api/spotify/config', async (_req, res) => {
   res.status(result.status).json(result.body);
 });
 
+// 5. Installed / Running system applications list (for Hotkey App Filter)
+app.get('/api/system/apps', async (_req, res) => {
+  try {
+    const apps = await scanSystemApps();
+    res.json({ apps });
+  } catch (err) {
+    console.warn('Failed to scan system apps:', err);
+    res.status(500).json({ error: 'Uygulama listesi alınamadı.', apps: [] });
+  }
+});
+
 // Mount Vite middleware for dev or serve dist in production
 async function startServer() {
+  const httpServer = http.createServer(app);
+  remoteHub.attach(app, httpServer, PORT);
+
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve('dist')));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.resolve('dist/index.html'));
     });
   } else {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Lir server listening on http://0.0.0.0:${PORT}`);
   });
 }
@@ -115,3 +143,4 @@ startServer().catch((err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+

@@ -14,11 +14,14 @@ import {
     ChevronDown,
     Check,
     Sliders,
+    Keyboard,
+    Pause,
 } from "lucide-react";
 import { useTranslation } from "../i18n";
 import { AudioVisualizer } from "./AudioVisualizer";
 import {
     AudioRoutingConfig,
+    HotkeyFilterStatus,
     UIStyle,
     VoiceChangerConfig,
 } from "../types/sound";
@@ -37,6 +40,9 @@ interface HeaderProps {
     onOpenVoiceChangerTab: () => void;
     activePlayingCount: number;
     onOpenRoutingTab: () => void;
+    hotkeyManuallyPaused: boolean;
+    hotkeyFilterStatus: HotkeyFilterStatus;
+    onTogglePauseHotkeys: () => void;
     backgroundImageEnabled: boolean;
     transparency: number;
     uiStyle: UIStyle;
@@ -55,6 +61,9 @@ export function Header({
     onOpenVoiceChangerTab,
     activePlayingCount,
     onOpenRoutingTab,
+    hotkeyManuallyPaused,
+    hotkeyFilterStatus,
+    onTogglePauseHotkeys,
     backgroundImageEnabled,
     transparency,
     uiStyle,
@@ -426,6 +435,35 @@ export function Header({
                         </span>
                     </motion.div>
                 </motion.div>
+
+                {/* Quick Pause / Resume Hotkeys */}
+                <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.94 }}
+                    onClick={onTogglePauseHotkeys}
+                    title={
+                        hotkeyManuallyPaused || hotkeyFilterStatus.paused
+                            ? t("header.resumeHotkeysTitle")
+                            : t("header.pauseHotkeysTitle")
+                    }
+                    className={`h-8 flex items-center gap-1.5 px-2.5 ${controlRadius} text-xs font-medium border transition-colors cursor-pointer ${
+                        hotkeyManuallyPaused || hotkeyFilterStatus.paused
+                            ? "bg-amber-950/40 border-amber-700/80 text-amber-300 hover:bg-amber-950/60"
+                            : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-hover)]"
+                    }`}
+                >
+                    {hotkeyManuallyPaused || hotkeyFilterStatus.paused ? (
+                        <Pause className="w-3.5 h-3.5" />
+                    ) : (
+                        <Keyboard className="w-3.5 h-3.5" />
+                    )}
+                    {(hotkeyManuallyPaused || hotkeyFilterStatus.paused) && (
+                        <span className="hidden lg:inline">
+                            {t("header.hotkeysPaused")}
+                        </span>
+                    )}
+                </motion.button>
 
                 {/* Stop All Button */}
                 <motion.button

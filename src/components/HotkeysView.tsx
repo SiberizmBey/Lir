@@ -9,9 +9,12 @@ import {
     AudioWaveform,
     Power,
     Check,
+    Pause,
+    ShieldAlert,
 } from "lucide-react";
-import { SoundItem, VoiceChangerConfig } from "../types/sound";
+import { HotkeyFilterStatus, SoundItem, VoiceChangerConfig } from "../types/sound";
 import { VOICE_PRESETS, VoicePresetDefinition } from "../utils/voicePresets";
+import { normalizeHotkey as normKey } from "../utils/hotkeys";
 import { useTranslation } from "../i18n";
 
 interface HotkeysViewProps {
@@ -24,15 +27,12 @@ interface HotkeysViewProps {
     onActivateVoicePreset: (preset: VoicePresetDefinition) => void;
     onToggleVoiceEngine: () => void;
     onPlaySound: (sound: SoundItem) => void;
+    hotkeyManuallyPaused: boolean;
+    hotkeyFilterStatus: HotkeyFilterStatus;
+    onTogglePauseHotkeys: () => void;
+    onOpenSettingsFilter: () => void;
     isElectron: boolean;
 }
-
-const normKey = (key: string) =>
-    key
-        .trim()
-        .toUpperCase()
-        .replace(/^ESCAPE$/, "ESC")
-        .replace(/\bNUMPAD\s+([0-9])\b/g, "NUMPAD$1");
 
 export function HotkeysView({
     sounds,
@@ -44,6 +44,10 @@ export function HotkeysView({
     onActivateVoicePreset,
     onToggleVoiceEngine,
     onPlaySound,
+    hotkeyManuallyPaused,
+    hotkeyFilterStatus,
+    onTogglePauseHotkeys,
+    onOpenSettingsFilter,
     isElectron,
 }: HotkeysViewProps) {
     const { t } = useTranslation();
@@ -133,6 +137,41 @@ export function HotkeysView({
                             {t("hotkeys.subtitle")}
                         </p>
                     </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                    <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={onTogglePauseHotkeys}
+                        className={`flex items-center gap-2 px-3.5 py-2 ui-control text-xs font-semibold border transition-colors cursor-pointer ${
+                            hotkeyManuallyPaused || hotkeyFilterStatus.paused
+                                ? "bg-amber-950/40 border-amber-700 text-amber-300"
+                                : "bg-[var(--bg-card)] border-[var(--border-card)] text-[var(--text-primary)] hover:border-[var(--accent-border)]"
+                        }`}
+                    >
+                        {hotkeyManuallyPaused || hotkeyFilterStatus.paused ? (
+                            <>
+                                <Pause className="w-3.5 h-3.5" />
+                                <span>{t("header.hotkeysPaused")}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Keyboard className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                                <span>{t("header.pauseHotkeysTitle")}</span>
+                            </>
+                        )}
+                    </motion.button>
+
+                    <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={onOpenSettingsFilter}
+                        className="flex items-center gap-1.5 px-3 py-2 ui-control bg-[var(--bg-card)] border border-[var(--border-card)] hover:border-[var(--border-hover)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                    >
+                        <ShieldAlert className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                        <span>{t("hotkeyFilter.sectionTitle")}</span>
+                    </motion.button>
                 </div>
             </div>
 

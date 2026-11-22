@@ -120,6 +120,86 @@ export interface SubtitleOverlaySettings {
   fontSize: number;
 }
 
+export interface AppPauseRule {
+  id: string;
+  name: string;
+  processName: string;
+  titleMatch?: string;
+  enabled: boolean;
+  addedAt: number;
+}
+
+export interface HotkeyFilterConfig {
+  enabled: boolean;
+  manuallyPaused: boolean;
+  pauseInTextInputs: boolean;
+  pausedApps: AppPauseRule[];
+}
+
+export interface InstalledAppInfo {
+  name: string;
+  processName: string;
+  path?: string;
+  source: 'running' | 'installed' | 'catalog';
+  windowTitle?: string;
+}
+
+export interface HotkeyFilterStatus {
+  paused: boolean;
+  reason?: 'manual' | 'app' | 'modal' | 'input';
+  activeProcess?: string;
+  activeTitle?: string;
+  matchedRuleName?: string;
+}
+
+export interface PlaybackTrackInfo {
+  soundId: string;
+  startedAt: number;
+  duration: number;
+  loop: boolean;
+}
+
+export interface RemoteControlSettings {
+  enabled: boolean;
+  deviceName: string;
+  requirePin: boolean;
+  pin: string;
+}
+
+export interface RemoteConnectedClient {
+  id: string;
+  name: string;
+  ip: string;
+  connectedAt: number;
+}
+
+export interface RemoteHostStatus {
+  enabled: boolean;
+  deviceId: string;
+  deviceName: string;
+  port: number;
+  lanIps: string[];
+  wsPath: string;
+  mdnsService: string;
+  udpDiscoveryPort: number;
+  requirePin: boolean;
+  pin: string;
+  connectedClients: RemoteConnectedClient[];
+  hostConnected: boolean;
+}
+
+export interface RelayBridgeConfig {
+  enabled: boolean;
+  relayUrl: string;
+  roomCode: string;
+  hostSecret: string;
+  deviceName: string;
+  requirePin: boolean;
+  pin: string;
+}
+
+export type RelayBridgeConnectionState = 'disabled' | 'connecting' | 'connected' | 'error';
+
 export interface ElectronAPI {
   isElectron: boolean;
   openFileDialog: () => Promise<Array<{
@@ -136,6 +216,9 @@ export interface ElectronAPI {
   }>;
   unregisterAllHotkeys: () => Promise<boolean>;
   onTriggerHotkey: (callback: (key: string) => void) => () => void;
+  getInstalledApps?: () => Promise<InstalledAppInfo[]>;
+  setHotkeyFilterConfig?: (config: HotkeyFilterConfig) => Promise<boolean>;
+  onHotkeyFilterStatus?: (callback: (status: HotkeyFilterStatus) => void) => () => void;
   minimizeWindow: () => void;
   maximizeWindow: () => void;
   closeWindow: () => void;
@@ -162,3 +245,4 @@ declare global {
     electronAPI?: ElectronAPI;
   }
 }
+
