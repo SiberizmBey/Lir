@@ -9,7 +9,6 @@ import {
     Minus,
     Maximize2,
     X,
-    Radio,
     AudioWaveform,
     ChevronDown,
     Check,
@@ -60,7 +59,6 @@ export function Header({
     onToggleVoiceChanger,
     onOpenVoiceChangerTab,
     activePlayingCount,
-    onOpenRoutingTab,
     hotkeyManuallyPaused,
     hotkeyFilterStatus,
     onTogglePauseHotkeys,
@@ -177,41 +175,18 @@ export function Header({
             className={headerClass}
             style={isWin10 ? capsuleStyle : undefined}
         >
-            {/* Left Capsule / Section: Audio Output, Live Equalizer & Quick Voice Effect Switcher */}
+            {/* Left Capsule / Section: Live Equalizer & Quick Voice Effect Switcher */}
             <div className="flex items-center gap-2 shrink-0">
                 <motion.div
                     layout
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    className={`${capsuleBaseClass} ${isWin10 ? "px-0 gap-2" : "px-2.5 gap-2"}`}
+                    className={`${capsuleBaseClass} ${isWin10 ? "px-1.5" : "px-3.5"}`}
                     style={!isWin10 ? capsuleStyle : undefined}
                 >
-                    <motion.button
-                        type="button"
-                        onClick={onOpenRoutingTab}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.96 }}
-                        title={t("header.openRoutingTab")}
-                        className={`flex items-center gap-2 px-2.5 py-1.5 ${controlRadius} hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
-                    >
-                        <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                                activePlayingCount > 0
-                                    ? "bg-[var(--accent)] animate-pulse"
-                                    : "bg-[var(--accent)] opacity-80"
-                            }`}
-                        />
-                        <Radio className="w-3.5 h-3.5 text-[var(--accent-text)] shrink-0 hidden sm:block" />
-                        <span className="text-xs font-medium text-[var(--text-primary)] truncate max-w-[130px] hidden md:block">
-                            {routingConfig.primaryDeviceLabel || "CABLE Input"}
-                        </span>
-                    </motion.button>
-
-                    <div className="hidden xl:flex items-center pl-2 border-l border-[var(--border-subtle)]">
-                        <AudioVisualizer
-                            isPlaying={activePlayingCount > 0}
-                            height={16}
-                        />
-                    </div>
+                    <AudioVisualizer
+                        isPlaying={activePlayingCount > 0}
+                        height={16}
+                    />
                 </motion.div>
 
                 {/* Instant Voice Effect Quick Switcher */}

@@ -118,7 +118,7 @@ export function SoundCard({
       </AnimatePresence>
 
       {/* Top Row: Icon + Title + Actions */}
-      <div className="relative z-10 flex items-start justify-between gap-2.5">
+      <div className="relative z-30 flex items-start justify-between gap-2.5">
         <div className="flex items-center gap-3 min-w-0">
           <motion.div
             animate={isPlaying ? { scale: [1, 1.07, 1] } : { scale: 1 }}
@@ -197,7 +197,7 @@ export function SoundCard({
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.92, y: -4 }}
                   transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute right-0 top-full mt-1 w-40 py-1.5 bg-[var(--bg-modal)] border border-[var(--border-hover)] ui-inner z-30 origin-top-right"
+                  className="absolute right-0 top-full mt-1 w-40 py-1.5 bg-[var(--bg-modal)] border border-[var(--border-hover)] shadow-xl ui-inner z-40 origin-top-right"
                 >
                   <button
                     type="button"

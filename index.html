@@ -24,6 +24,25 @@
             href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
+        <script>
+            (function () {
+                try {
+                    var saved = localStorage.getItem("lir_theme_v1");
+                    var prefersDark =
+                        window.matchMedia &&
+                        window.matchMedia("(prefers-color-scheme: dark)").matches;
+                    var resolved =
+                        saved === "amoled" || saved === "dark" || saved === "light"
+                            ? saved
+                            : prefersDark
+                              ? "dark"
+                              : "light";
+                    document.documentElement.dataset.theme = resolved;
+                    document.documentElement.classList.remove("amoled", "dark", "light");
+                    document.documentElement.classList.add(resolved);
+                } catch (e) {}
+            })();
+        </script>
     </head>
     <body
         class="antialiased overflow-hidden"

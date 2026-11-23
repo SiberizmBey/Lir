@@ -1,51 +1,6 @@
 @import "tailwindcss";
 
 :root,
-html[data-theme="amoled"] {
-  color-scheme: dark;
-  --bg-canvas: #000000;
-  --bg-card: #0a0a0a;
-  --bg-card-hover: #141414;
-  --bg-modal: #0e0e0e;
-  --bg-input: #080808;
-  --bg-inner: #060606;
-  --bg-island: #121212;
-  --modal-backdrop: rgba(0, 0, 0, 0.88);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-card: rgba(255, 255, 255, 0.08);
-  --border-input: rgba(255, 255, 255, 0.11);
-  --border-hover: rgba(255, 255, 255, 0.22);
-  --text-primary: #ededed;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --accent: #22c55e;
-  --accent-rgb: 34, 197, 94;
-  --accent-hover: #16a34a;
-  --accent-active: #15803d;
-  --accent-subtle: rgba(34, 197, 94, 0.16);
-  --accent-border: rgba(34, 197, 94, 0.44);
-  --accent-text: #4ade80;
-  --btn-primary-bg: #22c55e;
-  --btn-primary-text: #05140b;
-  --btn-primary-hover: #4ade80;
-  --badge-bg: rgba(34, 197, 94, 0.16);
-  --badge-border: rgba(34, 197, 94, 0.44);
-  --badge-text: #4ade80;
-  --scrollbar-track: #000000;
-  --scrollbar-thumb: #27272a;
-  --scrollbar-thumb-hover: #22c55e;
-  --background: #000000;
-  --main-theme: #22c55e;
-  --theme-alt: #15803d;
-  --secondary: #0a0a0a;
-  --thirdy: #141414;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-alpha: rgba(255, 255, 255, 0.14);
-  --text-color: #ededed;
-  --text-alt-color: #a1a1aa;
-  --s-main-theme: #4ade80;
-}
-
 html[data-theme="dark"] {
   color-scheme: dark;
   --bg-canvas: #0c0c0e;
@@ -84,6 +39,98 @@ html[data-theme="dark"] {
   --theme-alt: #15803d;
   --secondary: #141416;
   --thirdy: #1c1c1f;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-alpha: rgba(255, 255, 255, 0.14);
+  --text-color: #ededed;
+  --text-alt-color: #a1a1aa;
+  --s-main-theme: #4ade80;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg-canvas: #f4f4f5;
+    --bg-card: #ffffff;
+    --bg-card-hover: #fafafa;
+    --bg-modal: #ffffff;
+    --bg-input: #f4f4f5;
+    --bg-inner: #f1f1f3;
+    --bg-island: rgba(255, 255, 255, 0.95);
+    --modal-backdrop: rgba(0, 0, 0, 0.45);
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-card: rgba(0, 0, 0, 0.08);
+    --border-input: rgba(0, 0, 0, 0.12);
+    --border-hover: rgba(0, 0, 0, 0.2);
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-muted: #71717a;
+    --accent: #16a34a;
+    --accent-rgb: 22, 163, 74;
+    --accent-hover: #15803d;
+    --accent-active: #166534;
+    --accent-subtle: rgba(22, 163, 74, 0.12);
+    --accent-border: rgba(22, 163, 74, 0.36);
+    --accent-text: #15803d;
+    --btn-primary-bg: #16a34a;
+    --btn-primary-text: #ffffff;
+    --btn-primary-hover: #15803d;
+    --badge-bg: rgba(22, 163, 74, 0.12);
+    --badge-border: rgba(22, 163, 74, 0.36);
+    --badge-text: #15803d;
+    --scrollbar-track: #f4f4f5;
+    --scrollbar-thumb: #d4d4d8;
+    --scrollbar-thumb-hover: #16a34a;
+    --background: #f4f4f5;
+    --main-theme: #16a34a;
+    --theme-alt: #15803d;
+    --secondary: #ffffff;
+    --thirdy: #e4e4e7;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-alpha: rgba(0, 0, 0, 0.14);
+    --text-color: #18181b;
+    --text-alt-color: #71717a;
+    --s-main-theme: #22c55e;
+  }
+}
+
+html[data-theme="amoled"] {
+  color-scheme: dark;
+  --bg-canvas: #000000;
+  --bg-card: #0a0a0a;
+  --bg-card-hover: #141414;
+  --bg-modal: #0e0e0e;
+  --bg-input: #080808;
+  --bg-inner: #060606;
+  --bg-island: #121212;
+  --modal-backdrop: rgba(0, 0, 0, 0.88);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-card: rgba(255, 255, 255, 0.08);
+  --border-input: rgba(255, 255, 255, 0.11);
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --text-primary: #ededed;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #22c55e;
+  --accent-rgb: 34, 197, 94;
+  --accent-hover: #16a34a;
+  --accent-active: #15803d;
+  --accent-subtle: rgba(34, 197, 94, 0.16);
+  --accent-border: rgba(34, 197, 94, 0.44);
+  --accent-text: #4ade80;
+  --btn-primary-bg: #22c55e;
+  --btn-primary-text: #05140b;
+  --btn-primary-hover: #4ade80;
+  --badge-bg: rgba(34, 197, 94, 0.16);
+  --badge-border: rgba(34, 197, 94, 0.44);
+  --badge-text: #4ade80;
+  --scrollbar-track: #000000;
+  --scrollbar-thumb: #27272a;
+  --scrollbar-thumb-hover: #22c55e;
+  --background: #000000;
+  --main-theme: #22c55e;
+  --theme-alt: #15803d;
+  --secondary: #0a0a0a;
+  --thirdy: #141414;
   --border: rgba(255, 255, 255, 0.08);
   --border-alpha: rgba(255, 255, 255, 0.14);
   --text-color: #ededed;
