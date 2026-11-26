@@ -310,6 +310,28 @@ app.get('/api/system/apps', async (_req, res) => {
   }
 });
 
+// 7. Antic Valley / Koru Developer Signals Feed
+const SIGNALS_FEED_URL = 'https://raw.githubusercontent.com/SiberizmBey/Koru/main/signals.json';
+app.get('/api/signals', async (req, res) => {
+  try {
+    const bust = req.query.refresh === '1' ? `?ts=${Date.now()}` : '';
+    const upstream = await fetch(`${SIGNALS_FEED_URL}${bust}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: `Signals upstream returned ${upstream.status}` });
+      return;
+    }
+    const data = await upstream.json();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json(data);
+  } catch (err) {
+    console.warn('Failed to fetch signals.json:', err);
+    res.status(502).json({ error: 'Sinyal akışı alınamadı.' });
+  }
+});
+
 // Mount Vite middleware for dev or serve dist in production
 async function startServer() {
   const httpServer = http.createServer(app);

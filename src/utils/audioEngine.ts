@@ -262,6 +262,10 @@ class AudioEngine {
     return !this.isPrimaryVirtualCable && (!this.primaryDeviceId || this.primaryDeviceId === 'default');
   }
 
+  public getMonitorDeviceId(): string {
+    return this.secondaryDeviceId || 'default';
+  }
+
   private async resolveOutputDeviceMetadata() {
     const primaryTarget = this.primaryDeviceId || 'default';
     const secondaryTarget = this.secondaryDeviceId || 'default';

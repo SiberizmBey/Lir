@@ -35,11 +35,11 @@
     "giveUp": "Vazgeç"
   },
   "nav": {
-    "soundboard": "Soundboard",
+    "soundboard": "Ses Tahtası",
     "voice": "Ses Değiştirici",
     "recorder": "Ses Kaydedici",
     "maker": "Makara",
-    "spotify": "Spotify & Müzik",
+    "spotify": "Dış Kaynak",
     "routing": "Ses Yönlendirme",
     "hotkeys": "Kısayol Matrisi",
     "translator": "Altyazı Çevirisi",
@@ -885,6 +885,25 @@
     "ytAuthWaitingConfirm": "Google üzerinden onayınız bekleniyor...",
     "ytAuthConnectedTitle": "YouTube hesabınız aktif olarak bağlı",
     "ytAuthConnectedDesc": "YouTube istekleri oturumunuz üzerinden yetkilendirilir ve token süresi dolduğunda otomatik yenilenir.",
-    "ytAuthConnectedToast": "YouTube hesabınız bağlandı! Şimdi şarkıları Soundpad'e çekebilirsiniz."
+    "ytAuthConnectedToast": "YouTube hesabınız bağlandı! Şimdi şarkıları Soundpad'e çekebilirsiniz.",
+    "previewBtn": "Dinle",
+    "previewPauseBtn": "Duraklat",
+    "previewLoading": "Hazırlanıyor...",
+    "previewTitle": "Eklemadan önce dinle (yalnızca senin kulaklığına çalar, mikrofona gitmez)",
+    "previewPauseTitle": "Önizlemeyi duraklat",
+    "previewResumeTitle": "Önizlemeyi sürdür",
+    "previewStopTitle": "Önizlemeyi kapat",
+    "previewBannerNote": "Önizleme · Yalnızca kulaklık",
+    "previewMuteTitle": "Sesi kapat",
+    "previewUnmuteTitle": "Sesi aç"
+  },
+  "signals": {
+    "buttonTitle": "Sinyaller",
+    "refreshTitle": "Sinyalleri Yenile",
+    "closeTitle": "Kapat",
+    "loading": "Sinyaller yükleniyor...",
+    "empty": "Henüz yayınlanmış bir sinyal yok.",
+    "error": "Sinyaller şu anda alınamadı.",
+    "retry": "Tekrar Dene"
   }
 }

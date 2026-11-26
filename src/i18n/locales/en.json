@@ -39,7 +39,7 @@
         "voice": "Voice Changer",
         "recorder": "Audio Recorder",
         "maker": "Makara",
-        "spotify": "Spotify & Music",
+        "spotify": "External Source",
         "routing": "Audio Routing",
         "hotkeys": "Hotkey Matrix",
         "translator": "Live Subtitles",
@@ -885,6 +885,25 @@
         "ytAuthWaitingConfirm": "Waiting for your approval on Google...",
         "ytAuthConnectedTitle": "Your YouTube account is connected",
         "ytAuthConnectedDesc": "Audio requests authenticate with your YouTube session and refresh automatically.",
-        "ytAuthConnectedToast": "YouTube account connected! You can now fetch tracks into your Soundboard."
+        "ytAuthConnectedToast": "YouTube account connected! You can now fetch tracks into your Soundboard.",
+        "previewBtn": "Listen",
+        "previewPauseBtn": "Pause",
+        "previewLoading": "Loading...",
+        "previewTitle": "Preview before adding (plays to your headphones only, never to mic)",
+        "previewPauseTitle": "Pause preview",
+        "previewResumeTitle": "Resume preview",
+        "previewStopTitle": "Close preview",
+        "previewBannerNote": "Preview · Headphones only",
+        "previewMuteTitle": "Mute",
+        "previewUnmuteTitle": "Unmute"
+    },
+    "signals": {
+        "buttonTitle": "Signals",
+        "refreshTitle": "Refresh Signals",
+        "closeTitle": "Close",
+        "loading": "Loading signals...",
+        "empty": "No signals published yet.",
+        "error": "Could not load signals right now.",
+        "retry": "Retry"
     }
 }

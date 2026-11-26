@@ -42,6 +42,7 @@ import {
 } from "./utils/hotkeys";
 import { Sidebar, NavTab } from "./components/Sidebar";
 import { Header } from "./components/Header";
+import { BottomUtilityBar } from "./components/BottomUtilityBar";
 import { SoundCard } from "./components/SoundCard";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { HotkeyModal, ExistingHotkeyBinding } from "./components/HotkeyModal";
@@ -493,11 +494,25 @@ export default function App() {
         label?: string;
     } | null>(null);
     const triggerToastTimeoutRef = useRef<number | null>(null);
+    const playbackBarRef = useRef<HTMLDivElement | null>(null);
+    const [playbackBarHeight, setPlaybackBarHeight] = useState(0);
     const [isVbCableInstalled, setIsVbCableInstalled] = useState<boolean>(false);
     const [discordStatus, setDiscordStatus] = useState<DiscordStatus>({
         connected: false,
         clientId: "1558769862053077114",
     });
+
+    useEffect(() => {
+        const el = playbackBarRef.current;
+        if (!el) return;
+        const updateHeight = () => {
+            setPlaybackBarHeight(el.getBoundingClientRect().height);
+        };
+        updateHeight();
+        const observer = new ResizeObserver(updateHeight);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
 
     const isElectron =
         typeof window !== "undefined" && !!window.electronAPI?.isElectron;
@@ -2124,6 +2139,22 @@ export default function App() {
                 uiStyle={uiStyle}
             />
 
+            {/* Floating Top Header (full-window width in Gama & Win11 so search bar stays dead-center) */}
+            {uiStyle !== "win10" && (
+                <Header
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    onAddNewSound={() => setIsAddModalOpen(true)}
+                    onStopAll={handleStopAll}
+                    routingConfig={routingConfig}
+                    onRoutingConfigChange={setRoutingConfig}
+                    activePlayingCount={activePlayingIds.length}
+                    backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                    transparency={appearance.headerTransparency}
+                    uiStyle={uiStyle}
+                />
+            )}
+
             {/* Main View Area */}
             <div
                 className="relative z-10 flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--bg-canvas)]"
@@ -2133,39 +2164,30 @@ export default function App() {
                         : "var(--bg-canvas)",
                 }}
             >
-                {/* Top Header */}
-                <Header
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    onAddNewSound={() => setIsAddModalOpen(true)}
-                    onStopAll={handleStopAll}
-                    routingConfig={routingConfig}
-                    onRoutingConfigChange={setRoutingConfig}
-                    voiceChangerConfig={voiceChangerConfig}
-                    onSelectVoicePreset={handleSelectVoicePreset}
-                    onToggleVoiceChanger={handleToggleVoiceEngine}
-                    onOpenVoiceChangerTab={() => setCurrentTab("voice")}
-                    activePlayingCount={activePlayingIds.length}
-                    onOpenRoutingTab={() => setCurrentTab("routing")}
-                    hotkeyManuallyPaused={hotkeyFilterConfig.manuallyPaused}
-                    hotkeyFilterStatus={electronFilterStatus}
-                    onTogglePauseHotkeys={() =>
-                        setHotkeyFilterConfig((prev) => ({
-                            ...prev,
-                            manuallyPaused: !prev.manuallyPaused,
-                        }))
-                    }
-                    backgroundImageEnabled={Boolean(appearance.backgroundImage)}
-                    transparency={appearance.headerTransparency}
-                    uiStyle={uiStyle}
-                />
+                {/* Docked Top Header (Win10) */}
+                {uiStyle === "win10" && (
+                    <Header
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        onAddNewSound={() => setIsAddModalOpen(true)}
+                        onStopAll={handleStopAll}
+                        routingConfig={routingConfig}
+                        onRoutingConfigChange={setRoutingConfig}
+                        activePlayingCount={activePlayingIds.length}
+                        backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                        transparency={appearance.headerTransparency}
+                        uiStyle={uiStyle}
+                    />
+                )}
 
-                {/* Scrollable Content (passes transparently behind floating Header in Gama & Win11) */}
-                <main
-                    className={`flex-1 overflow-y-auto px-4 sm:px-6 pb-8 flex flex-col gap-8 ${
-                        uiStyle === "win10" ? "pt-5" : "pt-[76px]"
-                    }`}
-                >
+                {/* Content Wrapper: full height; BottomUtilityBar smoothly slides up/down over PlaybackBar */}
+                <div className="relative flex-1 min-h-0 flex flex-col">
+                    {/* Scrollable Content (passes transparently behind floating Header in Gama & Win11) */}
+                    <main
+                        className={`flex-1 overflow-y-auto px-4 sm:px-6 flex flex-col gap-8 ${
+                            activePlaybackTracks.length > 0 ? "pb-36" : "pb-20"
+                        } ${uiStyle === "win10" ? "pt-5" : "pt-[76px]"}`}
+                    >
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={currentTab}
@@ -2601,56 +2623,120 @@ export default function App() {
                             {currentTab === "guide" && <GuideView />}
                         </motion.div>
                     </AnimatePresence>
-                </main>
+                    </main>
 
-                {/* Live Playback Bar */}
-                <PlaybackBar
-                    sounds={sounds}
-                    activeTracks={activePlaybackTracks}
-                    masterVolume={routingConfig.masterVolume}
-                    stopAllHotkey={routingConfig.stopAllHotkey}
-                    onMasterVolumeChange={(volume) =>
-                        setRoutingConfig((prev) => ({
-                            ...prev,
-                            masterVolume: volume,
-                        }))
-                    }
-                    onStopSound={handleStopSound}
-                    onStopAll={handleStopAll}
-                    onToggleLoop={handleToggleLoop}
-                    backgroundImageEnabled={Boolean(appearance.backgroundImage)}
-                    transparency={appearance.headerTransparency}
-                    uiStyle={uiStyle}
-                />
-            </div>
+                    {/* Floating Hotkey Indicator */}
+                    <AnimatePresence>
+                        {lastTriggeredNotice && (() => {
+                            const noticeOffsetY =
+                                activePlaybackTracks.length > 0
+                                    ? -Math.max(
+                                          0,
+                                          playbackBarHeight -
+                                              (uiStyle === "win10" ? 0 : 4),
+                                      )
+                                    : 0;
+                            return (
+                                <motion.div
+                                    initial={{
+                                        opacity: 0,
+                                        y: noticeOffsetY + 16,
+                                        scale: 0.92,
+                                    }}
+                                    animate={{
+                                        opacity: 1,
+                                        y: noticeOffsetY,
+                                        scale: 1,
+                                    }}
+                                    exit={{
+                                        opacity: 0,
+                                        y: noticeOffsetY + 10,
+                                        scale: 0.94,
+                                    }}
+                                    transition={{
+                                        type: "spring",
+                                        stiffness: 420,
+                                        damping: 32,
+                                    }}
+                                    className="absolute bottom-[72px] right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs pointer-events-none"
+                                >
+                                    <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                                    <span className="text-[var(--text-secondary)]">
+                                        {t("recorder.hotkeyLabel")}
+                                    </span>
+                                    <strong className="text-[var(--accent-text)] font-semibold">
+                                        {lastTriggeredNotice.key}
+                                    </strong>
+                                    {lastTriggeredNotice.label && (
+                                        <span className="text-[var(--text-primary)] font-sans font-medium">
+                                            · {lastTriggeredNotice.label}
+                                        </span>
+                                    )}
+                                </motion.div>
+                            );
+                        })()}
+                    </AnimatePresence>
 
-            {/* Floating Hotkey Indicator */}
-            <AnimatePresence>
-                {lastTriggeredNotice && (
+                    {/* Bottom-Right Floating Utility Island */}
                     <motion.div
-                        initial={{ opacity: 0, y: 16, scale: 0.92 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.94 }}
-                        transition={{ type: "spring", stiffness: 460, damping: 30 }}
-                        className={`fixed right-4 z-50 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs transition-all ${
-                            activePlaybackTracks.length > 0 ? "bottom-24" : "bottom-4"
-                        }`}
+                        animate={{
+                            y:
+                                activePlaybackTracks.length > 0
+                                    ? -Math.max(
+                                          0,
+                                          playbackBarHeight -
+                                              (uiStyle === "win10" ? 0 : 4),
+                                      )
+                                    : 0,
+                        }}
+                        transition={{
+                            type: "spring",
+                            stiffness: 420,
+                            damping: 32,
+                        }}
+                        className="pointer-events-none absolute bottom-3 right-4 sm:right-6 z-30"
                     >
-                        <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
-                        <span className="text-[var(--text-secondary)]">
-                            {t("recorder.hotkeyLabel")}
-                        </span>
-                        <strong className="text-[var(--accent-text)] font-semibold">
-                            {lastTriggeredNotice.key}
-                        </strong>
-                        {lastTriggeredNotice.label && (
-                            <span className="text-[var(--text-primary)] font-sans font-medium">
-                                · {lastTriggeredNotice.label}
-                            </span>
-                        )}
+                        <BottomUtilityBar
+                            currentTab={currentTab}
+                            onTabChange={setCurrentTab}
+                            hotkeyManuallyPaused={hotkeyFilterConfig.manuallyPaused}
+                            hotkeyFilterStatus={electronFilterStatus}
+                            onTogglePauseHotkeys={() =>
+                                setHotkeyFilterConfig((prev) => ({
+                                    ...prev,
+                                    manuallyPaused: !prev.manuallyPaused,
+                                }))
+                            }
+                            backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                            transparency={appearance.headerTransparency}
+                            uiStyle={uiStyle}
+                        />
                     </motion.div>
-                )}
-            </AnimatePresence>
+
+                    {/* Live Playback Bar */}
+                    <div
+                        ref={playbackBarRef}
+                        className="pointer-events-none absolute bottom-0 left-0 right-0 z-30"
+                    >
+                        <PlaybackBar
+                            sounds={sounds}
+                            activeTracks={activePlaybackTracks}
+                            masterVolume={routingConfig.masterVolume}
+                            onMasterVolumeChange={(volume) =>
+                                setRoutingConfig((prev) => ({
+                                    ...prev,
+                                    masterVolume: volume,
+                                }))
+                            }
+                            onStopSound={handleStopSound}
+                            onToggleLoop={handleToggleLoop}
+                            backgroundImageEnabled={Boolean(appearance.backgroundImage)}
+                            transparency={appearance.headerTransparency}
+                            uiStyle={uiStyle}
+                        />
+                    </div>
+                </div>
+            </div>
 
             {/* Modals */}
             <AnimatePresence>

@@ -15,10 +15,8 @@ interface PlaybackBarProps {
   sounds: SoundItem[];
   activeTracks: PlaybackTrackInfo[];
   masterVolume: number;
-  stopAllHotkey: string;
   onMasterVolumeChange: (volume: number) => void;
   onStopSound: (soundId: string) => void;
-  onStopAll: () => void;
   onToggleLoop: (soundId: string) => void;
   backgroundImageEnabled: boolean;
   transparency: number;
@@ -37,10 +35,8 @@ export function PlaybackBar({
   sounds,
   activeTracks,
   masterVolume,
-  stopAllHotkey,
   onMasterVolumeChange,
   onStopSound,
-  onStopAll,
   onToggleLoop,
   backgroundImageEnabled,
   transparency,
@@ -48,6 +44,7 @@ export function PlaybackBar({
 }: PlaybackBarProps) {
   const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
+  const [isVolumeExpanded, setIsVolumeExpanded] = useState(false);
 
   useEffect(() => {
     if (activeTracks.length === 0) return;
@@ -88,7 +85,7 @@ export function PlaybackBar({
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
           className={
             isWin10
-              ? 'shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-island)] px-4 py-2.5 z-30'
+              ? 'pointer-events-auto shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-island)] px-4 py-2.5 z-30'
               : 'shrink-0 px-4 sm:px-6 pb-3 pt-1 z-30 pointer-events-none'
           }
         >
@@ -97,7 +94,7 @@ export function PlaybackBar({
             className={
               isWin10
                 ? 'flex flex-col gap-2'
-                : `pointer-events-auto relative overflow-hidden border border-[var(--accent-border)] backdrop-blur-xl px-4 py-2.5 flex flex-col gap-2 shadow-[0_-8px_30px_-12px_rgba(var(--accent-rgb),0.22)] ${
+                : `pointer-events-auto relative overflow-hidden border border-[var(--accent-border)] backdrop-blur-xl px-4 py-2.5 flex flex-col gap-2 ${
                     isWin11 ? 'rounded-xl' : 'rounded-2xl'
                   }`
             }
@@ -171,8 +168,8 @@ export function PlaybackBar({
                 </div>
               </div>
 
-              {/* Right: Quick Controls & Stop All */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Right: Quick Controls */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {activeTracks.length === 1 && primaryTrack && primarySound && (
                   <>
                     <motion.button
@@ -184,7 +181,12 @@ export function PlaybackBar({
                           ? t('soundCard.loopOn')
                           : t('soundCard.loopOff')
                       }
-                      className={`p-1.5 ui-control border transition-colors cursor-pointer ${
+                      aria-label={
+                        primarySound.loop
+                          ? t('soundCard.loopOn')
+                          : t('soundCard.loopOff')
+                      }
+                      className={`w-8 h-8 flex items-center justify-center ui-control border transition-colors cursor-pointer ${
                         primarySound.loop
                           ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]'
                           : 'bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -195,62 +197,66 @@ export function PlaybackBar({
 
                     <motion.button
                       type="button"
-                      whileTap={{ scale: 0.92 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => onStopSound(primarySound.id)}
                       title={t('soundCard.stop')}
-                      className="flex items-center gap-1 px-2.5 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-rose-950/60 border border-[var(--border-subtle)] hover:border-rose-700 text-xs font-medium text-[var(--text-primary)] hover:text-rose-200 transition-colors cursor-pointer"
+                      aria-label={t('soundCard.stop')}
+                      className="w-8 h-8 flex items-center justify-center ui-control bg-[var(--bg-inner)] hover:bg-rose-950/60 border border-[var(--border-subtle)] hover:border-rose-700 text-[var(--text-primary)] hover:text-rose-200 transition-colors cursor-pointer"
                     >
-                      <Square className="w-3 h-3 fill-current" />
-                      <span className="hidden sm:inline">{t('soundCard.stop')}</span>
+                      <Square className="w-3.5 h-3.5 fill-current" />
                     </motion.button>
                   </>
                 )}
 
-                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
-                  <button
+                <motion.div
+                  onMouseEnter={() => setIsVolumeExpanded(true)}
+                  onMouseLeave={() => setIsVolumeExpanded(false)}
+                  onFocus={() => setIsVolumeExpanded(true)}
+                  onBlur={() => setIsVolumeExpanded(false)}
+                  animate={{ width: isVolumeExpanded ? 148 : 32 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 420,
+                    damping: 32,
+                  }}
+                  className="hidden md:flex h-8 items-center gap-2 overflow-hidden ui-control border border-[var(--border-subtle)] bg-[var(--bg-inner)] px-1.5"
+                >
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.88 }}
                     onClick={() => onMasterVolumeChange(isMuted ? 0.85 : 0)}
-                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                    className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                     title={isMuted ? t('header.unmute') : t('header.mute')}
+                    aria-label={isMuted ? t('header.unmute') : t('header.mute')}
                   >
                     {isMuted ? (
-                      <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                      <VolumeX className="w-4 h-4 text-rose-400" />
                     ) : (
-                      <Volume2 className="w-3.5 h-3.5" />
+                      <Volume2 className="w-4 h-4" />
                     )}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.02"
-                    value={masterVolume}
-                    onChange={(e) =>
-                      onMasterVolumeChange(parseFloat(e.target.value))
-                    }
-                    className="w-16 cursor-pointer"
-                    aria-label={t('header.masterVolume')}
-                  />
-                  <span className="text-[11px] font-mono tabular-nums text-[var(--text-secondary)] w-8 text-right">
-                    %{Math.round(masterVolume * 100)}
-                  </span>
-                </div>
-
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={onStopAll}
-                  className="flex items-center gap-1.5 px-3 py-1.5 ui-control bg-rose-950/70 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  <Square className="w-3 h-3 fill-current" />
-                  <span>{t('header.stopAll')}</span>
-                  {stopAllHotkey && (
-                    <kbd className="hidden xl:inline-block px-1.5 py-0.2 rounded bg-black/25 text-[10px] font-mono text-rose-200">
-                      {stopAllHotkey}
-                    </kbd>
-                  )}
-                </motion.button>
+                  </motion.button>
+                  <motion.div
+                    animate={{ opacity: isVolumeExpanded ? 1 : 0 }}
+                    transition={{ duration: 0.16 }}
+                    className="flex w-[104px] shrink-0 items-center gap-2"
+                  >
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.02"
+                      value={masterVolume}
+                      onChange={(e) =>
+                        onMasterVolumeChange(parseFloat(e.target.value))
+                      }
+                      className="w-16 shrink-0 cursor-pointer"
+                      aria-label={t('header.masterVolume')}
+                    />
+                    <span className="w-8 shrink-0 text-right text-[11px] font-mono tabular-nums text-[var(--text-secondary)]">
+                      %{Math.round(masterVolume * 100)}
+                    </span>
+                  </motion.div>
+                </motion.div>
               </div>
             </div>
 

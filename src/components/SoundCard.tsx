@@ -86,7 +86,7 @@ export function SoundCard({
         isPlaying ? '' : 'card-ambient-glow'
       } group relative overflow-hidden flex flex-col justify-between gap-3.5 p-4 transition-all border ${
         isPlaying
-          ? 'border-[var(--accent)] ring-1 ring-[var(--accent-border)] shadow-[0_12px_36px_-12px_rgba(var(--accent-rgb),0.42)]'
+          ? 'border-[var(--accent)] ring-1 ring-[var(--accent-border)]'
           : 'border-[var(--border-card)] hover:border-[var(--border-hover)]'
       }`}
     >
@@ -132,7 +132,7 @@ export function SoundCard({
             }
             className={`w-10 h-10 ui-input border flex items-center justify-center shrink-0 transition-colors ${
               isPlaying
-                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] shadow-[0_0_16px_rgba(var(--accent-rgb),0.3)]'
+                ? 'bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]'
                 : 'bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] group-hover:text-[var(--accent-text)]'
             }`}
           >
@@ -200,7 +200,7 @@ export function SoundCard({
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.92, y: -4 }}
                   transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute right-0 top-full mt-1 w-40 py-1.5 bg-[var(--bg-modal)] border border-[var(--border-hover)] shadow-xl ui-inner z-40 origin-top-right"
+                  className="absolute right-0 top-full mt-1 w-40 py-1.5 bg-[var(--bg-modal)] border border-[var(--border-hover)] ui-inner z-40 origin-top-right"
                 >
                   <button
                     type="button"
@@ -314,7 +314,7 @@ export function SoundCard({
           <span
             className={`w-2 h-2 rounded-full ${
               isPlaying
-                ? 'bg-[var(--accent)] animate-pulse shadow-[0_0_8px_var(--accent)]'
+                ? 'bg-[var(--accent)] animate-pulse'
                 : 'bg-[var(--accent)] opacity-60'
             }`}
           />

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
     Volume2,
@@ -9,22 +9,9 @@ import {
     Minus,
     Maximize2,
     X,
-    AudioWaveform,
-    ChevronDown,
-    Check,
-    Sliders,
-    Keyboard,
-    Pause,
 } from "lucide-react";
 import { useTranslation } from "../i18n";
-import { AudioVisualizer } from "./AudioVisualizer";
-import {
-    AudioRoutingConfig,
-    HotkeyFilterStatus,
-    UIStyle,
-    VoiceChangerConfig,
-} from "../types/sound";
-import { VOICE_PRESETS, VoicePresetDefinition } from "../utils/voicePresets";
+import { AudioRoutingConfig, UIStyle } from "../types/sound";
 
 interface HeaderProps {
     searchQuery: string;
@@ -33,15 +20,7 @@ interface HeaderProps {
     onStopAll: () => void;
     routingConfig: AudioRoutingConfig;
     onRoutingConfigChange: (newConfig: AudioRoutingConfig) => void;
-    voiceChangerConfig: VoiceChangerConfig;
-    onSelectVoicePreset: (preset: VoicePresetDefinition) => void;
-    onToggleVoiceChanger: () => void;
-    onOpenVoiceChangerTab: () => void;
     activePlayingCount: number;
-    onOpenRoutingTab: () => void;
-    hotkeyManuallyPaused: boolean;
-    hotkeyFilterStatus: HotkeyFilterStatus;
-    onTogglePauseHotkeys: () => void;
     backgroundImageEnabled: boolean;
     transparency: number;
     uiStyle: UIStyle;
@@ -54,50 +33,15 @@ export function Header({
     onStopAll,
     routingConfig,
     onRoutingConfigChange,
-    voiceChangerConfig,
-    onSelectVoicePreset,
-    onToggleVoiceChanger,
-    onOpenVoiceChangerTab,
     activePlayingCount,
-    hotkeyManuallyPaused,
-    hotkeyFilterStatus,
-    onTogglePauseHotkeys,
     backgroundImageEnabled,
     transparency,
     uiStyle,
 }: HeaderProps) {
     const { t } = useTranslation();
     const [isVolumeExpanded, setIsVolumeExpanded] = useState(false);
-    const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
-    const voiceMenuRef = useRef<HTMLDivElement | null>(null);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
     const isMuted = routingConfig.masterVolume === 0;
-
-    useEffect(() => {
-        if (!isVoiceMenuOpen) return;
-        const handleOutsideClick = (e: MouseEvent) => {
-            if (
-                voiceMenuRef.current &&
-                !voiceMenuRef.current.contains(e.target as Node)
-            ) {
-                setIsVoiceMenuOpen(false);
-            }
-        };
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setIsVoiceMenuOpen(false);
-        };
-        window.addEventListener("mousedown", handleOutsideClick);
-        window.addEventListener("keydown", handleEsc);
-        return () => {
-            window.removeEventListener("mousedown", handleOutsideClick);
-            window.removeEventListener("keydown", handleEsc);
-        };
-    }, [isVoiceMenuOpen]);
-
-    const activePreset = VOICE_PRESETS.find(
-        (p) => p.id === voiceChangerConfig.preset,
-    );
-    const isVoiceEffectRunning =
-        voiceChangerConfig.enabled && voiceChangerConfig.wetMix > 0;
 
     const handleToggleMute = () => {
         onRoutingConfigChange({
@@ -145,12 +89,12 @@ export function Header({
               backgroundColor: `color-mix(in srgb, var(--bg-island) ${islandOpacity}%, transparent)`,
           };
 
-    // Transparent floating overlay in Gama & Win11 so scrolled content passes visibly behind the navbar!
+    // Transparent floating overlay in Gama & Win11 (rendered across full window width so search stays dead-center)
     const headerClass = isWin10
-        ? "relative h-14 px-4 flex items-center justify-between gap-3 shrink-0 select-none window-drag-region border-b border-[var(--border-subtle)] bg-[var(--bg-island)] rounded-none z-30"
+        ? "relative h-14 px-4 flex items-center justify-between gap-2 sm:grid sm:grid-cols-[1fr_minmax(180px,28rem)_1fr] sm:items-center sm:gap-3 shrink-0 select-none window-drag-region border-b border-[var(--border-subtle)] bg-[var(--bg-island)] rounded-none z-30"
         : isWin11
-          ? "absolute top-0 left-0 right-0 px-4 sm:px-6 pt-2.5 pb-2 flex items-center justify-between gap-2.5 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30"
-          : "absolute top-0 left-0 right-0 px-4 sm:px-6 pt-3 pb-2 flex items-center justify-between gap-3 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30";
+          ? "absolute top-0 left-0 right-0 pl-[82px] pr-4 sm:px-6 pt-2.5 pb-2 flex items-center justify-between gap-2 sm:grid sm:grid-cols-[1fr_minmax(180px,28rem)_1fr] sm:items-center sm:gap-2.5 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30"
+          : "absolute top-0 left-0 right-0 pl-[86px] pr-4 sm:px-6 pt-3 pb-2 flex items-center justify-between gap-2 sm:grid sm:grid-cols-[1fr_minmax(180px,28rem)_1fr] sm:items-center sm:gap-3 shrink-0 select-none window-drag-region bg-transparent pointer-events-none z-30";
 
     const capsuleBaseClass = isWin10
         ? "h-10 flex items-center shrink-0 window-no-drag bg-transparent border-0 rounded-none"
@@ -159,10 +103,10 @@ export function Header({
           : "pointer-events-auto h-11 flex items-center rounded-full border border-[var(--border-subtle)] backdrop-blur-xl shrink-0 window-no-drag transition-[border-radius,border-color] duration-200";
 
     const searchBoxClass = isWin10
-        ? "h-9 flex-1 max-w-md px-3 flex items-center gap-2.5 rounded-[2px] border border-[var(--border-subtle)] bg-[var(--bg-input)] focus-within:border-[var(--accent-border)] transition-colors window-no-drag"
+        ? "w-full mx-auto px-3 flex items-center gap-2.5 rounded-[2px] border bg-[var(--bg-input)] transition-colors window-no-drag"
         : isWin11
-          ? "pointer-events-auto h-11 flex-1 max-w-md px-3.5 flex items-center gap-2.5 rounded-xl border border-[var(--border-subtle)] backdrop-blur-xl focus-within:border-[var(--accent-border)] transition-colors window-no-drag"
-          : "pointer-events-auto h-11 flex-1 max-w-md px-3.5 flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] backdrop-blur-xl focus-within:border-[var(--accent-border)] transition-colors window-no-drag";
+          ? "pointer-events-auto w-full mx-auto px-3.5 flex items-center gap-2.5 rounded-xl border backdrop-blur-xl transition-colors window-no-drag"
+          : "pointer-events-auto w-full mx-auto px-3.5 flex items-center gap-2.5 rounded-full border backdrop-blur-xl transition-colors window-no-drag";
 
     const controlRadius = isWin10
         ? "rounded-[2px]"
@@ -175,188 +119,79 @@ export function Header({
             className={headerClass}
             style={isWin10 ? capsuleStyle : undefined}
         >
-            {/* Left Capsule / Section: Live Equalizer & Quick Voice Effect Switcher */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Left Spacer: reserves Sidebar width on small screens while keeping Search Bar dead-center in full window */}
+            <div
+                className={isWin10 ? "hidden sm:block" : "hidden sm:block sm:min-w-[68px]"}
+                aria-hidden="true"
+            />
+
+            {/* Center Capsule / Section: Animated Search Bar */}
+            <div className="flex-1 sm:w-full flex items-center justify-center min-w-0">
                 <motion.div
-                    layout
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    className={`${capsuleBaseClass} ${isWin10 ? "px-1.5" : "px-3.5"}`}
+                    initial={false}
+                    animate={{
+                        maxWidth: isSearchFocused ? 448 : 288,
+                        height: isWin10
+                            ? isSearchFocused
+                                ? 36
+                                : 30
+                            : isSearchFocused
+                              ? 44
+                              : 36,
+                    }}
+                    transition={{
+                        type: "spring",
+                        stiffness: 420,
+                        damping: 32,
+                    }}
+                    className={`${searchBoxClass} ${
+                        isSearchFocused
+                            ? "border-[var(--accent-border)]"
+                            : "border-[var(--border-subtle)]"
+                    }`}
                     style={!isWin10 ? capsuleStyle : undefined}
                 >
-                    <AudioVisualizer
-                        isPlaying={activePlayingCount > 0}
-                        height={16}
-                    />
-                </motion.div>
-
-                {/* Instant Voice Effect Quick Switcher */}
-                <div ref={voiceMenuRef} className="relative pointer-events-auto window-no-drag">
-                    <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => setIsVoiceMenuOpen((prev) => !prev)}
-                        title={t("header.voiceEffectSwitch")}
-                        style={!isWin10 ? capsuleStyle : undefined}
-                        className={`${
-                            isWin10
-                                ? "h-9 px-2.5 rounded-[2px] border border-[var(--border-subtle)] bg-[var(--bg-card)]"
-                                : isWin11
-                                  ? "h-11 px-3 rounded-xl border border-[var(--border-subtle)] backdrop-blur-xl"
-                                  : "h-11 px-3.5 rounded-full border border-[var(--border-subtle)] backdrop-blur-xl"
-                        } flex items-center gap-2 text-xs font-medium transition-colors cursor-pointer ${
-                            isVoiceEffectRunning
-                                ? "border-[var(--accent-border)] text-[var(--accent-text)]"
-                                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    <Search
+                        className={`w-4 h-4 shrink-0 pointer-events-none transition-colors ${
+                            isSearchFocused
+                                ? "text-[var(--accent-text)]"
+                                : "text-[var(--text-muted)]"
                         }`}
-                    >
-                        <AudioWaveform className="w-3.5 h-3.5 shrink-0" />
-                        <span className="hidden sm:inline truncate max-w-[115px]">
-                            {isVoiceEffectRunning
-                                ? (activePreset ? t(`voicePresets.${activePreset.id}_name`) : t("header.voiceEngineActive"))
-                                : t("header.voicePresetNatural")}
-                        </span>
-                        <ChevronDown
-                            className={`w-3.5 h-3.5 transition-transform ${
-                                isVoiceMenuOpen ? "rotate-180" : ""
-                            }`}
-                        />
-                    </motion.button>
-
+                    />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        onFocus={() => setIsSearchFocused(true)}
+                        onBlur={() => setIsSearchFocused(false)}
+                        placeholder={t("header.searchPlaceholder")}
+                        className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none"
+                    />
                     <AnimatePresence>
-                        {isVoiceMenuOpen && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                        {searchQuery && (
+                            <motion.button
+                                type="button"
+                                initial={{ opacity: 0, scale: 0.6 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.6 }}
                                 transition={{ duration: 0.14 }}
-                                className="absolute left-0 top-full mt-2 w-72 bg-[var(--bg-modal)] border border-[var(--border-card)] ui-card p-3 flex flex-col gap-2.5 z-50"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => onSearchChange("")}
+                                aria-label={t("header.searchClear")}
+                                className={`p-1 ${controlRadius} text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
                             >
-                                <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
-                                    <div className="flex items-center gap-2">
-                                        <AudioWaveform className="w-4 h-4 text-[var(--accent-text)]" />
-                                        <span className="text-xs font-bold text-[var(--text-primary)]">
-                                            {t("header.voiceEngine")}
-                                        </span>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={onToggleVoiceChanger}
-                                        className={`px-2 py-0.5 ui-control text-[10px] font-mono font-semibold border cursor-pointer transition-colors ${
-                                            isVoiceEffectRunning
-                                                ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
-                                                : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-                                        }`}
-                                    >
-                                        {isVoiceEffectRunning ? t("nav.statusOn") : t("common.inactive").toUpperCase()}
-                                    </button>
-                                </div>
-
-                                <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-0.5">
-                                    {VOICE_PRESETS.map((preset) => {
-                                        const isCurrent =
-                                            voiceChangerConfig.preset ===
-                                                preset.id &&
-                                            (preset.id === "natural"
-                                                ? !isVoiceEffectRunning
-                                                : isVoiceEffectRunning);
-                                        const hk =
-                                            voiceChangerConfig.presetHotkeys?.[
-                                                preset.id
-                                            ];
-                                        const presetName = t(`voicePresets.${preset.id}_name`) || preset.name;
-                                        const presetBadge = t(`voicePresets.${preset.id}_badge`) || preset.badge;
-                                        return (
-                                            <button
-                                                key={preset.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    onSelectVoicePreset(preset);
-                                                    setIsVoiceMenuOpen(false);
-                                                }}
-                                                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 ui-control text-xs border transition-colors cursor-pointer ${
-                                                    isCurrent
-                                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] font-semibold"
-                                                        : "bg-transparent border-transparent hover:bg-[var(--bg-card-hover)] text-[var(--text-primary)]"
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
-                                                        {isCurrent && (
-                                                            <Check className="w-3.5 h-3.5" />
-                                                        )}
-                                                    </span>
-                                                    <span className="truncate">
-                                                        {presetName}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                    {hk && (
-                                                        <span className="px-1.5 py-0.5 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] text-[10px] font-mono text-[var(--accent-text)]">
-                                                            {hk}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                                                        {presetBadge}
-                                                    </span>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setIsVoiceMenuOpen(false);
-                                        onOpenVoiceChangerTab();
-                                    }}
-                                    className="w-full flex items-center justify-center gap-1.5 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                                >
-                                    <Sliders className="w-3 h-3" />
-                                    <span>{t("header.openVoiceTab")}</span>
-                                </button>
-                            </motion.div>
+                                <X className="w-3.5 h-3.5" />
+                            </motion.button>
                         )}
                     </AnimatePresence>
-                </div>
-            </div>
-
-            {/* Center Capsule / Section: Search Bar */}
-            <div
-                className={searchBoxClass}
-                style={!isWin10 ? capsuleStyle : undefined}
-            >
-                <Search className="w-4 h-4 text-[var(--text-muted)] shrink-0 pointer-events-none" />
-                <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => onSearchChange(e.target.value)}
-                    placeholder={t("header.searchPlaceholder")}
-                    className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none"
-                />
-                <AnimatePresence>
-                    {searchQuery && (
-                        <motion.button
-                            type="button"
-                            initial={{ opacity: 0, scale: 0.6 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.6 }}
-                            transition={{ duration: 0.14 }}
-                            onClick={() => onSearchChange("")}
-                            aria-label={t("header.searchClear")}
-                            className={`p-1 ${controlRadius} text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors cursor-pointer`}
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </motion.button>
-                    )}
-                </AnimatePresence>
+                </motion.div>
             </div>
 
             {/* Right Capsule / Section: Master Volume, Stop, Add Sound & Window Controls */}
             <motion.div
                 layout
                 transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                className={`${capsuleBaseClass} ${isWin10 ? "px-0 gap-1.5" : "px-1.5 gap-1.5"}`}
+                className={`${capsuleBaseClass} sm:justify-self-end ${isWin10 ? "px-0 gap-1.5" : "px-1.5 gap-1.5"}`}
                 style={!isWin10 ? capsuleStyle : undefined}
             >
                 {/* Master Volume Control with smooth spring expand */}
@@ -410,35 +245,6 @@ export function Header({
                         </span>
                     </motion.div>
                 </motion.div>
-
-                {/* Quick Pause / Resume Hotkeys */}
-                <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.94 }}
-                    onClick={onTogglePauseHotkeys}
-                    title={
-                        hotkeyManuallyPaused || hotkeyFilterStatus.paused
-                            ? t("header.resumeHotkeysTitle")
-                            : t("header.pauseHotkeysTitle")
-                    }
-                    className={`h-8 flex items-center gap-1.5 px-2.5 ${controlRadius} text-xs font-medium border transition-colors cursor-pointer ${
-                        hotkeyManuallyPaused || hotkeyFilterStatus.paused
-                            ? "bg-amber-950/40 border-amber-700/80 text-amber-300 hover:bg-amber-950/60"
-                            : "bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-hover)]"
-                    }`}
-                >
-                    {hotkeyManuallyPaused || hotkeyFilterStatus.paused ? (
-                        <Pause className="w-3.5 h-3.5" />
-                    ) : (
-                        <Keyboard className="w-3.5 h-3.5" />
-                    )}
-                    {(hotkeyManuallyPaused || hotkeyFilterStatus.paused) && (
-                        <span className="hidden lg:inline">
-                            {t("header.hotkeysPaused")}
-                        </span>
-                    )}
-                </motion.button>
 
                 {/* Stop All Button */}
                 <motion.button
