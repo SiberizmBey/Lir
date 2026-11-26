@@ -33,6 +33,7 @@ interface SidebarProps {
     backgroundImageEnabled: boolean;
     transparency: number;
     uiStyle: UIStyle;
+    forceExpanded?: boolean;
 }
 
 export function Sidebar({
@@ -44,9 +45,11 @@ export function Sidebar({
     backgroundImageEnabled,
     transparency,
     uiStyle,
+    forceExpanded = false,
 }: SidebarProps) {
     const { t } = useTranslation();
     const [isMenuHovered, setIsMenuHovered] = useState(false);
+    const expanded = isMenuHovered || forceExpanded;
 
     const navItems = [
         {
@@ -122,10 +125,10 @@ export function Sidebar({
           : "rounded-[28px]";
 
     const navBorderBgClass = isWin10
-        ? isMenuHovered
+        ? expanded
             ? "border border-[var(--border-hover)] bg-[var(--bg-island)]"
             : "border-0 bg-transparent"
-        : isMenuHovered
+        : expanded
           ? "border border-[var(--border-hover)] backdrop-blur-xl"
           : "border border-[var(--border-card)] backdrop-blur-xl";
 
@@ -172,12 +175,13 @@ export function Sidebar({
                 className={`relative ${isWin10 ? "w-16" : "w-14"} flex items-center justify-start my-auto overflow-visible`}
             >
                 <motion.nav
+                    data-tour="sidebar-nav"
                     aria-label={t("nav.mainMenu")}
                     onMouseEnter={() => setIsMenuHovered(true)}
                     onMouseLeave={() => setIsMenuHovered(false)}
                     initial={false}
                     animate={{
-                        width: isMenuHovered ? 236 : isWin10 ? 64 : 56,
+                        width: expanded ? 236 : isWin10 ? 64 : 56,
                     }}
                     transition={{
                         type: "spring",
@@ -199,9 +203,10 @@ export function Sidebar({
                             <motion.button
                                 key={item.id}
                                 type="button"
+                                data-tour={`sidebar-tab-${item.id}`}
                                 onClick={() => onTabChange(item.id)}
                                 whileTap={{ scale: 0.96 }}
-                                title={!isMenuHovered ? item.label : undefined}
+                                title={!expanded ? item.label : undefined}
                                 className={`relative h-11 w-full flex items-center px-[12px] justify-start transition-colors cursor-pointer ${itemRadiusClass} ${
                                     isActive
                                         ? "font-semibold"
@@ -237,7 +242,7 @@ export function Sidebar({
                                 </div>
 
                                 <AnimatePresence>
-                                    {isMenuHovered && (
+                                    {expanded && (
                                         <motion.span
                                             key="label"
                                             initial={{ opacity: 0, x: -8 }}
@@ -255,7 +260,7 @@ export function Sidebar({
                                 </AnimatePresence>
 
                                 <AnimatePresence>
-                                    {isMenuHovered && item.badge !== null && (
+                                    {expanded && item.badge !== null && (
                                         <motion.span
                                             key="badge"
                                             initial={{ opacity: 0, scale: 0.8 }}
@@ -286,6 +291,7 @@ export function Sidebar({
                 <motion.button
                     type="button"
                     data-tab="settings"
+                    data-tour="sidebar-settings"
                     onClick={() => onTabChange("settings")}
                     whileHover={{ scale: isWin10 ? 1 : 1.05 }}
                     whileTap={{ scale: 0.92 }}

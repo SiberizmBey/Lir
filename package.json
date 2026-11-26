@@ -1,7 +1,7 @@
 {
     "name": "lir",
     "private": true,
-    "version": "26.3.3-beta",
+    "version": "26.3.4-beta",
     "main": "main.cjs",
     "type": "module",
     "scripts": {

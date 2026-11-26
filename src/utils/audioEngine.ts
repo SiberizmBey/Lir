@@ -111,6 +111,7 @@ class AudioEngine {
   private isSecondaryVirtualCable: boolean = false;
   private dualOutputEnabled: boolean = true;
   private masterVolume: number = 0.85;
+  private monitorVolume: number = 1;
   private activeRecDspUpdater: ((cfg: VoiceChangerConfig) => void) | null = null;
 
   // Unity gain multipliers (prevents digital clipping/distortion)
@@ -141,7 +142,7 @@ class AudioEngine {
 
       // Effects sub-bus
       this.cableEffectsGain = this.cableCtx.createGain();
-      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
+      const sfxVol = this.getSfxGain();
       this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
       this.cableEffectsGain.connect(this.cableMasterBus);
 
@@ -162,7 +163,7 @@ class AudioEngine {
       this.monitorCtx = new AudioCtx({ latencyHint: 'interactive' });
 
       this.monitorEffectsGain = this.monitorCtx.createGain();
-      const initialMonitorVol = this.dualOutputEnabled ? this.masterVolume : 0;
+      const initialMonitorVol = this.getMonitorGain();
       this.monitorEffectsGain.gain.setValueAtTime(initialMonitorVol, this.monitorCtx.currentTime);
 
       // Monitor Limiter to protect user's ears from high peaks
@@ -190,19 +191,32 @@ class AudioEngine {
     }
   }
 
+  private getSfxGain(): number {
+    return Math.min(1.5, Math.max(0, this.masterVolume) * this.SFX_BOOST);
+  }
+
+  private getMonitorGain(): number {
+    if (!this.dualOutputEnabled) return 0;
+    return Math.min(1.5, Math.max(0, this.masterVolume) * Math.max(0, this.monitorVolume));
+  }
+
   public setRoutingConfig(
     primaryId: string,
     secondaryId: string,
     dualOutput: boolean,
     volume: number,
-    muteMicOnPlay?: boolean
+    muteMicOnPlay?: boolean,
+    monitorVolume?: number
   ) {
     const nextPrimary = primaryId || 'default';
     const nextSecondary = secondaryId || 'default';
     const nextDual = dualOutput;
-    const nextVol = Math.max(0, Math.min(1, volume));
+    const nextVol = Math.max(0, Math.min(1.5, volume));
     if (muteMicOnPlay !== undefined) {
       this.muteMicOnPlay = muteMicOnPlay;
+    }
+    if (monitorVolume !== undefined) {
+      this.monitorVolume = Math.max(0, Math.min(1.5, monitorVolume));
     }
 
     const deviceChanged = this.primaryDeviceId !== nextPrimary || this.secondaryDeviceId !== nextSecondary;
@@ -215,13 +229,11 @@ class AudioEngine {
     this.initContexts();
 
     if (this.cableEffectsGain && this.cableCtx) {
-      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
-      this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
+      this.cableEffectsGain.gain.setValueAtTime(this.getSfxGain(), this.cableCtx.currentTime);
     }
 
     if (this.monitorEffectsGain && this.monitorCtx) {
-      const monitorVol = this.dualOutputEnabled ? this.masterVolume : 0;
-      this.monitorEffectsGain.gain.setValueAtTime(monitorVol, this.monitorCtx.currentTime);
+      this.monitorEffectsGain.gain.setValueAtTime(this.getMonitorGain(), this.monitorCtx.currentTime);
     }
 
     if (deviceChanged) {
@@ -1401,7 +1413,7 @@ class AudioEngine {
   }
 
   public updateSoundVolume(soundId: string, volume: number) {
-    const clamped = Math.max(0, Math.min(1, volume));
+    const clamped = Math.max(0, Math.min(1.5, volume));
     const gains = this.activeSoundGains.get(soundId);
     if (gains) {
       gains.forEach((g) => {
@@ -1415,16 +1427,14 @@ class AudioEngine {
   }
 
   public setMasterVolume(volume: number) {
-    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.masterVolume = Math.max(0, Math.min(1.5, volume));
     this.initContexts();
 
     if (this.cableEffectsGain && this.cableCtx) {
-      const sfxVol = Math.min(1.5, this.masterVolume * this.SFX_BOOST);
-      this.cableEffectsGain.gain.setValueAtTime(sfxVol, this.cableCtx.currentTime);
+      this.cableEffectsGain.gain.setValueAtTime(this.getSfxGain(), this.cableCtx.currentTime);
     }
     if (this.monitorEffectsGain && this.monitorCtx) {
-      const monitorVol = this.dualOutputEnabled ? this.masterVolume : 0;
-      this.monitorEffectsGain.gain.setValueAtTime(monitorVol, this.monitorCtx.currentTime);
+      this.monitorEffectsGain.gain.setValueAtTime(this.getMonitorGain(), this.monitorCtx.currentTime);
     }
   }
 

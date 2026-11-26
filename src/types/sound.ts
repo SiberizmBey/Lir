@@ -91,7 +91,8 @@ export interface SavedRecording {
 }
 
 export interface AudioRoutingConfig {
-  masterVolume: number;
+  masterVolume: number; // 0..1.5 — stream / virtual cable level
+  monitorVolume: number; // 0..1.5 — headphone monitoring level, independent from master
   primaryDeviceLabel: string;
   primaryDeviceId: string;
   secondaryDeviceLabel: string;

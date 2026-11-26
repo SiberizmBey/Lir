@@ -243,8 +243,8 @@ export function PlaybackBar({
                     <input
                       type="range"
                       min="0"
-                      max="1"
-                      step="0.02"
+                      max="1.5"
+                      step="0.05"
                       value={masterVolume}
                       onChange={(e) =>
                         onMasterVolumeChange(parseFloat(e.target.value))
@@ -252,7 +252,7 @@ export function PlaybackBar({
                       className="w-16 shrink-0 cursor-pointer"
                       aria-label={t('header.masterVolume')}
                     />
-                    <span className="w-8 shrink-0 text-right text-[11px] font-mono tabular-nums text-[var(--text-secondary)]">
+                    <span className="w-10 shrink-0 text-right text-[11px] font-mono tabular-nums text-[var(--text-secondary)]">
                       %{Math.round(masterVolume * 100)}
                     </span>
                   </motion.div>

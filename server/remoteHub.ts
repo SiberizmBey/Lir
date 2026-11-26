@@ -201,7 +201,7 @@ export class RemoteHub {
     activePlaying: [],
     routing: {
       masterVolume: 0.85,
-      playbackMode: 'overlap',
+      playbackMode: 'cutoff',
       primaryDeviceLabel: 'Varsayılan Sistem Çıkışı',
       dualOutputEnabled: false,
     },

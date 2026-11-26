@@ -118,6 +118,7 @@ export function BottomUtilityBar({
             </AnimatePresence>
 
             <div
+                data-tour="bottom-utility-bar"
                 style={capsuleStyle}
                 className={`pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-full border select-none ${
                     isWin10

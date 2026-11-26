@@ -295,14 +295,14 @@ export function SoundCard({
           <input
             type="range"
             min="0"
-            max="1"
+            max="1.5"
             step="0.05"
             value={sound.volume}
             onChange={(e) => onVolumeChange(sound.id, parseFloat(e.target.value))}
             className="w-full"
             title={t('soundCard.volumeLevel', { percent: Math.round(sound.volume * 100) })}
           />
-          <span className="text-xs font-mono tabular-nums text-[var(--text-secondary)] w-9 text-right shrink-0">
+          <span className="text-xs font-mono tabular-nums text-[var(--text-secondary)] w-10 text-right shrink-0">
             %{Math.round(sound.volume * 100)}
           </span>
         </div>

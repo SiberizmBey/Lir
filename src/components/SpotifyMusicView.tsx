@@ -39,6 +39,7 @@ import {
     Youtube,
 } from "lucide-react";
 import { getApiUrl } from "../utils/apiBase";
+import { auditionStore } from "../utils/auditionStore";
 import { SoundItem } from "../types/sound";
 import {
     DEFAULT_SPOTIFY_REDIRECT_URI,
@@ -456,12 +457,38 @@ export function SpotifyMusicView({
         }
     }, [applyPreviewMonitorSink, previewSession, t]);
 
-    const handleSeekPreview = useCallback((nextSec: number) => {
-        const audio = previewAudioRef.current;
-        if (!audio) return;
-        const clamped = Math.max(0, nextSec);
-        audio.currentTime = clamped;
-        setPreviewCurrentTime(clamped);
+    // Mirror the local audition (Dinle) into the global header dynamic island
+    useEffect(() => {
+        auditionStore.publish(
+            previewSession
+                ? {
+                      id: previewSession.key,
+                      title: previewSession.title,
+                      artist: previewSession.artist,
+                      thumbnailUrl: previewSession.thumbnailUrl,
+                      isPlaying: isPreviewPlaying,
+                      currentTime: previewCurrentTime,
+                      duration:
+                          previewDuration || previewSession.durationSec || 0,
+                  }
+                : null,
+        );
+    }, [previewSession, isPreviewPlaying, previewCurrentTime, previewDuration]);
+
+    useEffect(() => {
+        auditionStore.setControls({
+            toggle: () => {
+                void handleTogglePreviewPlayPause();
+            },
+            stop: stopAndClosePreview,
+        });
+    }, [handleTogglePreviewPlayPause, stopAndClosePreview]);
+
+    useEffect(() => {
+        return () => {
+            auditionStore.setControls(null);
+            auditionStore.publish(null);
+        };
     }, []);
 
     const playMicSoundCleanly = useCallback(
@@ -2656,342 +2683,6 @@ export function SpotifyMusicView({
                     )}
                 </div>
             </motion.div>
-
-            {/* Inline Local Preview Player Bar (Headphones Monitor Only) */}
-            <AnimatePresence>
-                {previewSession && (
-                    <motion.div
-                        layout
-                        initial={{ opacity: 0, y: -10, scale: 0.985 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -8, scale: 0.985 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 30 }}
-                        className="app-card ui-card relative overflow-hidden p-3.5 sm:px-4 sm:py-3 border border-[var(--accent-border)] flex flex-col lg:flex-row lg:items-center gap-3.5"
-                    >
-                        <AnimatePresence>
-                            {isPreviewPlaying && (
-                                <motion.div
-                                    aria-hidden="true"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.25 }}
-                                    className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-                                >
-                                    <motion.div
-                                        animate={{ opacity: [0.75, 1, 0.8] }}
-                                        transition={{
-                                            repeat: Infinity,
-                                            duration: 2.2,
-                                            ease: "easeInOut",
-                                        }}
-                                        className="absolute inset-0 card-spotlight-beam"
-                                    />
-                                    <div className="absolute top-0 left-0 right-0 h-[1.5px] card-spotlight-rim" />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                        {(() => {
-                            const existingPreviewSound =
-                                previewSession.kind === "youtube" &&
-                                previewSession.youtubeTrack
-                                    ? findExistingSoundForYouTubeTrack(
-                                          previewSession.youtubeTrack,
-                                      )
-                                    : previewSession.kind === "spotify" &&
-                                        previewSession.spotifyTrack
-                                      ? findExistingSoundForSpotifyTrack(
-                                            previewSession.spotifyTrack,
-                                        )
-                                      : undefined;
-                            const isMicPlaying = existingPreviewSound
-                                ? activePlayingIds.includes(
-                                      existingPreviewSound.id,
-                                  )
-                                : false;
-                            const isImportingPreview = Boolean(
-                                importingKeys[previewSession.key],
-                            );
-                            const safeDuration = Math.max(
-                                previewDuration || previewSession.durationSec || 0,
-                                0.1,
-                            );
-
-                            return (
-                                <>
-                                    {/* Track Identity */}
-                                    <div className="relative z-10 flex items-center gap-3 min-w-0 lg:w-[270px] shrink-0">
-                                        <TrackThumbnail
-                                            src={previewSession.thumbnailUrl}
-                                            alt={previewSession.title}
-                                            isPlaying={isPreviewPlaying}
-                                            isReady
-                                            coverMode="preview"
-                                            onCoverClick={() =>
-                                                void handleTogglePreviewPlayPause()
-                                            }
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <p
-                                                className="text-sm font-semibold text-[var(--text-primary)] truncate"
-                                                title={previewSession.title}
-                                            >
-                                                {previewSession.title}
-                                            </p>
-                                            <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
-                                                {previewSession.artist}
-                                                <span className="text-[var(--accent-text)] font-medium">
-                                                    {" · "}
-                                                    {t("spotify.previewBannerNote")}
-                                                </span>
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Transport + Seekable Timeline */}
-                                    <div className="relative z-10 flex items-center gap-3 flex-1 min-w-0">
-                                        <motion.button
-                                            type="button"
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={() =>
-                                                void handleTogglePreviewPlayPause()
-                                            }
-                                            title={
-                                                isPreviewPlaying
-                                                    ? t("spotify.previewPauseTitle")
-                                                    : t("spotify.previewResumeTitle")
-                                            }
-                                            className="btn-accent w-9 h-9 ui-control flex items-center justify-center shrink-0 cursor-pointer"
-                                        >
-                                            {isPreviewPlaying ? (
-                                                <Pause className="w-4 h-4 fill-current" />
-                                            ) : (
-                                                <Play className="w-4 h-4 fill-current ml-0.5" />
-                                            )}
-                                        </motion.button>
-
-                                        <span className="text-[11px] font-mono tabular-nums text-[var(--text-secondary)] w-10 text-right shrink-0">
-                                            {formatDuration(previewCurrentTime)}
-                                        </span>
-
-                                        <input
-                                            type="range"
-                                            min={0}
-                                            max={safeDuration}
-                                            step={0.1}
-                                            value={Math.min(
-                                                previewCurrentTime,
-                                                safeDuration,
-                                            )}
-                                            onChange={(e) =>
-                                                handleSeekPreview(
-                                                    Number(e.target.value),
-                                                )
-                                            }
-                                            className="flex-1 h-1.5 accent-[var(--accent)] cursor-pointer min-w-[80px]"
-                                        />
-
-                                        <span className="text-[11px] font-mono tabular-nums text-[var(--text-muted)] w-10 shrink-0">
-                                            {formatDuration(
-                                                previewDuration ||
-                                                    previewSession.durationSec,
-                                            )}
-                                        </span>
-                                    </div>
-
-                                    {/* Volume + Direct Import / Close Actions */}
-                                    <div className="relative z-10 flex items-center justify-between lg:justify-end gap-2 shrink-0">
-                                        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)]">
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setIsPreviewMuted((m) => !m)
-                                                }
-                                                title={
-                                                    isPreviewMuted
-                                                        ? t(
-                                                              "spotify.previewUnmuteTitle",
-                                                          )
-                                                        : t(
-                                                              "spotify.previewMuteTitle",
-                                                          )
-                                                }
-                                                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                                            >
-                                                {isPreviewMuted ||
-                                                previewVolume === 0 ? (
-                                                    <VolumeX className="w-3.5 h-3.5 text-rose-400" />
-                                                ) : (
-                                                    <Volume2 className="w-3.5 h-3.5 text-[var(--accent-text)]" />
-                                                )}
-                                            </button>
-                                            <input
-                                                type="range"
-                                                min={0}
-                                                max={1}
-                                                step={0.02}
-                                                value={
-                                                    isPreviewMuted
-                                                        ? 0
-                                                        : previewVolume
-                                                }
-                                                onChange={(e) => {
-                                                    const val = Number(
-                                                        e.target.value,
-                                                    );
-                                                    setIsPreviewMuted(val === 0);
-                                                    setPreviewVolume(val);
-                                                }}
-                                                className="w-16 h-1 accent-[var(--accent)] cursor-pointer"
-                                            />
-                                        </div>
-
-                                        {existingPreviewSound ? (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        isMicPlaying
-                                                            ? onStopSound(
-                                                                  existingPreviewSound.id,
-                                                              )
-                                                            : playMicSoundCleanly(
-                                                                  existingPreviewSound,
-                                                              )
-                                                    }
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 ui-control text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                                                        isMicPlaying
-                                                            ? "bg-rose-950/60 border border-rose-700 text-rose-300 hover:bg-rose-950/80"
-                                                            : "btn-accent"
-                                                    }`}
-                                                >
-                                                    {isMicPlaying ? (
-                                                        <>
-                                                            <Square className="w-3.5 h-3.5 fill-current" />
-                                                            <span>
-                                                                {t("soundCard.stop")}
-                                                            </span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Mic className="w-3.5 h-3.5" />
-                                                            <span>
-                                                                {t(
-                                                                    "spotify.playToMicBtn",
-                                                                )}
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        onOpenInMaker(
-                                                            existingPreviewSound,
-                                                        )
-                                                    }
-                                                    title={t(
-                                                        "soundCard.trimInMaker",
-                                                    )}
-                                                    className="p-2 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                                                >
-                                                    <Scissors className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    disabled={isImportingPreview}
-                                                    onClick={() => {
-                                                        if (
-                                                            previewSession.kind ===
-                                                                "youtube" &&
-                                                            previewSession.youtubeTrack
-                                                        ) {
-                                                            void importYouTubeTrack(
-                                                                previewSession.youtubeTrack,
-                                                                false,
-                                                            );
-                                                        } else if (
-                                                            previewSession.kind ===
-                                                                "spotify" &&
-                                                            previewSession.spotifyTrack
-                                                        ) {
-                                                            void importSpotifyTrack(
-                                                                previewSession.spotifyTrack,
-                                                                false,
-                                                            );
-                                                        }
-                                                    }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] text-xs font-semibold text-[var(--text-primary)] disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
-                                                >
-                                                    {isImportingPreview ? (
-                                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-text)]" />
-                                                    ) : (
-                                                        <Plus className="w-3.5 h-3.5 text-[var(--accent-text)]" />
-                                                    )}
-                                                    <span>
-                                                        {t(
-                                                            "spotify.addToSoundpadBtn",
-                                                        )}
-                                                    </span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={isImportingPreview}
-                                                    onClick={() => {
-                                                        if (
-                                                            previewSession.kind ===
-                                                                "youtube" &&
-                                                            previewSession.youtubeTrack
-                                                        ) {
-                                                            void importYouTubeTrack(
-                                                                previewSession.youtubeTrack,
-                                                                true,
-                                                            );
-                                                        } else if (
-                                                            previewSession.kind ===
-                                                                "spotify" &&
-                                                            previewSession.spotifyTrack
-                                                        ) {
-                                                            void importSpotifyTrack(
-                                                                previewSession.spotifyTrack,
-                                                                true,
-                                                            );
-                                                        }
-                                                    }}
-                                                    title={t(
-                                                        "spotify.addAndPlayTitle",
-                                                    )}
-                                                    className="btn-accent flex items-center gap-1.5 px-3 py-1.5 ui-control text-xs font-semibold disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
-                                                >
-                                                    <Mic className="w-3.5 h-3.5" />
-                                                    <span className="hidden sm:inline">
-                                                        {t(
-                                                            "spotify.addAndPlayBtn",
-                                                        )}
-                                                    </span>
-                                                </button>
-                                            </>
-                                        )}
-
-                                        <button
-                                            type="button"
-                                            onClick={stopAndClosePreview}
-                                            title={t("spotify.previewStopTitle")}
-                                            className="p-2 ui-control bg-[var(--bg-inner)] hover:bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                </>
-                            );
-                        })()}
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             {/* Active Tab Content */}
             <AnimatePresence mode="wait">

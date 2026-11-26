@@ -44,7 +44,6 @@ import { Sidebar, NavTab } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { BottomUtilityBar } from "./components/BottomUtilityBar";
 import { SoundCard } from "./components/SoundCard";
-import { PlaybackBar } from "./components/PlaybackBar";
 import { HotkeyModal, ExistingHotkeyBinding } from "./components/HotkeyModal";
 import { AddSoundModal } from "./components/AddSoundModal";
 import { AudioRoutingView } from "./components/AudioRoutingView";
@@ -59,6 +58,8 @@ import { SubtitleTranslatorView } from "./components/SubtitleTranslatorView";
 import { Footer } from "./components/Footer";
 import { KoruBanner } from "./components/KoruBanner";
 import { VbCableGuardOverlay } from "./components/VbCableGuardOverlay";
+import { SetupWizard } from "./components/SetupWizard";
+import { SpotlightTour } from "./components/SpotlightTour";
 import {
     getStoredBackgroundImage,
     storeBackgroundImage,
@@ -74,6 +75,8 @@ import { offloadSoundItem, offloadSoundsArray } from "./utils/audioAssetStorage"
 
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
+// One-time migration: playback mode default is Cutoff from this build on
+const STORAGE_KEY_PLAYBACK_DEFAULT_V2 = "lir_playback_mode_cutoff_default_v1";
 const STORAGE_KEY_VOICE_CHANGER = "lir_voice_changer_v1";
 const STORAGE_KEY_HOTKEY_FILTER = "lir_hotkey_filter_v1";
 const STORAGE_KEY_THEME = "lir_theme_v1";
@@ -81,6 +84,8 @@ const STORAGE_KEY_ACCENT = "lir_accent_color_v1";
 const STORAGE_KEY_UI_STYLE = "lir_ui_style_v1";
 const STORAGE_KEY_APPEARANCE = "lir_appearance_v1";
 const STORAGE_KEY_RELAY_BRIDGE = "lir_relay_bridge_v1";
+const STORAGE_KEY_ONBOARDING = "lir_onboarding_completed_v1";
+const STORAGE_KEY_TOUR = "lir_tour_completed_v1";
 const DEFAULT_RELAY_URL = "https://lirandroid.anticvalley.com.tr";
 
 function generateRandomRoomCode(): string {
@@ -137,6 +142,7 @@ const clampPercentage = (value: unknown, fallback: number) =>
 
 const DEFAULT_CONFIG: AudioRoutingConfig = {
     masterVolume: 0.85,
+    monitorVolume: 1.0,
     primaryDeviceLabel: "Varsayılan Sistem Çıkışı",
     primaryDeviceId: "default",
     secondaryDeviceLabel: "Varsayılan Kulaklık",
@@ -147,7 +153,7 @@ const DEFAULT_CONFIG: AudioRoutingConfig = {
     micDeviceLabel: "Varsayılan Mikrofon",
     micVolume: 1.0,
     muteMicOnPlay: true,
-    playbackMode: "overlap",
+    playbackMode: "cutoff",
     stopAllHotkey: "CTRL+SHIFT+X",
     discordRpcEnabled: true,
 };
@@ -388,6 +394,9 @@ export default function App() {
                 if (saved) {
                     const parsed = JSON.parse(saved) as Partial<AudioRoutingConfig>;
                     const loadedPrimaryId = parsed.primaryDeviceId || "default";
+                    const playbackDefaultMigrated =
+                        getPersistentItem(STORAGE_KEY_PLAYBACK_DEFAULT_V2) ===
+                        "1";
                     const loadedPrimaryLabel =
                         loadedPrimaryId === "default" &&
                         parsed.primaryDeviceLabel === "CABLE Input (VB-Audio Virtual Cable)"
@@ -399,6 +408,26 @@ export default function App() {
                         primaryDeviceId: loadedPrimaryId,
                         primaryDeviceLabel: loadedPrimaryLabel,
                         muteMicOnPlay: parsed.muteMicOnPlay ?? true,
+                        playbackMode:
+                            playbackDefaultMigrated &&
+                            (parsed.playbackMode === "overlap" ||
+                                parsed.playbackMode === "cutoff")
+                                ? parsed.playbackMode
+                                : DEFAULT_CONFIG.playbackMode,
+                        masterVolume:
+                            typeof parsed.masterVolume === "number"
+                                ? Math.min(
+                                      1.5,
+                                      Math.max(0, parsed.masterVolume),
+                                  )
+                                : DEFAULT_CONFIG.masterVolume,
+                        monitorVolume:
+                            typeof parsed.monitorVolume === "number"
+                                ? Math.min(
+                                      1.5,
+                                      Math.max(0, parsed.monitorVolume),
+                                  )
+                                : DEFAULT_CONFIG.monitorVolume,
                         stopAllHotkey:
                             typeof parsed.stopAllHotkey === "string" &&
                             parsed.stopAllHotkey.trim() !== "" &&
@@ -494,24 +523,73 @@ export default function App() {
         label?: string;
     } | null>(null);
     const triggerToastTimeoutRef = useRef<number | null>(null);
-    const playbackBarRef = useRef<HTMLDivElement | null>(null);
-    const [playbackBarHeight, setPlaybackBarHeight] = useState(0);
     const [isVbCableInstalled, setIsVbCableInstalled] = useState<boolean>(false);
+    const [isSetupWizardOpen, setIsSetupWizardOpen] = useState<boolean>(() => {
+        try {
+            return getPersistentItem(STORAGE_KEY_ONBOARDING) !== "true";
+        } catch {
+            return true;
+        }
+    });
+    const [isTourActive, setIsTourActive] = useState<boolean>(false);
+    const [tourStepIndex, setTourStepIndex] = useState<number>(0);
+    const [tourSidebarExpanded, setTourSidebarExpanded] = useState<boolean>(false);
     const [discordStatus, setDiscordStatus] = useState<DiscordStatus>({
         connected: false,
         clientId: "1558769862053077114",
     });
 
-    useEffect(() => {
-        const el = playbackBarRef.current;
-        if (!el) return;
-        const updateHeight = () => {
-            setPlaybackBarHeight(el.getBoundingClientRect().height);
-        };
-        updateHeight();
-        const observer = new ResizeObserver(updateHeight);
-        observer.observe(el);
-        return () => observer.disconnect();
+    const handleCompleteSetupWizard = useCallback((startTour: boolean) => {
+        try {
+            setPersistentItem(STORAGE_KEY_ONBOARDING, "true");
+        } catch {
+            // ignore
+        }
+        setIsSetupWizardOpen(false);
+        setCurrentTab("soundboard");
+        if (startTour) {
+            setTourStepIndex(0);
+            setIsTourActive(true);
+        } else {
+            try {
+                setPersistentItem(STORAGE_KEY_TOUR, "true");
+            } catch {
+                // ignore
+            }
+        }
+    }, []);
+
+    const handleSkipSetupWizard = useCallback(() => {
+        try {
+            setPersistentItem(STORAGE_KEY_ONBOARDING, "true");
+        } catch {
+            // ignore
+        }
+        setIsSetupWizardOpen(false);
+    }, []);
+
+    const handleCloseTour = useCallback(() => {
+        try {
+            setPersistentItem(STORAGE_KEY_TOUR, "true");
+        } catch {
+            // ignore
+        }
+        setIsTourActive(false);
+        setTourSidebarExpanded(false);
+        setCurrentTab("soundboard");
+    }, []);
+
+    const handleOpenSetupWizard = useCallback(() => {
+        setIsTourActive(false);
+        setTourSidebarExpanded(false);
+        setIsSetupWizardOpen(true);
+    }, []);
+
+    const handleStartTour = useCallback(() => {
+        setIsSetupWizardOpen(false);
+        setTourStepIndex(0);
+        setCurrentTab("soundboard");
+        setIsTourActive(true);
     }, []);
 
     const isElectron =
@@ -618,6 +696,18 @@ export default function App() {
 
     useEffect(() => {
         try {
+            if (
+                getPersistentItem(STORAGE_KEY_PLAYBACK_DEFAULT_V2) !== "1"
+            ) {
+                setPersistentItem(STORAGE_KEY_PLAYBACK_DEFAULT_V2, "1");
+            }
+        } catch {
+            // ignore storage errors
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
             setPersistentItem(
                 STORAGE_KEY_CONFIG,
                 JSON.stringify(routingConfig),
@@ -631,6 +721,7 @@ export default function App() {
             routingConfig.dualOutputEnabled,
             routingConfig.masterVolume,
             routingConfig.muteMicOnPlay,
+            routingConfig.monitorVolume,
         );
         audioEngine.setMicrophonePassThrough(
             routingConfig.micPassThrough,
@@ -1039,7 +1130,10 @@ export default function App() {
     );
 
     const isHotkeyPausedForModal =
-        isCapturingStopHotkey || editingHotkeyTarget !== null;
+        isCapturingStopHotkey ||
+        editingHotkeyTarget !== null ||
+        isSetupWizardOpen ||
+        isTourActive;
     const isHotkeysGloballyPaused =
         hotkeyFilterConfig.manuallyPaused ||
         (isElectron && electronFilterStatus.paused);
@@ -1136,7 +1230,7 @@ export default function App() {
     }, []);
 
     const handleVolumeChange = useCallback((soundId: string, volume: number) => {
-        const clamped = Math.max(0, Math.min(1, volume));
+        const clamped = Math.max(0, Math.min(1.5, volume));
         audioEngine.updateSoundVolume(soundId, clamped);
         setSounds((prev) =>
             prev.map((s) => (s.id === soundId ? { ...s, volume: clamped } : s)),
@@ -1259,7 +1353,7 @@ export default function App() {
         ) {
             actions.handleVolumeChange(msg.soundId, msg.volume);
         } else if (action === "master:volume" && typeof msg.volume === "number") {
-            const vol = Math.max(0, Math.min(1, msg.volume));
+            const vol = Math.max(0, Math.min(1.5, msg.volume));
             actions.setRoutingConfig((prev) => ({
                 ...prev,
                 masterVolume: vol,
@@ -2137,9 +2231,10 @@ export default function App() {
                 backgroundImageEnabled={Boolean(appearance.backgroundImage)}
                 transparency={appearance.sidebarTransparency}
                 uiStyle={uiStyle}
+                forceExpanded={isTourActive && tourSidebarExpanded}
             />
 
-            {/* Floating Top Header (full-window width in Gama & Win11 so search bar stays dead-center) */}
+            {/* Floating Top Header (full-window width in Gama & Win11 so Dynamic Island stays dead-center) */}
             {uiStyle !== "win10" && (
                 <Header
                     searchQuery={searchQuery}
@@ -2149,6 +2244,10 @@ export default function App() {
                     routingConfig={routingConfig}
                     onRoutingConfigChange={setRoutingConfig}
                     activePlayingCount={activePlayingIds.length}
+                    sounds={sounds}
+                    activeTracks={activePlaybackTracks}
+                    onStopSound={handleStopSound}
+                    onToggleLoop={handleToggleLoop}
                     backgroundImageEnabled={Boolean(appearance.backgroundImage)}
                     transparency={appearance.headerTransparency}
                     uiStyle={uiStyle}
@@ -2174,19 +2273,23 @@ export default function App() {
                         routingConfig={routingConfig}
                         onRoutingConfigChange={setRoutingConfig}
                         activePlayingCount={activePlayingIds.length}
+                        sounds={sounds}
+                        activeTracks={activePlaybackTracks}
+                        onStopSound={handleStopSound}
+                        onToggleLoop={handleToggleLoop}
                         backgroundImageEnabled={Boolean(appearance.backgroundImage)}
                         transparency={appearance.headerTransparency}
                         uiStyle={uiStyle}
                     />
                 )}
 
-                {/* Content Wrapper: full height; BottomUtilityBar smoothly slides up/down over PlaybackBar */}
+                {/* Content Wrapper */}
                 <div className="relative flex-1 min-h-0 flex flex-col">
                     {/* Scrollable Content (passes transparently behind floating Header in Gama & Win11) */}
                     <main
-                        className={`flex-1 overflow-y-auto px-4 sm:px-6 flex flex-col gap-8 ${
-                            activePlaybackTracks.length > 0 ? "pb-36" : "pb-20"
-                        } ${uiStyle === "win10" ? "pt-5" : "pt-[76px]"}`}
+                        className={`flex-1 overflow-y-auto px-4 sm:px-6 flex flex-col gap-8 pb-20 ${
+                            uiStyle === "win10" ? "pt-5" : "pt-[76px]"
+                        }`}
                     >
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -2203,7 +2306,10 @@ export default function App() {
                             {currentTab === "soundboard" && (
                                 <div className="flex-1 flex flex-col gap-5 w-full">
                                     {/* Soundboard Page Header */}
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div
+                                        data-tour="soundboard-controls"
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                                    >
                                         <div className="flex items-center gap-3.5">
                                             <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
                                                 <Volume2 className="w-5 h-5" />
@@ -2615,6 +2721,8 @@ export default function App() {
                                         onRelayBridgeConfigChange={setRelayBridgeConfig}
                                         relayBridgeStatus={relayBridgeStatus}
                                         relayClients={relayClients}
+                                        onOpenSetupWizard={handleOpenSetupWizard}
+                                        onStartTour={handleStartTour}
                                     />
                                     <Footer />
                                 </div>
@@ -2627,75 +2735,48 @@ export default function App() {
 
                     {/* Floating Hotkey Indicator */}
                     <AnimatePresence>
-                        {lastTriggeredNotice && (() => {
-                            const noticeOffsetY =
-                                activePlaybackTracks.length > 0
-                                    ? -Math.max(
-                                          0,
-                                          playbackBarHeight -
-                                              (uiStyle === "win10" ? 0 : 4),
-                                      )
-                                    : 0;
-                            return (
-                                <motion.div
-                                    initial={{
-                                        opacity: 0,
-                                        y: noticeOffsetY + 16,
-                                        scale: 0.92,
-                                    }}
-                                    animate={{
-                                        opacity: 1,
-                                        y: noticeOffsetY,
-                                        scale: 1,
-                                    }}
-                                    exit={{
-                                        opacity: 0,
-                                        y: noticeOffsetY + 10,
-                                        scale: 0.94,
-                                    }}
-                                    transition={{
-                                        type: "spring",
-                                        stiffness: 420,
-                                        damping: 32,
-                                    }}
-                                    className="absolute bottom-[72px] right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs pointer-events-none"
-                                >
-                                    <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
-                                    <span className="text-[var(--text-secondary)]">
-                                        {t("recorder.hotkeyLabel")}
+                        {lastTriggeredNotice && (
+                            <motion.div
+                                initial={{
+                                    opacity: 0,
+                                    y: 16,
+                                    scale: 0.92,
+                                }}
+                                animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                    scale: 1,
+                                }}
+                                exit={{
+                                    opacity: 0,
+                                    y: 10,
+                                    scale: 0.94,
+                                }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 420,
+                                    damping: 32,
+                                }}
+                                className="absolute bottom-[72px] right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2 ui-control bg-[var(--bg-island)] backdrop-blur-xl border border-[var(--accent-border)] text-[var(--text-primary)] font-mono text-xs pointer-events-none"
+                            >
+                                <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                                <span className="text-[var(--text-secondary)]">
+                                    {t("recorder.hotkeyLabel")}
+                                </span>
+                                <strong className="text-[var(--accent-text)] font-semibold">
+                                    {lastTriggeredNotice.key}
+                                </strong>
+                                {lastTriggeredNotice.label && (
+                                    <span className="text-[var(--text-primary)] font-sans font-medium">
+                                        · {lastTriggeredNotice.label}
                                     </span>
-                                    <strong className="text-[var(--accent-text)] font-semibold">
-                                        {lastTriggeredNotice.key}
-                                    </strong>
-                                    {lastTriggeredNotice.label && (
-                                        <span className="text-[var(--text-primary)] font-sans font-medium">
-                                            · {lastTriggeredNotice.label}
-                                        </span>
-                                    )}
-                                </motion.div>
-                            );
-                        })()}
+                                )}
+                            </motion.div>
+                        )}
                     </AnimatePresence>
 
                     {/* Bottom-Right Floating Utility Island */}
-                    <motion.div
-                        animate={{
-                            y:
-                                activePlaybackTracks.length > 0
-                                    ? -Math.max(
-                                          0,
-                                          playbackBarHeight -
-                                              (uiStyle === "win10" ? 0 : 4),
-                                      )
-                                    : 0,
-                        }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 420,
-                            damping: 32,
-                        }}
-                        className="pointer-events-none absolute bottom-3 right-4 sm:right-6 z-30"
-                    >
+                    <div className="pointer-events-none absolute bottom-3 right-4 sm:right-6 z-30">
                         <BottomUtilityBar
                             currentTab={currentTab}
                             onTabChange={setCurrentTab}
@@ -2707,29 +2788,6 @@ export default function App() {
                                     manuallyPaused: !prev.manuallyPaused,
                                 }))
                             }
-                            backgroundImageEnabled={Boolean(appearance.backgroundImage)}
-                            transparency={appearance.headerTransparency}
-                            uiStyle={uiStyle}
-                        />
-                    </motion.div>
-
-                    {/* Live Playback Bar */}
-                    <div
-                        ref={playbackBarRef}
-                        className="pointer-events-none absolute bottom-0 left-0 right-0 z-30"
-                    >
-                        <PlaybackBar
-                            sounds={sounds}
-                            activeTracks={activePlaybackTracks}
-                            masterVolume={routingConfig.masterVolume}
-                            onMasterVolumeChange={(volume) =>
-                                setRoutingConfig((prev) => ({
-                                    ...prev,
-                                    masterVolume: volume,
-                                }))
-                            }
-                            onStopSound={handleStopSound}
-                            onToggleLoop={handleToggleLoop}
                             backgroundImageEnabled={Boolean(appearance.backgroundImage)}
                             transparency={appearance.headerTransparency}
                             uiStyle={uiStyle}
@@ -2831,6 +2889,34 @@ export default function App() {
                     />
                 )}
             </AnimatePresence>
+
+            {/* First-Launch Sequential Setup Wizard */}
+            <AnimatePresence>
+                {isSetupWizardOpen && (!isElectron || isVbCableInstalled) && (
+                    <SetupWizard
+                        isOpen={isSetupWizardOpen}
+                        routingConfig={routingConfig}
+                        onRoutingConfigChange={setRoutingConfig}
+                        isElectron={isElectron}
+                        onComplete={handleCompleteSetupWizard}
+                        onSkip={handleSkipSetupWizard}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Step-by-Step Animated Spotlight Tutorial */}
+            <SpotlightTour
+                isOpen={
+                    isTourActive &&
+                    !isSetupWizardOpen &&
+                    (!isElectron || isVbCableInstalled)
+                }
+                currentStepIndex={tourStepIndex}
+                onStepChange={setTourStepIndex}
+                onClose={handleCloseTour}
+                onNavigateTab={setCurrentTab}
+                onSetSidebarExpanded={setTourSidebarExpanded}
+            />
         </div>
         </MotionConfig>
     );
