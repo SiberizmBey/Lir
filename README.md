@@ -47,6 +47,11 @@
       <br />
       <sub><strong>Ses Değiştirici</strong> — Canlı ses değiştirici</sub>
     </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td align="center" width="50%">
       <img src="public/assets/screenshots/othermusics.png" alt="Lir Dış Kaynak" />
       <br />
