@@ -20,7 +20,7 @@
 ## Öne Çıkan Özellikler
 
 - **Ses Tahtası (Soundboard):** Favoriler, kategori filtreleri, odaklanınca genişleyen hızlı arama çubuğu, kart bazlı ses seviyesi, döngü (loop), çalma modları (`overlap`, `restart`, `single`) ve canlı oynatma çubuğu.
-- **Makara (Lir Maker):** Ses dosyalarını yeniden render almadan (*non-destructive*) milisaniye hassasiyetinde dalga formu üzerinden kesme, `1x`–`8x` yakınlaştırma ve çoklu kesit birleştirme.
+- **Makara (Lir Maker):** Ses dosyalarını yeniden render almadan (_non-destructive_) milisaniye hassasiyetinde dalga formu üzerinden kesme, `1x`–`8x` yakınlaştırma ve çoklu kesit birleştirme.
 - **Dış Kaynak (Spotify & YouTube Müzik):** Spotify OAuth ile beğenilen şarkıları ve çalma listelerini görüntüleme, YouTube / YouTube Music üzerinden ses arama, önbelleğe alma ve tek tıkla Soundboard'a veya doğrudan mikrofona aktarma.
 - **Ses Kaydedici:** 60fps canlı frekans spektrumu, duraklat/devam et desteği, ses değiştirici efektleriyle veya ham kayıt alma ve kalıcı kayıt arşivi.
 - **Gerçek Zamanlı Ses Değiştirici:** `AudioWorklet` tabanlı perde (pitch), yüksek/alçak geçiren filtre, bas ve netlik artırıcı, distorsiyon, ring modulation, yankı (echo), reverb ve hazır ses profilleri.
@@ -37,32 +37,40 @@
 
 <table>
   <tr>
+  <td align="center" width="50%">
+      <img src="public/assets/screenshots/home.png" alt="Lir Ev" />
+      <br />
+      <sub><strong>Ana Sayfa</strong></sub>
+    </td>
+  <td align="center" width="50%">
+      <img src="public/assets/screenshots/voicechanger.png" alt="Lir Ses Değiştirici" />
+      <br />
+      <sub><strong>Ses Değiştirici</strong> — Canlı ses değiştirici</sub>
+    </td>
     <td align="center" width="50%">
-      <img src="public/assets/aistudio/image_4e469e98.png" alt="Lir Makara - Dalga Formu ve Ses Kesme" />
+      <img src="public/assets/screenshots/othermusics.png" alt="Lir Dış Kaynak" />
+      <br />
+      <sub><strong>Dış Kaynak</strong> — Spotify ve YouTube Music hesabınızı bağlayarak indirme gerektirmeden müzikleri ses thatanıza aktarın</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="public/assets/screenshots/maker.png" alt="Lir Makara" />
       <br />
       <sub><strong>Makara (Lir Maker)</strong> — Milisaniye hassasiyetinde dalga formu kırpma</sub>
     </td>
-    <td align="center" width="50%">
-      <img src="public/assets/aistudio/image_5eb49f75.png" alt="Lir Makara - Çoklu Kesit Seçimi" />
-      <br />
-      <sub><strong>Çoklu Kesit &amp; Önizleme</strong> — Tahribatsız kesit kuyruğu</sub>
-    </td>
   </tr>
 </table>
-
-> **Not:** Diğer görünümlerden (`Ses Tahtası`, `Dış Kaynak`, `Ses Değiştirici`) yeni ekran görüntüleri aldığınızda `docs/screenshots/` altına ekleyip bu tabloyu genişletebilirsiniz.
 
 ---
 
 ## Teknoloji Yığını
 
-| Katman | Kullanılan Teknolojiler |
-| :--- | :--- |
-| **Arayüz** | React 19, TypeScript, Tailwind CSS v4, Motion (`motion/react`), Lucide Icons |
-| **Ses Motoru** | Web Audio API, özel `AudioWorklet` perde işlemcisi, `HTMLMediaElement.setSinkId` |
+| Katman           | Kullanılan Teknolojiler                                                           |
+| :--------------- | :-------------------------------------------------------------------------------- |
+| **Arayüz**       | React 19, TypeScript, Tailwind CSS v4, Motion (`motion/react`), Lucide Icons      |
+| **Ses Motoru**   | Web Audio API, özel `AudioWorklet` perde işlemcisi, `HTMLMediaElement.setSinkId`  |
 | **Sunucu & API** | Node.js, Express, `ws` (WebSocket Hub), Spotify OAuth, `youtubei.js`, `yt-search` |
-| **Masaüstü** | Electron 44, `electron-builder` (Windows NSIS), `discord-rpc` |
-| **OCR & Çeviri** | `tesseract.js`, `@google/genai` |
+| **Masaüstü**     | Electron 44, `electron-builder` (Windows NSIS), `discord-rpc`                     |
+| **OCR & Çeviri** | `tesseract.js`, `@google/genai`                                                   |
 
 ---
 
@@ -72,7 +80,7 @@
 
 - **Node.js** `20+` (önerilen `22+`)
 - **npm** `10+`
-- *(Masaüstü mikrofon yönlendirmesi için önerilir)* **VB-Audio Virtual Cable (VB-CABLE)**
+- _(Masaüstü mikrofon yönlendirmesi için önerilir)_ **VB-Audio Virtual Cable (VB-CABLE)**
 
 ### 1. Depoyu Klonlayın ve Bağımlılıkları Yükleyin
 
