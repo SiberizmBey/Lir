@@ -1,6 +1,7 @@
 const DATABASE_NAME = "lir-appearance";
 const STORE_NAME = "settings";
 const BACKGROUND_IMAGE_KEY = "background-image";
+const ELECTRON_BG_ASSET_ID = "lir_wallpaper_bg";
 
 function openAppearanceDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
@@ -14,6 +15,17 @@ function openAppearanceDatabase(): Promise<IDBDatabase> {
 }
 
 export async function getStoredBackgroundImage(): Promise<string | null> {
+    if (typeof window !== "undefined" && window.electronAPI?.readAudioAsset) {
+        try {
+            const diskImage = await window.electronAPI.readAudioAsset(ELECTRON_BG_ASSET_ID);
+            if (diskImage && diskImage.startsWith("data:image/")) {
+                return diskImage;
+            }
+        } catch {
+            // fallback to IndexedDB
+        }
+    }
+
     const database = await openAppearanceDatabase();
     return new Promise((resolve, reject) => {
         const request = database
@@ -22,7 +34,11 @@ export async function getStoredBackgroundImage(): Promise<string | null> {
             .get(BACKGROUND_IMAGE_KEY);
         request.onsuccess = () => {
             database.close();
-            resolve(typeof request.result === "string" ? request.result : null);
+            const result = typeof request.result === "string" ? request.result : null;
+            if (result && typeof window !== "undefined" && window.electronAPI?.saveAudioAsset) {
+                void window.electronAPI.saveAudioAsset(ELECTRON_BG_ASSET_ID, result).catch(() => {});
+            }
+            resolve(result);
         };
         request.onerror = () => {
             database.close();
@@ -34,6 +50,14 @@ export async function getStoredBackgroundImage(): Promise<string | null> {
 export async function storeBackgroundImage(
     image: string | null,
 ): Promise<void> {
+    if (typeof window !== "undefined") {
+        if (image && window.electronAPI?.saveAudioAsset) {
+            await window.electronAPI.saveAudioAsset(ELECTRON_BG_ASSET_ID, image).catch(() => {});
+        } else if (!image && window.electronAPI?.deleteAudioAsset) {
+            await window.electronAPI.deleteAudioAsset(ELECTRON_BG_ASSET_ID).catch(() => {});
+        }
+    }
+
     const database = await openAppearanceDatabase();
     return new Promise((resolve, reject) => {
         const transaction = database.transaction(STORE_NAME, "readwrite");

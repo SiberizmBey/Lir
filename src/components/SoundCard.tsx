@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Volume2,
   AudioLines,
+  Scissors,
 } from 'lucide-react';
 import { PlaybackTrackInfo, SoundItem } from '../types/sound';
 import { useTranslation } from '../i18n';
@@ -25,6 +26,7 @@ interface SoundCardProps {
   onVolumeChange: (soundId: string, volume: number) => void;
   onDelete: (soundId: string) => void;
   onOpenHotkeyModal: (sound: SoundItem) => void;
+  onOpenInMaker?: (sound: SoundItem) => void;
 }
 
 export function SoundCard({
@@ -38,6 +40,7 @@ export function SoundCard({
   onVolumeChange,
   onDelete,
   onOpenHotkeyModal,
+  onOpenInMaker,
 }: SoundCardProps) {
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
@@ -211,6 +214,20 @@ export function SoundCard({
                     <span>{t('soundCard.assignHotkey')}</span>
                   </button>
 
+                  {onOpenInMaker && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        onOpenInMaker(sound);
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] flex items-center gap-2 cursor-pointer"
+                    >
+                      <Scissors className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                      <span>{t('soundCard.trimInMaker')}</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -244,6 +261,25 @@ export function SoundCard({
           </motion.button>
 
           <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] font-mono tabular-nums">
+            {(sound.segments && sound.segments.length > 0) ||
+            (sound.trimStart !== undefined && sound.trimStart > 0) ||
+            sound.trimEnd !== undefined ? (
+              <span
+                title={
+                  sound.segments && sound.segments.length > 1
+                    ? t('soundCard.slicesBadge', { count: sound.segments.length })
+                    : t('soundCard.trimmedBadge')
+                }
+                className="inline-flex items-center gap-0.5 text-[var(--accent-text)]"
+              >
+                <Scissors className="w-3 h-3" />
+                {sound.segments && sound.segments.length > 1 && (
+                  <span className="text-[10px] font-bold leading-none">
+                    {sound.segments.length}
+                  </span>
+                )}
+              </span>
+            ) : null}
             {sound.loop && (
               <span className="text-[11px] font-sans font-medium text-[var(--accent-text)]">
                 {t('soundCard.loopBadge')}

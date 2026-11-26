@@ -26,6 +26,8 @@ app.commandLine.appendSwitch("enable-features", "AudioServiceOutOfProcess");
 Menu.setApplicationMenu(null);
 
 let mainWindow = null;
+let localApiBaseUrl = "";
+let stopElectronLocalApi = null;
 let subtitleOverlayWindow = null;
 let registeredShortcuts = new Set();
 let lastRequestedHotkeys = [];
@@ -33,7 +35,7 @@ let hotkeyFilterConfig = {
     enabled: true,
     manuallyPaused: false,
     pauseInTextInputs: true,
-    pausedApps: [],
+    allowedApps: [],
 };
 let hotkeyFilterStatus = {
     paused: false,
@@ -56,6 +58,103 @@ let subtitleOverlaySettings = {
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+}
+
+// Authoritative disk-backed store in Electron userData (immune to localStorage quota & file:// flush issues)
+let storeDirPath = "";
+let storeFilePath = "";
+let storeBakFilePath = "";
+let assetsDirPath = "";
+let persistedKvStore = Object.create(null);
+let storeDirty = false;
+let storeFlushTimer = null;
+const pendingAssetWrites = new Map();
+
+function isValidStoreKey(key) {
+    return typeof key === "string" && /^[a-zA-Z0-9._:-]{1,120}$/.test(key);
+}
+
+function isValidAssetId(assetId) {
+    return typeof assetId === "string" && /^[a-zA-Z0-9_-]{3,100}$/.test(assetId);
+}
+
+function resolveConfinedAssetPath(assetId) {
+    if (!assetsDirPath || !isValidAssetId(assetId)) {
+        throw new Error("Geçersiz medya varlık kimliği");
+    }
+    const resolved = path.resolve(assetsDirPath, `${assetId}.dat`);
+    if (!resolved.startsWith(assetsDirPath + path.sep)) {
+        throw new Error("Geçersiz medya varlık yolu");
+    }
+    return resolved;
+}
+
+function initPersistentStore() {
+    storeDirPath = path.join(app.getPath("userData"), "lir-store");
+    storeFilePath = path.join(storeDirPath, "app-state.json");
+    storeBakFilePath = path.join(storeDirPath, "app-state.json.bak");
+    assetsDirPath = path.join(storeDirPath, "assets");
+    try {
+        fs.mkdirSync(assetsDirPath, { recursive: true });
+    } catch (err) {
+        console.warn("Lir store dizini oluşturulamadı:", err);
+    }
+
+    const candidates = [storeFilePath, storeBakFilePath];
+    for (const candidate of candidates) {
+        try {
+            if (!fs.existsSync(candidate)) continue;
+            const raw = fs.readFileSync(candidate, "utf8");
+            if (!raw || !raw.trim()) continue;
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                const next = Object.create(null);
+                for (const [k, v] of Object.entries(parsed)) {
+                    if (isValidStoreKey(k) && typeof v === "string") {
+                        next[k] = v;
+                    }
+                }
+                persistedKvStore = next;
+                break;
+            }
+        } catch (err) {
+            console.warn(`Lir store okunamadı (${candidate}):`, err);
+        }
+    }
+}
+
+function flushPersistentStoreSync() {
+    if (storeFlushTimer) {
+        clearTimeout(storeFlushTimer);
+        storeFlushTimer = null;
+    }
+    if (!storeDirty || !storeFilePath) return;
+    try {
+        fs.mkdirSync(storeDirPath, { recursive: true });
+        const payload = JSON.stringify(persistedKvStore);
+        const tmpFile = `${storeFilePath}.tmp-${process.pid}-${Date.now()}`;
+        fs.writeFileSync(tmpFile, payload, "utf8");
+        if (fs.existsSync(storeFilePath)) {
+            try {
+                fs.copyFileSync(storeFilePath, storeBakFilePath);
+            } catch {
+                // ignore backup copy failure
+            }
+        }
+        fs.renameSync(tmpFile, storeFilePath);
+        storeDirty = false;
+    } catch (err) {
+        console.error("Lir store diske yazılamadı:", err);
+    }
+}
+
+function schedulePersistentStoreFlush() {
+    storeDirty = true;
+    if (storeFlushTimer) return;
+    storeFlushTimer = setTimeout(() => {
+        storeFlushTimer = null;
+        flushPersistentStoreSync();
+    }, 80);
 }
 
 function applySubtitleOverlaySettings() {
@@ -437,7 +536,40 @@ function createWindow() {
         });
     }
 
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (
+            url.startsWith("https://accounts.spotify.com/") ||
+            url.startsWith("https://lir.anticvalley.com.tr/auth/callback") ||
+            url.startsWith("http://localhost:") ||
+            url.startsWith("http://127.0.0.1:")
+        ) {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    width: 580,
+                    height: 740,
+                    autoHideMenuBar: true,
+                    backgroundColor: "#09090b",
+                },
+            };
+        }
+        if (url.startsWith("https://") || url.startsWith("http://")) {
+            shell.openExternal(url);
+        }
+        return { action: "deny" };
+    });
+
+    mainWindow.on("close", () => {
+        flushPersistentStoreSync();
+        try {
+            session.defaultSession.flushStorageData();
+        } catch {
+            // ignore
+        }
+    });
+
     mainWindow.on("closed", () => {
+        flushPersistentStoreSync();
         mainWindow = null;
         if (subtitleOverlayWindow && !subtitleOverlayWindow.isDestroyed()) {
             subtitleOverlayWindow.close();
@@ -568,7 +700,16 @@ function evaluateForegroundApp(activeProcess, activeTitle) {
         return;
     }
 
-    const enabledRules = (hotkeyFilterConfig.pausedApps || []).filter((r) => r && r.enabled);
+    const enabledRules = (hotkeyFilterConfig.allowedApps || []).filter((r) => r && r.enabled);
+    if (enabledRules.length === 0) {
+        applyEffectiveHotkeyState({
+            paused: false,
+            activeProcess,
+            activeTitle,
+        });
+        return;
+    }
+
     const procNorm = normProcName(activeProcess);
     const titleLower = String(activeTitle || "").toLowerCase();
 
@@ -583,15 +724,15 @@ function evaluateForegroundApp(activeProcess, activeTitle) {
 
     if (matchedRule) {
         applyEffectiveHotkeyState({
-            paused: true,
-            reason: "app",
+            paused: false,
             activeProcess,
             activeTitle,
             matchedRuleName: matchedRule.name || matchedRule.processName,
         });
     } else {
         applyEffectiveHotkeyState({
-            paused: false,
+            paused: true,
+            reason: "app",
             activeProcess,
             activeTitle,
         });
@@ -614,8 +755,8 @@ function stopForegroundWatcher() {
 function startForegroundWatcherIfNeeded() {
     const hasRules =
         hotkeyFilterConfig.enabled &&
-        Array.isArray(hotkeyFilterConfig.pausedApps) &&
-        hotkeyFilterConfig.pausedApps.some((r) => r && r.enabled);
+        Array.isArray(hotkeyFilterConfig.allowedApps) &&
+        hotkeyFilterConfig.allowedApps.some((r) => r && r.enabled);
 
     if (!hasRules) {
         stopForegroundWatcher();
@@ -819,7 +960,7 @@ async function scanElectronSystemApps() {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     if (process.platform === "win32") {
         app.setAppUserModelId("com.lir.soundboard");
     }
@@ -840,6 +981,136 @@ app.whenReady().then(() => {
     if (session.defaultSession.setDevicePermissionHandler) {
         session.defaultSession.setDevicePermissionHandler(() => true);
     }
+
+    initPersistentStore();
+
+    try {
+        const mod = await import("./localApiServer.mjs");
+        localApiBaseUrl = await mod.startLocalApiServer({
+            dataDir: path.join(app.getPath("userData"), "lir-cache"),
+        });
+        stopElectronLocalApi = mod.stopLocalApiServer;
+    } catch (err) {
+        console.warn("Electron local API server failed to start:", err);
+    }
+
+    ipcMain.on("api:getBaseUrlSync", (event) => {
+        event.returnValue = localApiBaseUrl || "";
+    });
+
+    ipcMain.on("store:getSnapshotSync", (event) => {
+        if (mainWindow && event.sender !== mainWindow.webContents) {
+            event.returnValue = {};
+            return;
+        }
+        event.returnValue = { ...persistedKvStore };
+    });
+
+    ipcMain.on("store:setItemSync", (event, key, value) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidStoreKey(key) ||
+            typeof value !== "string"
+        ) {
+            event.returnValue = false;
+            return;
+        }
+        persistedKvStore[key] = value;
+        storeDirty = true;
+        flushPersistentStoreSync();
+        event.returnValue = true;
+    });
+
+    ipcMain.handle("store:setItem", (event, key, value) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidStoreKey(key) ||
+            typeof value !== "string"
+        ) {
+            return false;
+        }
+        persistedKvStore[key] = value;
+        schedulePersistentStoreFlush();
+        return true;
+    });
+
+    ipcMain.handle("store:removeItem", (event, key) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidStoreKey(key)
+        ) {
+            return false;
+        }
+        delete persistedKvStore[key];
+        schedulePersistentStoreFlush();
+        return true;
+    });
+
+    ipcMain.handle("assets:saveAudio", async (event, assetId, dataUrl) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidAssetId(assetId) ||
+            typeof dataUrl !== "string" ||
+            !dataUrl
+        ) {
+            return false;
+        }
+        const writeTask = (async () => {
+            await fs.promises.mkdir(assetsDirPath, { recursive: true });
+            const targetPath = resolveConfinedAssetPath(assetId);
+            const tmpPath = `${targetPath}.tmp-${Date.now()}`;
+            await fs.promises.writeFile(tmpPath, dataUrl, "utf8");
+            await fs.promises.rename(tmpPath, targetPath);
+            return true;
+        })();
+        pendingAssetWrites.set(assetId, writeTask);
+        try {
+            return await writeTask;
+        } catch (err) {
+            console.warn("Medya varlığı diske yazılamadı:", err);
+            return false;
+        } finally {
+            if (pendingAssetWrites.get(assetId) === writeTask) {
+                pendingAssetWrites.delete(assetId);
+            }
+        }
+    });
+
+    ipcMain.handle("assets:readAudio", async (event, assetId) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidAssetId(assetId)
+        ) {
+            return null;
+        }
+        const inFlight = pendingAssetWrites.get(assetId);
+        if (inFlight) {
+            await inFlight.catch(() => {});
+        }
+        try {
+            const targetPath = resolveConfinedAssetPath(assetId);
+            if (!fs.existsSync(targetPath)) return null;
+            return await fs.promises.readFile(targetPath, "utf8");
+        } catch {
+            return null;
+        }
+    });
+
+    ipcMain.handle("assets:deleteAudio", async (event, assetId) => {
+        if (
+            (mainWindow && event.sender !== mainWindow.webContents) ||
+            !isValidAssetId(assetId)
+        ) {
+            return false;
+        }
+        try {
+            const targetPath = resolveConfinedAssetPath(assetId);
+            await fs.promises.unlink(targetPath).catch(() => {});
+            return true;
+        } catch {
+            return false;
+        }
+    });
 
     createWindow();
     // Setup IPC Handlers
@@ -975,7 +1246,7 @@ app.whenReady().then(() => {
             enabled: Boolean(cfg.enabled),
             manuallyPaused: Boolean(cfg.manuallyPaused),
             pauseInTextInputs: Boolean(cfg.pauseInTextInputs),
-            pausedApps: Array.isArray(cfg.pausedApps) ? cfg.pausedApps : [],
+            allowedApps: Array.isArray(cfg.allowedApps) ? cfg.allowedApps : [],
         };
         if (hotkeyFilterConfig.manuallyPaused) {
             applyEffectiveHotkeyState({ paused: true, reason: "manual" });
@@ -1118,8 +1389,36 @@ app.whenReady().then(() => {
     });
 });
 
+let isQuittingAfterFlush = false;
+
+app.on("before-quit", (event) => {
+    flushPersistentStoreSync();
+    try {
+        session.defaultSession.flushStorageData();
+    } catch {
+        // ignore
+    }
+    if (!isQuittingAfterFlush && pendingAssetWrites.size > 0) {
+        event.preventDefault();
+        isQuittingAfterFlush = true;
+        Promise.allSettled(Array.from(pendingAssetWrites.values())).finally(() => {
+            flushPersistentStoreSync();
+            app.quit();
+        });
+    }
+});
+
 app.on("will-quit", () => {
+    flushPersistentStoreSync();
+    try {
+        session.defaultSession.flushStorageData();
+    } catch {
+        // ignore
+    }
     stopForegroundWatcher();
+    if (stopElectronLocalApi) {
+        void stopElectronLocalApi().catch(() => {});
+    }
     // Clean up Discord RPC
     if (rpcClient) {
         try {
@@ -1132,6 +1431,7 @@ app.on("will-quit", () => {
 });
 
 app.on("window-all-closed", () => {
+    flushPersistentStoreSync();
     if (process.platform !== "darwin") {
         app.quit();
     }

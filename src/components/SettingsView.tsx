@@ -278,7 +278,7 @@ export function SettingsView({
         const cleanTitle = titleMatch?.trim() || undefined;
         const norm = (v: string) => v.trim().toLowerCase().replace(/\.exe$/, "");
 
-        const exists = hotkeyFilterConfig.pausedApps.some(
+        const exists = hotkeyFilterConfig.allowedApps.some(
             (r) =>
                 norm(r.processName) === norm(cleanProc) &&
                 (r.titleMatch || "").toLowerCase() === (cleanTitle || "").toLowerCase(),
@@ -287,7 +287,7 @@ export function SettingsView({
 
         onHotkeyFilterConfigChange({
             ...hotkeyFilterConfig,
-            pausedApps: [
+            allowedApps: [
                 {
                     id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                     name: name.trim() || cleanProc,
@@ -296,7 +296,7 @@ export function SettingsView({
                     enabled: true,
                     addedAt: Date.now(),
                 },
-                ...hotkeyFilterConfig.pausedApps,
+                ...hotkeyFilterConfig.allowedApps,
             ],
         });
     };
@@ -1193,31 +1193,49 @@ export function SettingsView({
                 </div>
 
                 {/* Live Filter Status Banner */}
-                <div
-                    className={`px-3.5 py-2.5 ui-inner border text-xs flex flex-wrap items-center justify-between gap-2 ${
-                        hotkeyFilterConfig.manuallyPaused || hotkeyFilterStatus.paused
-                            ? "bg-amber-950/30 border-amber-700/60 text-amber-200"
-                            : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                    }`}
-                >
-                    <span>
-                        {hotkeyFilterConfig.manuallyPaused
-                            ? t("hotkeyFilter.statusPausedManual")
-                            : hotkeyFilterStatus.paused
-                              ? t("hotkeyFilter.statusPausedByApp", {
-                                    app: hotkeyFilterStatus.activeProcess || "",
-                                    rule: hotkeyFilterStatus.matchedRuleName || "",
-                                })
-                              : t("hotkeyFilter.statusWatching", {
-                                    count: hotkeyFilterConfig.pausedApps.filter((r) => r.enabled).length,
-                                })}
-                    </span>
-                    {!isElectron && (
-                        <span className="text-[11px] text-[var(--text-muted)]">
-                            {t("hotkeyFilter.webDesktopNotice")}
-                        </span>
-                    )}
-                </div>
+                {(() => {
+                    const enabledAllowedCount = hotkeyFilterConfig.allowedApps.filter(
+                        (r) => r.enabled,
+                    ).length;
+                    const isPaused =
+                        hotkeyFilterConfig.manuallyPaused ||
+                        hotkeyFilterStatus.paused;
+                    return (
+                        <div
+                            className={`px-3.5 py-2.5 ui-inner border text-xs flex flex-wrap items-center justify-between gap-2 ${
+                                isPaused
+                                    ? "bg-amber-950/30 border-amber-700/60 text-amber-200"
+                                    : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                            }`}
+                        >
+                            <span>
+                                {hotkeyFilterConfig.manuallyPaused
+                                    ? t("hotkeyFilter.statusPausedManual")
+                                    : hotkeyFilterStatus.paused
+                                      ? t("hotkeyFilter.statusPausedByApp", {
+                                            app:
+                                                hotkeyFilterStatus.activeProcess ||
+                                                "—",
+                                        })
+                                      : hotkeyFilterStatus.matchedRuleName
+                                        ? t("hotkeyFilter.statusAllowedActive", {
+                                              rule: hotkeyFilterStatus.matchedRuleName,
+                                          })
+                                        : enabledAllowedCount > 0 &&
+                                            hotkeyFilterConfig.enabled
+                                          ? t("hotkeyFilter.statusWatching", {
+                                                count: enabledAllowedCount,
+                                            })
+                                          : t("hotkeyFilter.statusAllApps")}
+                            </span>
+                            {!isElectron && (
+                                <span className="text-[11px] text-[var(--text-muted)]">
+                                    {t("hotkeyFilter.webDesktopNotice")}
+                                </span>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Quick Filter Switches */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1328,20 +1346,20 @@ export function SettingsView({
                     </div>
                 </div>
 
-                {/* Paused Apps Rules List */}
+                {/* Allowed Apps Rules List */}
                 <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
                         {t("hotkeyFilter.rulesListTitle", {
-                            count: hotkeyFilterConfig.pausedApps.length,
+                            count: hotkeyFilterConfig.allowedApps.length,
                         })}
                     </p>
-                    {hotkeyFilterConfig.pausedApps.length === 0 ? (
+                    {hotkeyFilterConfig.allowedApps.length === 0 ? (
                         <div className="p-4 ui-inner bg-[var(--bg-inner)] border border-dashed border-[var(--border-subtle)] text-xs text-[var(--text-muted)] text-center">
                             {t("hotkeyFilter.noRules")}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                            {hotkeyFilterConfig.pausedApps.map((rule) => (
+                            {hotkeyFilterConfig.allowedApps.map((rule) => (
                                 <div
                                     key={rule.id}
                                     className="px-3.5 py-2.5 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-between gap-3"
@@ -1369,7 +1387,7 @@ export function SettingsView({
                                             onClick={() =>
                                                 onHotkeyFilterConfigChange({
                                                     ...hotkeyFilterConfig,
-                                                    pausedApps: hotkeyFilterConfig.pausedApps.map((r) =>
+                                                    allowedApps: hotkeyFilterConfig.allowedApps.map((r) =>
                                                         r.id === rule.id
                                                             ? { ...r, enabled: !r.enabled }
                                                             : r,
@@ -1390,7 +1408,7 @@ export function SettingsView({
                                             onClick={() =>
                                                 onHotkeyFilterConfigChange({
                                                     ...hotkeyFilterConfig,
-                                                    pausedApps: hotkeyFilterConfig.pausedApps.filter(
+                                                    allowedApps: hotkeyFilterConfig.allowedApps.filter(
                                                         (r) => r.id !== rule.id,
                                                     ),
                                                 })
@@ -2020,7 +2038,7 @@ export function SettingsView({
                                         return filtered.map((app) => {
                                             const norm = (v: string) =>
                                                 v.trim().toLowerCase().replace(/\.exe$/, "");
-                                            const isAdded = hotkeyFilterConfig.pausedApps.some(
+                                            const isAdded = hotkeyFilterConfig.allowedApps.some(
                                                 (r) => norm(r.processName) === norm(app.processName),
                                             );
                                             const sourceLabel =

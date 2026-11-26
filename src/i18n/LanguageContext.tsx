@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import trTranslations from './locales/tr.json';
 import enTranslations from './locales/en.json';
+import { getPersistentItem, setPersistentItem } from '../utils/persistentStore';
 
 export type Language = 'tr' | 'en';
 export type LanguageMode = 'auto' | 'tr' | 'en';
@@ -98,12 +99,12 @@ function interpolate(template: string, params?: Record<string, string | number |
 
 function getInitialLanguageMode(): LanguageMode {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY_LANGUAGE);
+    const saved = getPersistentItem(STORAGE_KEY_LANGUAGE);
     if (saved === 'auto' || saved === 'tr' || saved === 'en') {
       return saved;
     }
   } catch (err) {
-    console.warn('Could not read saved language from localStorage:', err);
+    console.warn('Could not read saved language from storage:', err);
   }
   // Default to 'auto' for automatic language detection
   return 'auto';
@@ -131,9 +132,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const setLanguage = useCallback((newMode: LanguageMode) => {
     setLanguageMode(newMode);
     try {
-      localStorage.setItem(STORAGE_KEY_LANGUAGE, newMode);
+      setPersistentItem(STORAGE_KEY_LANGUAGE, newMode);
     } catch (err) {
-      console.warn('Could not save language to localStorage:', err);
+      console.warn('Could not save language to storage:', err);
     }
   }, []);
 

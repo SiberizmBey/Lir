@@ -6,9 +6,11 @@ import {
     Sliders,
     Keyboard,
     Mic,
+    Scissors,
     HelpCircle,
     Settings,
     ScanText,
+    Disc3,
 } from "lucide-react";
 import { UIStyle } from "../types/sound";
 import { useTranslation } from "../i18n";
@@ -17,6 +19,8 @@ export type NavTab =
     | "soundboard"
     | "voice"
     | "recorder"
+    | "maker"
+    | "spotify"
     | "routing"
     | "hotkeys"
     | "translator"
@@ -64,6 +68,18 @@ export function Sidebar({
             id: "recorder" as NavTab,
             label: t("nav.recorder"),
             icon: Mic,
+            badge: null,
+        },
+        {
+            id: "maker" as NavTab,
+            label: t("nav.maker"),
+            icon: Scissors,
+            badge: null,
+        },
+        {
+            id: "spotify" as NavTab,
+            label: t("nav.spotify"),
+            icon: Disc3,
             badge: null,
         },
         {

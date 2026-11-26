@@ -4,7 +4,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
-  
+  getApiBaseUrl: () => ipcRenderer.sendSync('api:getBaseUrlSync'),
+
+  // Authoritative userData store & audio asset persistence
+  getStoreSnapshotSync: () => ipcRenderer.sendSync('store:getSnapshotSync'),
+  setStoreItemSync: (key, value) => ipcRenderer.sendSync('store:setItemSync', key, value),
+  setStoreItem: (key, value) => ipcRenderer.invoke('store:setItem', key, value),
+  removeStoreItem: (key) => ipcRenderer.invoke('store:removeItem', key),
+  saveAudioAsset: (assetId, dataUrl) => ipcRenderer.invoke('assets:saveAudio', assetId, dataUrl),
+  readAudioAsset: (assetId) => ipcRenderer.invoke('assets:readAudio', assetId),
+  deleteAudioAsset: (assetId) => ipcRenderer.invoke('assets:deleteAudio', assetId),
+
   // File dialog
   openFileDialog: () => ipcRenderer.invoke('dialog:openSoundFile'),
   

@@ -1,4 +1,4 @@
-export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Özel';
+export type SoundCategory = 'Tümü' | 'Meme & Eğlence' | 'Oyun SFX' | 'Reaksiyon' | 'Anime & Dizi' | 'Müzik' | 'Özel';
 export type ResolvedTheme = 'amoled' | 'dark' | 'light';
 export type AppTheme = 'system' | ResolvedTheme;
 export type UIStyle = 'gama' | 'win11' | 'win10';
@@ -9,6 +9,16 @@ export interface AppearanceSettings {
   sidebarTransparency: number;
   cardTransparency: number;
   headerTransparency: number;
+}
+
+export interface SoundSegment {
+  id: string;
+  start: number; // start offset in seconds
+  end: number;   // end offset in seconds
+  dataUrl?: string;
+  synthPreset?: string;
+  sourceSoundId?: string;
+  label?: string;
 }
 
 export interface SoundItem {
@@ -24,6 +34,10 @@ export interface SoundItem {
   audioBuffer?: AudioBuffer;
   dataUrl?: string; // base64 or object URL or generated identifier
   synthPreset?: string; // name of synthesizer preset if generated
+  trimStart?: number; // non-destructive trim start offset in seconds
+  trimEnd?: number; // non-destructive trim end offset in seconds
+  sourceSoundId?: string; // original sound reference if sliced in Lir Maker
+  segments?: SoundSegment[]; // non-destructive multi-segment splice timeline
   addedAt: number;
 }
 
@@ -133,7 +147,8 @@ export interface HotkeyFilterConfig {
   enabled: boolean;
   manuallyPaused: boolean;
   pauseInTextInputs: boolean;
-  pausedApps: AppPauseRule[];
+  allowedApps: AppPauseRule[];
+  pausedApps?: AppPauseRule[];
 }
 
 export interface InstalledAppInfo {
@@ -202,6 +217,14 @@ export type RelayBridgeConnectionState = 'disabled' | 'connecting' | 'connected'
 
 export interface ElectronAPI {
   isElectron: boolean;
+  getApiBaseUrl?: () => string;
+  getStoreSnapshotSync?: () => Record<string, string>;
+  setStoreItemSync?: (key: string, value: string) => boolean;
+  setStoreItem?: (key: string, value: string) => Promise<boolean>;
+  removeStoreItem?: (key: string) => Promise<boolean>;
+  saveAudioAsset?: (assetId: string, dataUrl: string) => Promise<boolean>;
+  readAudioAsset?: (assetId: string) => Promise<string | null>;
+  deleteAudioAsset?: (assetId: string) => Promise<boolean>;
   openFileDialog: () => Promise<Array<{
     path: string;
     name: string;

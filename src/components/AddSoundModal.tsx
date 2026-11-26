@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { SoundCategory, SoundItem } from '../types/sound';
 import { useTranslation } from '../i18n';
+import { offloadDataUrlSync } from '../utils/audioAssetStorage';
 
 interface AddSoundModalProps {
   onClose: () => void;
@@ -40,6 +41,7 @@ export function AddSoundModal({
     'Oyun SFX',
     'Reaksiyon',
     'Anime & Dizi',
+    'Müzik',
     'Özel',
   ];
 
@@ -64,7 +66,8 @@ export function AddSoundModal({
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
-      setDataUrl(result);
+      const persistedRef = offloadDataUrlSync(result) || result;
+      setDataUrl(persistedRef);
       setSynthPreset(undefined);
 
       const audio = new Audio(result);

@@ -10,6 +10,7 @@ import { motion, AnimatePresence, MotionConfig } from "motion/react";
 import { RotateCcw, Heart, Music, Plus, Volume2 } from "lucide-react";
 import {
     SoundItem,
+    SoundSegment,
     SoundCategory,
     AudioRoutingConfig,
     AppTheme,
@@ -49,6 +50,8 @@ import { AudioRoutingView } from "./components/AudioRoutingView";
 import { VoiceChangerView } from "./components/VoiceChangerView";
 import { HotkeysView } from "./components/HotkeysView";
 import { RecorderView } from "./components/RecorderView";
+import { LirMakerView } from "./components/LirMakerView";
+import { SpotifyMusicView } from "./components/SpotifyMusicView";
 import { GuideView } from "./components/GuideView";
 import { SettingsView } from "./components/SettingsView";
 import { SubtitleTranslatorView } from "./components/SubtitleTranslatorView";
@@ -65,6 +68,8 @@ import {
     normalizeHexColor,
 } from "./utils/accentColors";
 import { useTranslation } from "./i18n";
+import { getPersistentItem, setPersistentItem } from "./utils/persistentStore";
+import { offloadSoundItem, offloadSoundsArray } from "./utils/audioAssetStorage";
 
 const STORAGE_KEY_SOUNDS = "lir_soundboard_sounds_v1";
 const STORAGE_KEY_CONFIG = "lir_soundboard_config_v1";
@@ -113,7 +118,7 @@ const DEFAULT_HOTKEY_FILTER: HotkeyFilterConfig = {
     enabled: true,
     manuallyPaused: false,
     pauseInTextInputs: true,
-    pausedApps: [],
+    allowedApps: [],
 };
 
 const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -152,6 +157,7 @@ const CATEGORIES: SoundCategory[] = [
     "Oyun SFX",
     "Reaksiyon",
     "Anime & Dizi",
+    "Müzik",
     "Özel",
 ];
 
@@ -159,7 +165,7 @@ export default function App() {
     const { t, language } = useTranslation();
     const [theme, setTheme] = useState<AppTheme>(() => {
         try {
-            const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
+            const savedTheme = getPersistentItem(STORAGE_KEY_THEME);
             if (
                 savedTheme === "system" ||
                 savedTheme === "amoled" ||
@@ -195,7 +201,7 @@ export default function App() {
 
     const [accentColor, setAccentColor] = useState<string>(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_ACCENT);
+            const saved = getPersistentItem(STORAGE_KEY_ACCENT);
             const normalized = saved ? normalizeHexColor(saved) : null;
             if (normalized) return normalized;
         } catch (error) {
@@ -212,12 +218,12 @@ export default function App() {
         applyAccentColorToRoot(accentColor, effectiveTheme);
 
         try {
-            localStorage.setItem(STORAGE_KEY_THEME, theme);
+            setPersistentItem(STORAGE_KEY_THEME, theme);
         } catch (error) {
             console.warn("Tema tercihi kaydedilemedi:", error);
         }
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 STORAGE_KEY_ACCENT,
                 normalizeHexColor(accentColor) ?? DEFAULT_ACCENT_COLOR,
             );
@@ -228,7 +234,7 @@ export default function App() {
 
     const [uiStyle, setUiStyle] = useState<UIStyle>(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_UI_STYLE);
+            const saved = getPersistentItem(STORAGE_KEY_UI_STYLE);
             if (saved === "gama" || saved === "win11" || saved === "win10") {
                 return saved;
             }
@@ -241,7 +247,7 @@ export default function App() {
     useLayoutEffect(() => {
         document.documentElement.dataset.uiStyle = uiStyle;
         try {
-            localStorage.setItem(STORAGE_KEY_UI_STYLE, uiStyle);
+            setPersistentItem(STORAGE_KEY_UI_STYLE, uiStyle);
         } catch (error) {
             console.warn("Tasarım dili kaydedilemedi:", error);
         }
@@ -249,7 +255,7 @@ export default function App() {
 
     const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_APPEARANCE);
+            const saved = getPersistentItem(STORAGE_KEY_APPEARANCE);
             if (saved) {
                 const parsed: unknown = JSON.parse(saved);
                 if (parsed && typeof parsed === "object") {
@@ -301,10 +307,10 @@ export default function App() {
                 if (legacyImage) {
                     await storeBackgroundImage(legacyImage);
                     try {
-                        const saved = localStorage.getItem(STORAGE_KEY_APPEARANCE);
+                        const saved = getPersistentItem(STORAGE_KEY_APPEARANCE);
                         if (saved) {
                             const parsed = JSON.parse(saved) as AppearanceSettings;
-                            localStorage.setItem(
+                            setPersistentItem(
                                 STORAGE_KEY_APPEARANCE,
                                 JSON.stringify({ ...parsed, backgroundImage: null }),
                             );
@@ -336,7 +342,7 @@ export default function App() {
             backgroundImageRef.current = nextAppearance.backgroundImage;
             setAppearance(nextAppearance);
             try {
-                localStorage.setItem(
+                setPersistentItem(
                     STORAGE_KEY_APPEARANCE,
                     JSON.stringify({
                         ...nextAppearance,
@@ -357,18 +363,15 @@ export default function App() {
 
     const [sounds, setSounds] = useState<SoundItem[]>(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_SOUNDS);
-            if (saved) {
+            const saved = getPersistentItem(STORAGE_KEY_SOUNDS);
+            if (saved !== null) {
                 const parsed: unknown = JSON.parse(saved);
                 if (Array.isArray(parsed)) {
                     const cleaned = parsed.filter(
                         (item): item is SoundItem =>
-                            Boolean(item) &&
-                            typeof item === "object" &&
-                            (item as { category?: unknown }).category !== "Spotify" &&
-                            !("spotifyUri" in item && (item as { spotifyUri?: unknown }).spotifyUri),
+                            Boolean(item) && typeof item === "object",
                     );
-                    if (cleaned.length > 0) return cleaned;
+                    return offloadSoundsArray(cleaned).sounds;
                 }
             }
         } catch {
@@ -380,7 +383,7 @@ export default function App() {
     const [routingConfig, setRoutingConfig] = useState<AudioRoutingConfig>(
         () => {
             try {
-                const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
+                const saved = getPersistentItem(STORAGE_KEY_CONFIG);
                 if (saved) {
                     const parsed = JSON.parse(saved) as Partial<AudioRoutingConfig>;
                     const loadedPrimaryId = parsed.primaryDeviceId || "default";
@@ -413,7 +416,7 @@ export default function App() {
     const [voiceChangerConfig, setVoiceChangerConfig] =
         useState<VoiceChangerConfig>(() => {
             try {
-                const saved = localStorage.getItem(STORAGE_KEY_VOICE_CHANGER);
+                const saved = getPersistentItem(STORAGE_KEY_VOICE_CHANGER);
                 if (saved) {
                     const parsed = JSON.parse(
                         saved,
@@ -430,6 +433,7 @@ export default function App() {
         });
 
     const [currentTab, setCurrentTab] = useState<NavTab>("soundboard");
+    const [makerInitialSoundId, setMakerInitialSoundId] = useState<string | null>(null);
     const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<SoundCategory>("Tümü");
     const [searchQuery, setSearchQuery] = useState("");
@@ -437,14 +441,14 @@ export default function App() {
     const [activePlaybackTracks, setActivePlaybackTracks] = useState<PlaybackTrackInfo[]>([]);
     const [hotkeyFilterConfig, setHotkeyFilterConfig] = useState<HotkeyFilterConfig>(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_HOTKEY_FILTER);
+            const saved = getPersistentItem(STORAGE_KEY_HOTKEY_FILTER);
             if (saved) {
                 const parsed = JSON.parse(saved) as Partial<HotkeyFilterConfig>;
                 return {
                     enabled: parsed.enabled ?? true,
                     manuallyPaused: parsed.manuallyPaused ?? false,
                     pauseInTextInputs: parsed.pauseInTextInputs ?? true,
-                    pausedApps: Array.isArray(parsed.pausedApps) ? parsed.pausedApps : [],
+                    allowedApps: Array.isArray(parsed.allowedApps) ? parsed.allowedApps : [],
                 };
             }
         } catch {
@@ -459,7 +463,7 @@ export default function App() {
     const [remoteClients, setRemoteClients] = useState<RemoteConnectedClient[]>([]);
     const [relayBridgeConfig, setRelayBridgeConfig] = useState<RelayBridgeConfig>(() => {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY_RELAY_BRIDGE);
+            const raw = getPersistentItem(STORAGE_KEY_RELAY_BRIDGE);
             if (raw) {
                 const parsed = JSON.parse(raw) as Partial<RelayBridgeConfig>;
                 return {
@@ -585,21 +589,26 @@ export default function App() {
     }, [isElectron, routingConfig.discordRpcEnabled]);
 
     useEffect(() => {
+        const { sounds: safeSounds, changed } = offloadSoundsArray(sounds);
+        if (changed) {
+            setSounds(safeSounds);
+            return;
+        }
         try {
-            localStorage.setItem(STORAGE_KEY_SOUNDS, JSON.stringify(sounds));
+            setPersistentItem(STORAGE_KEY_SOUNDS, JSON.stringify(safeSounds));
         } catch (e) {
-            console.warn("LocalStorage save error:", e);
+            console.warn("Sounds save error:", e);
         }
     }, [sounds]);
 
     useEffect(() => {
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 STORAGE_KEY_CONFIG,
                 JSON.stringify(routingConfig),
             );
         } catch (e) {
-            console.warn("LocalStorage save error:", e);
+            console.warn("Routing config save error:", e);
         }
         audioEngine.setRoutingConfig(
             routingConfig.primaryDeviceId,
@@ -617,7 +626,7 @@ export default function App() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 STORAGE_KEY_VOICE_CHANGER,
                 JSON.stringify(voiceChangerConfig),
             );
@@ -757,7 +766,7 @@ export default function App() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 STORAGE_KEY_HOTKEY_FILTER,
                 JSON.stringify(hotkeyFilterConfig),
             );
@@ -1204,7 +1213,7 @@ export default function App() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 STORAGE_KEY_RELAY_BRIDGE,
                 JSON.stringify(relayBridgeConfig),
             );
@@ -1960,14 +1969,58 @@ export default function App() {
 
     const handleAddSound = (
         newSoundData: Omit<SoundItem, "id" | "addedAt">,
-    ) => {
-        const newSound: SoundItem = {
+    ): SoundItem => {
+        const draft: SoundItem = {
             ...newSoundData,
             id: `snd-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
             addedAt: Date.now(),
         };
+        const newSound = offloadSoundItem(draft).sound;
         setSounds((prev) => [newSound, ...prev]);
+        return newSound;
     };
+
+    const handleUpdateSoundTrim = useCallback(
+        (
+            soundId: string,
+            trimStart: number,
+            trimEnd: number,
+            nextTitle?: string,
+            segments?: SoundSegment[],
+        ) => {
+            audioEngine.stopSound(soundId);
+            const hasMulti = Boolean(segments && segments.length > 0);
+            const clipDuration = hasMulti
+                ? Math.max(
+                      0.05,
+                      Math.round(
+                          segments!.reduce(
+                              (sum, seg) => sum + Math.max(0.05, seg.end - seg.start),
+                              0,
+                          ) * 1000,
+                      ) / 1000,
+                  )
+                : Math.max(
+                      0.05,
+                      Math.round((trimEnd - trimStart) * 1000) / 1000,
+                  );
+            setSounds((prev) =>
+                prev.map((s) =>
+                    s.id === soundId
+                        ? {
+                              ...s,
+                              title: nextTitle?.trim() ? nextTitle.trim() : s.title,
+                              trimStart: hasMulti ? undefined : trimStart,
+                              trimEnd: hasMulti ? undefined : trimEnd,
+                              segments: hasMulti ? segments : undefined,
+                              duration: clipDuration,
+                          }
+                        : s,
+                ),
+            );
+        },
+        [],
+    );
 
     const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
@@ -2318,6 +2371,10 @@ export default function App() {
                                                                 hotkey: sound.hotkey,
                                                             })
                                                         }
+                                                        onOpenInMaker={(sound) => {
+                                                            setMakerInitialSoundId(sound.id);
+                                                            setCurrentTab("maker");
+                                                        }}
                                                     />
                                                 ))}
                                             </AnimatePresence>
@@ -2462,6 +2519,44 @@ export default function App() {
                                     routingConfig={routingConfig}
                                     voiceChangerConfig={voiceChangerConfig}
                                     onOpenVoiceChanger={() => setCurrentTab("voice")}
+                                />
+                            )}
+
+                            {currentTab === "maker" && (
+                                <LirMakerView
+                                    sounds={sounds}
+                                    initialSoundId={makerInitialSoundId}
+                                    isElectron={isElectron}
+                                    onAddCutToBoard={handleAddSound}
+                                    onUpdateSoundTrim={handleUpdateSoundTrim}
+                                    onGoToSoundboard={() => setCurrentTab("soundboard")}
+                                />
+                            )}
+
+                            {currentTab === "spotify" && (
+                                <SpotifyMusicView
+                                    sounds={sounds}
+                                    activePlayingIds={activePlayingIds}
+                                    isVirtualCableOutput={
+                                        routingConfig.primaryDeviceLabel
+                                            .toLowerCase()
+                                            .includes("cable") ||
+                                        routingConfig.primaryDeviceLabel
+                                            .toLowerCase()
+                                            .includes("voicemeeter") ||
+                                        routingConfig.primaryDeviceLabel
+                                            .toLowerCase()
+                                            .includes("virtual")
+                                    }
+                                    onAddSound={handleAddSound}
+                                    onPlaySound={handlePlaySound}
+                                    onStopSound={handleStopSound}
+                                    onGoToSoundboard={() => setCurrentTab("soundboard")}
+                                    onOpenRouting={() => setCurrentTab("routing")}
+                                    onOpenInMaker={(sound) => {
+                                        setMakerInitialSoundId(sound.id);
+                                        setCurrentTab("maker");
+                                    }}
                                 />
                             )}
 

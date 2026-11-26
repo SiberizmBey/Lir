@@ -1,6 +1,8 @@
 import { PlaybackTrackInfo, SoundItem, VoiceChangerConfig } from '../types/sound';
 import { DEFAULT_VOICE_CHANGER_CONFIG } from './voicePresets';
 import { createPitchShifterNode, ensurePitchShifterWorklet } from './pitchWorklet';
+import { getApiUrl } from './apiBase';
+import { isAssetUri, loadAudioAssetDataUrl } from './audioAssetStorage';
 
 // Prevent Chromium V8 garbage collector from terminating active mic streams
 declare global {
@@ -74,10 +76,33 @@ class AudioEngine {
   private currentPlayInstance: Map<string, number> = new Map();
   private tokenCounter: number = 0;
   private audioBuffers: Map<string, AudioBuffer> = new Map();
+  private dataUrlBuffers: Map<string, AudioBuffer> = new Map();
+  private activeTrimBounds: Map<string, { start: number; end: number }> = new Map();
+  private multiSegmentActive: Set<string> = new Set();
+  private multiSegmentLoopFlags: Map<string, boolean> = new Map();
   private onPlaybackStateChange?: (playingIds: string[]) => void;
   private onPlaybackDetailChange?: (tracks: PlaybackTrackInfo[]) => void;
   private currentlyPlaying: Set<string> = new Set();
   private playbackMeta: Map<string, PlaybackTrackInfo> = new Map();
+
+  // Lir Maker local preview state (plays locally on monitorCtx only)
+  private previewSources: AudioBufferSourceNode[] = [];
+  private previewGain: GainNode | null = null;
+  private previewSessionId: number = 0;
+  private previewLoop: boolean = false;
+  private previewMeta: {
+    segments: Array<{
+      segmentId: string;
+      buffer: AudioBuffer;
+      startSec: number;
+      endSec: number;
+      timelineStart: number;
+      timelineEnd: number;
+    }>;
+    totalDuration: number;
+    startedAtCtxTime: number;
+    onEnded?: () => void;
+  } | null = null;
 
   private primaryDeviceId: string = 'default';
   private secondaryDeviceId: string = 'default';
@@ -1349,11 +1374,20 @@ class AudioEngine {
   }
 
   public updateSoundLoop(soundId: string, loop: boolean) {
-    const sources = this.activeSources.get(soundId);
-    if (sources) {
-      sources.forEach((src) => {
-        src.loop = loop;
-      });
+    if (this.multiSegmentActive.has(soundId)) {
+      this.multiSegmentLoopFlags.set(soundId, loop);
+    } else {
+      const sources = this.activeSources.get(soundId);
+      const bounds = this.activeTrimBounds.get(soundId);
+      if (sources) {
+        sources.forEach((src) => {
+          if (bounds) {
+            src.loopStart = bounds.start;
+            src.loopEnd = bounds.end;
+          }
+          src.loop = loop;
+        });
+      }
     }
     const meta = this.playbackMeta.get(soundId);
     if (meta) {
@@ -1397,33 +1431,487 @@ class AudioEngine {
     return dataArray;
   }
 
-  public async getOrGenerateBuffer(sound: SoundItem): Promise<AudioBuffer | null> {
+  public async decodeDataUrlToBuffer(dataUrl: string): Promise<AudioBuffer | null> {
+    this.initContexts();
+    if (!this.cableCtx || !dataUrl) return null;
+
+    const cached = this.dataUrlBuffers.get(dataUrl);
+    if (cached) return cached;
+
+    try {
+      let resolvedTarget = dataUrl;
+      if (isAssetUri(dataUrl)) {
+        const loaded = await loadAudioAssetDataUrl(dataUrl);
+        if (!loaded) {
+          throw new Error(`Ses varlığı bulunamadı: ${dataUrl}`);
+        }
+        resolvedTarget = loaded;
+      }
+      const fetchTarget = resolvedTarget.startsWith('/api/')
+        ? getApiUrl(resolvedTarget)
+        : resolvedTarget;
+      const response = await fetch(fetchTarget);
+      if (!response.ok) {
+        throw new Error(`Audio fetch HTTP ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const decoded = await this.cableCtx.decodeAudioData(arrayBuffer);
+      this.dataUrlBuffers.set(dataUrl, decoded);
+      return decoded;
+    } catch (err) {
+      console.warn('Failed to decode audio data:', err);
+      return null;
+    }
+  }
+
+  public async resolveBufferForRef(
+    ref: {
+      id?: string;
+      dataUrl?: string;
+      synthPreset?: string;
+      sourceSoundId?: string;
+    },
+    fallbackTitle?: string,
+  ): Promise<AudioBuffer | null> {
     this.initContexts();
     if (!this.cableCtx) return null;
 
-    if (this.audioBuffers.has(sound.id)) {
-      return this.audioBuffers.get(sound.id)!;
+    if (ref.id && this.audioBuffers.has(ref.id)) {
+      return this.audioBuffers.get(ref.id)!;
     }
 
-    if (sound.dataUrl) {
-      try {
-        const response = await fetch(sound.dataUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        const decoded = await this.cableCtx.decodeAudioData(arrayBuffer);
-        this.audioBuffers.set(sound.id, decoded);
+    if (ref.dataUrl) {
+      const decoded = await this.decodeDataUrlToBuffer(ref.dataUrl);
+      if (decoded) {
+        if (ref.id) this.audioBuffers.set(ref.id, decoded);
         return decoded;
-      } catch (err) {
-        console.warn('Failed to decode audio data:', err);
       }
     }
 
-    const buffer = this.createProceduralBuffer(sound.synthPreset || sound.title);
-    if (buffer) {
-      this.audioBuffers.set(sound.id, buffer);
-      return buffer;
+    if (ref.sourceSoundId && this.audioBuffers.has(ref.sourceSoundId)) {
+      const shared = this.audioBuffers.get(ref.sourceSoundId)!;
+      if (ref.id) this.audioBuffers.set(ref.id, shared);
+      return shared;
+    }
+
+    const presetKey = ref.synthPreset || fallbackTitle;
+    if (presetKey) {
+      const buffer = this.createProceduralBuffer(presetKey);
+      if (buffer) {
+        if (ref.id) this.audioBuffers.set(ref.id, buffer);
+        return buffer;
+      }
     }
 
     return null;
+  }
+
+  public async getOrGenerateBuffer(sound: SoundItem): Promise<AudioBuffer | null> {
+    return this.resolveBufferForRef(
+      {
+        id: sound.id,
+        dataUrl: sound.dataUrl,
+        synthPreset: sound.synthPreset,
+        sourceSoundId: sound.sourceSoundId,
+      },
+      sound.title,
+    );
+  }
+
+  public playPreviewBuffer(
+    buffer: AudioBuffer,
+    startSec: number,
+    endSec: number,
+    loop: boolean,
+    volume: number = 0.85,
+    onEnded?: () => void,
+  ) {
+    this.playPreviewSegments(
+      [{ segmentId: '__single__', buffer, startSec, endSec }],
+      loop,
+      volume,
+      onEnded,
+    );
+  }
+
+  private schedulePreviewCycle(
+    sessionId: number,
+    ctx: AudioContext,
+    gain: GainNode,
+    segments: Array<{
+      segmentId: string;
+      buffer: AudioBuffer;
+      startSec: number;
+      endSec: number;
+    }>,
+    onEnded?: () => void,
+  ) {
+    if (this.previewSessionId !== sessionId) return;
+
+    // Clear previous cycle node refs
+    this.previewSources.forEach((s) => {
+      try {
+        s.onended = null;
+        s.stop();
+        s.disconnect();
+      } catch { }
+    });
+    this.previewSources = [];
+
+    const sanitized: Array<{
+      segmentId: string;
+      buffer: AudioBuffer;
+      startSec: number;
+      endSec: number;
+      timelineStart: number;
+      timelineEnd: number;
+    }> = [];
+
+    let cursor = 0;
+    for (const seg of segments) {
+      const fullDur = Math.max(0.05, seg.buffer.duration);
+      const safeStart = Math.max(0, Math.min(fullDur - 0.02, seg.startSec));
+      const safeEnd = Math.max(safeStart + 0.02, Math.min(fullDur, seg.endSec));
+      const clipDur = Math.max(0.02, safeEnd - safeStart);
+      sanitized.push({
+        segmentId: seg.segmentId,
+        buffer: seg.buffer,
+        startSec: safeStart,
+        endSec: safeEnd,
+        timelineStart: cursor,
+        timelineEnd: cursor + clipDur,
+      });
+      cursor += clipDur;
+    }
+
+    if (sanitized.length === 0) {
+      this.stopPreviewBuffer();
+      onEnded?.();
+      return;
+    }
+
+    const baseCtxTime = ctx.currentTime + 0.015;
+    this.previewMeta = {
+      segments: sanitized,
+      totalDuration: cursor,
+      startedAtCtxTime: baseCtxTime,
+      onEnded,
+    };
+
+    if (sanitized.length === 1) {
+      const only = sanitized[0];
+      const source = ctx.createBufferSource();
+      source.buffer = only.buffer;
+      source.loop = this.previewLoop;
+      if (this.previewLoop) {
+        source.loopStart = only.startSec;
+        source.loopEnd = only.endSec;
+      }
+      source.connect(gain);
+      this.previewSources = [source];
+
+      source.onended = () => {
+        if (this.previewSessionId === sessionId) {
+          this.stopPreviewBuffer();
+          onEnded?.();
+        }
+      };
+
+      try {
+        if (this.previewLoop) {
+          source.start(baseCtxTime, only.startSec);
+        } else {
+          source.start(baseCtxTime, only.startSec, only.timelineEnd - only.timelineStart);
+        }
+      } catch (err) {
+        console.warn('Preview playback error:', err);
+        this.stopPreviewBuffer();
+        onEnded?.();
+      }
+      return;
+    }
+
+    const createdSources: AudioBufferSourceNode[] = [];
+    for (let i = 0; i < sanitized.length; i++) {
+      const item = sanitized[i];
+      const source = ctx.createBufferSource();
+      source.buffer = item.buffer;
+      source.connect(gain);
+      createdSources.push(source);
+
+      if (i === sanitized.length - 1) {
+        source.onended = () => {
+          if (this.previewSessionId !== sessionId) return;
+          if (this.previewLoop) {
+            this.schedulePreviewCycle(sessionId, ctx, gain, segments, onEnded);
+          } else {
+            this.stopPreviewBuffer();
+            onEnded?.();
+          }
+        };
+      }
+
+      try {
+        source.start(
+          baseCtxTime + item.timelineStart,
+          item.startSec,
+          item.timelineEnd - item.timelineStart,
+        );
+      } catch (err) {
+        console.warn('Multi-segment preview playback error:', err);
+        this.stopPreviewBuffer();
+        onEnded?.();
+        return;
+      }
+    }
+
+    this.previewSources = createdSources;
+  }
+
+  public playPreviewSegments(
+    segments: Array<{
+      segmentId: string;
+      buffer: AudioBuffer;
+      startSec: number;
+      endSec: number;
+    }>,
+    loop: boolean,
+    volume: number = 0.85,
+    onEnded?: () => void,
+  ) {
+    this.initContexts();
+    this.resumeContexts();
+    this.stopPreviewBuffer();
+
+    const ctx = this.monitorCtx || this.cableCtx;
+    const destNode =
+      this.monitorLimiter ||
+      this.monitorCtx?.destination ||
+      this.cableLimiter ||
+      this.cableCtx?.destination;
+    if (!ctx || !destNode || segments.length === 0) return;
+
+    const sessionId = ++this.previewSessionId;
+    this.previewLoop = loop;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(Math.max(0, Math.min(1, volume)), ctx.currentTime);
+    gain.connect(destNode);
+    this.previewGain = gain;
+
+    this.schedulePreviewCycle(sessionId, ctx, gain, segments, onEnded);
+  }
+
+  public stopPreviewBuffer() {
+    this.previewSessionId++;
+    if (this.previewSources.length > 0) {
+      this.previewSources.forEach((src) => {
+        try {
+          src.onended = null;
+          src.stop();
+          src.disconnect();
+        } catch {
+          // ignore
+        }
+      });
+      this.previewSources = [];
+    }
+    if (this.previewGain) {
+      try {
+        this.previewGain.disconnect();
+      } catch {
+        // ignore
+      }
+      this.previewGain = null;
+    }
+    this.previewMeta = null;
+  }
+
+  public updatePreviewLoop(loop: boolean, startSec: number, endSec: number) {
+    this.previewLoop = loop;
+    if (this.previewSources.length === 1 && this.previewMeta && this.previewMeta.segments.length === 1) {
+      const src = this.previewSources[0];
+      src.loopStart = startSec;
+      src.loopEnd = endSec;
+      src.loop = loop;
+      const only = this.previewMeta.segments[0];
+      const dur = Math.max(0.02, endSec - startSec);
+      this.previewMeta = {
+        ...this.previewMeta,
+        segments: [{ ...only, startSec, endSec, timelineStart: 0, timelineEnd: dur }],
+        totalDuration: dur,
+      };
+    }
+  }
+
+  public updatePreviewVolume(volume: number) {
+    if (!this.previewGain) return;
+    const clamped = Math.max(0, Math.min(1, volume));
+    try {
+      this.previewGain.gain.setValueAtTime(clamped, this.previewGain.context.currentTime);
+    } catch {
+      this.previewGain.gain.value = clamped;
+    }
+  }
+
+  public getPreviewStatus(): { timeInBuffer: number; segmentId: string | null } | null {
+    if (this.previewSources.length === 0 || !this.previewMeta) return null;
+    const ctx = this.monitorCtx || this.cableCtx;
+    if (!ctx) return null;
+
+    const { segments, totalDuration, startedAtCtxTime } = this.previewMeta;
+    if (segments.length === 0 || totalDuration <= 0) return null;
+
+    const rawElapsed = Math.max(0, ctx.currentTime - startedAtCtxTime);
+    const cycleElapsed =
+      this.previewLoop && segments.length === 1
+        ? rawElapsed % totalDuration
+        : this.previewLoop
+          ? rawElapsed % totalDuration
+          : Math.min(totalDuration, rawElapsed);
+
+    for (const seg of segments) {
+      if (cycleElapsed <= seg.timelineEnd || seg === segments[segments.length - 1]) {
+        const localOffset = Math.max(0, cycleElapsed - seg.timelineStart);
+        return {
+          segmentId: seg.segmentId,
+          timeInBuffer: Math.min(seg.endSec, seg.startSec + localOffset),
+        };
+      }
+    }
+    return null;
+  }
+
+  public getPreviewPlaybackTime(): number | null {
+    return this.getPreviewStatus()?.timeInBuffer ?? null;
+  }
+
+  private cleanupSoundNodesOnly(soundId: string) {
+    const prevSources = this.activeSources.get(soundId);
+    if (prevSources) {
+      prevSources.forEach((source) => {
+        try {
+          this.allLiveSources.delete(source);
+          source.onended = null;
+          source.stop();
+          source.disconnect();
+        } catch { }
+      });
+    }
+    const prevGains = this.activeSoundGains.get(soundId);
+    if (prevGains) {
+      prevGains.forEach((g) => {
+        try {
+          g.disconnect();
+        } catch { }
+      });
+    }
+  }
+
+  private scheduleMultiSegmentSoundCycle(
+    sound: SoundItem,
+    instanceId: number,
+    segments: Array<{ buffer: AudioBuffer; start: number; end: number; duration: number }>,
+    soundVolume: number,
+    shouldUseMonitor: boolean,
+  ) {
+    if (!this.cableCtx || !this.cableEffectsGain) return;
+    if (this.currentPlayInstance.get(sound.id) !== instanceId) return;
+
+    this.cleanupSoundNodesOnly(sound.id);
+
+    const sourcesToTrack: AudioBufferSourceNode[] = [];
+    const gainsToTrack: GainNode[] = [];
+
+    const cableSoundGain = this.cableCtx.createGain();
+    cableSoundGain.gain.setValueAtTime(soundVolume, this.cableCtx.currentTime);
+    cableSoundGain.connect(this.cableEffectsGain);
+    gainsToTrack.push(cableSoundGain);
+
+    let monitorSoundGain: GainNode | null = null;
+    if (shouldUseMonitor && this.monitorCtx && this.monitorEffectsGain) {
+      monitorSoundGain = this.monitorCtx.createGain();
+      monitorSoundGain.gain.setValueAtTime(soundVolume, this.monitorCtx.currentTime);
+      monitorSoundGain.connect(this.monitorEffectsGain);
+      gainsToTrack.push(monitorSoundGain);
+    }
+
+    const cableBaseTime = this.cableCtx.currentTime + 0.015;
+    const monitorBaseTime = this.monitorCtx ? this.monitorCtx.currentTime + 0.015 : 0;
+
+    let offset = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const cableSource = this.cableCtx.createBufferSource();
+      cableSource.buffer = seg.buffer;
+      cableSource.connect(cableSoundGain);
+      sourcesToTrack.push(cableSource);
+      this.allLiveSources.add(cableSource);
+
+      if (i === segments.length - 1) {
+        cableSource.onended = () => {
+          this.allLiveSources.delete(cableSource);
+          if (this.currentPlayInstance.get(sound.id) !== instanceId) {
+            this.checkAndApplyMicDucking();
+            return;
+          }
+          if (this.multiSegmentLoopFlags.get(sound.id)) {
+            this.scheduleMultiSegmentSoundCycle(
+              sound,
+              instanceId,
+              segments,
+              soundVolume,
+              shouldUseMonitor,
+            );
+            return;
+          }
+          this.activeSources.delete(sound.id);
+          this.activeSoundGains.delete(sound.id);
+          this.activeTrimBounds.delete(sound.id);
+          this.multiSegmentActive.delete(sound.id);
+          this.multiSegmentLoopFlags.delete(sound.id);
+          this.currentlyPlaying.delete(sound.id);
+          this.playbackMeta.delete(sound.id);
+          this.currentPlayInstance.delete(sound.id);
+          this.emitPlaybackListeners();
+          this.checkAndApplyMicDucking();
+        };
+      } else {
+        cableSource.onended = () => {
+          this.allLiveSources.delete(cableSource);
+        };
+      }
+
+      let monSource: AudioBufferSourceNode | null = null;
+      if (monitorSoundGain && this.monitorCtx) {
+        monSource = this.monitorCtx.createBufferSource();
+        monSource.buffer = seg.buffer;
+        monSource.connect(monitorSoundGain);
+        sourcesToTrack.push(monSource);
+        this.allLiveSources.add(monSource);
+        monSource.onended = () => {
+          if (monSource) this.allLiveSources.delete(monSource);
+          this.checkAndApplyMicDucking();
+        };
+      }
+
+      try {
+        cableSource.start(cableBaseTime + offset, seg.start, seg.duration);
+        if (monSource) {
+          monSource.start(monitorBaseTime + offset, seg.start, seg.duration);
+        }
+      } catch (e) {
+        console.warn('Multi-segment playback start error:', e);
+        this.stopSound(sound.id);
+        return;
+      }
+
+      offset += seg.duration;
+    }
+
+    this.activeSources.set(sound.id, sourcesToTrack);
+    this.activeSoundGains.set(sound.id, gainsToTrack);
+    this.checkAndApplyMicDucking();
   }
 
   public async playSound(
@@ -1459,6 +1947,101 @@ class AudioEngine {
     const requestToken = ++this.tokenCounter;
     this.pendingTokens.set(sound.id, requestToken);
 
+    const isSameTargetDevice =
+      this.resolvedSameOutputDevice ||
+      this.primaryDeviceId === this.secondaryDeviceId ||
+      ((!this.primaryDeviceId || this.primaryDeviceId === 'default') &&
+        (!this.secondaryDeviceId || this.secondaryDeviceId === 'default'));
+
+    const shouldUseMonitor =
+      this.dualOutputEnabled &&
+      !isSameTargetDevice &&
+      !this.isSecondaryVirtualCable &&
+      Boolean(this.monitorCtx && this.monitorEffectsGain);
+
+    // Multi-segment non-destructive playback branch
+    if (sound.segments && sound.segments.length > 0) {
+      const parentFallback =
+        sound.dataUrl || sound.synthPreset || sound.sourceSoundId
+          ? await this.getOrGenerateBuffer(sound)
+          : null;
+
+      if (this.pendingTokens.get(sound.id) !== requestToken) return;
+
+      const resolvedSegments: Array<{
+        buffer: AudioBuffer;
+        start: number;
+        end: number;
+        duration: number;
+      }> = [];
+
+      for (const seg of sound.segments) {
+        const segBuffer =
+          (await this.resolveBufferForRef(
+            {
+              dataUrl: seg.dataUrl,
+              synthPreset: seg.synthPreset,
+              sourceSoundId: seg.sourceSoundId,
+            },
+            seg.label,
+          )) || parentFallback;
+
+        if (this.pendingTokens.get(sound.id) !== requestToken) return;
+        if (!segBuffer) continue;
+
+        const fullDur = Math.max(0.05, segBuffer.duration);
+        const sStart = Math.max(0, Math.min(fullDur - 0.02, seg.start));
+        const sEnd = Math.max(sStart + 0.02, Math.min(fullDur, seg.end));
+        resolvedSegments.push({
+          buffer: segBuffer,
+          start: sStart,
+          end: sEnd,
+          duration: Math.max(0.02, sEnd - sStart),
+        });
+      }
+
+      if (resolvedSegments.length === 0) {
+        this.pendingTokens.delete(sound.id);
+        return;
+      }
+
+      if (resolvedSegments.length > 1) {
+        const totalDur = resolvedSegments.reduce((sum, s) => sum + s.duration, 0);
+        const instanceId = requestToken;
+        this.currentPlayInstance.set(sound.id, instanceId);
+        this.multiSegmentActive.add(sound.id);
+        this.multiSegmentLoopFlags.set(sound.id, !!sound.loop);
+        this.currentlyPlaying.add(sound.id);
+        this.playbackMeta.set(sound.id, {
+          soundId: sound.id,
+          startedAt: Date.now(),
+          duration: totalDur || sound.duration || 1,
+          loop: !!sound.loop,
+        });
+        this.emitPlaybackListeners();
+
+        this.scheduleMultiSegmentSoundCycle(
+          sound,
+          instanceId,
+          resolvedSegments,
+          sound.volume ?? 1,
+          shouldUseMonitor,
+        );
+        return;
+      }
+
+      // Single segment behaves identically to single trim
+      const only = resolvedSegments[0];
+      sound = {
+        ...sound,
+        trimStart: only.start,
+        trimEnd: only.end,
+        dataUrl: sound.segments[0].dataUrl ?? sound.dataUrl,
+        synthPreset: sound.segments[0].synthPreset ?? sound.synthPreset,
+        sourceSoundId: sound.segments[0].sourceSoundId ?? sound.sourceSoundId,
+      };
+    }
+
     const buffer = await this.getOrGenerateBuffer(sound);
 
     // If request was cancelled or superseded while resolving buffer, drop it completely!
@@ -1476,10 +2059,21 @@ class AudioEngine {
     const gainsToTrack: GainNode[] = [];
     const instanceId = requestToken;
 
+    const fullDuration = Math.max(0.05, buffer.duration);
+    const trimStart = Math.max(0, Math.min(fullDuration - 0.02, sound.trimStart ?? 0));
+    const rawTrimEnd = sound.trimEnd !== undefined ? sound.trimEnd : fullDuration;
+    const trimEnd = Math.max(trimStart + 0.02, Math.min(fullDuration, rawTrimEnd));
+    const clipDuration = Math.max(0.02, trimEnd - trimStart);
+    const isTrimmed = trimStart > 0.001 || trimEnd < fullDuration - 0.001;
+
     // 1. Play on Cable Context (Discord / Stream mixer)
     const cableSource = this.cableCtx.createBufferSource();
     cableSource.buffer = buffer;
     cableSource.loop = !!sound.loop;
+    if (isTrimmed) {
+      cableSource.loopStart = trimStart;
+      cableSource.loopEnd = trimEnd;
+    }
 
     const cableSoundGain = this.cableCtx.createGain();
     cableSoundGain.gain.setValueAtTime(soundVolume, this.cableCtx.currentTime);
@@ -1492,96 +2086,100 @@ class AudioEngine {
     this.allLiveSources.add(cableSource);
 
     // 2. Play on Monitor Context if dual output is enabled (User's Headphones)
-    // CRITICAL ANTI-ECHO GUARD:
-    // If primary and secondary outputs resolve to the same physical device (including "default" vs real ID),
-    // never play a duplicate buffer on monitorCtx.
-    const isSameTargetDevice =
-      this.resolvedSameOutputDevice ||
-      this.primaryDeviceId === this.secondaryDeviceId ||
-      ((!this.primaryDeviceId || this.primaryDeviceId === 'default') &&
-        (!this.secondaryDeviceId || this.secondaryDeviceId === 'default'));
-
     let monitorSource: AudioBufferSourceNode | null = null;
-      if (this.dualOutputEnabled && !isSameTargetDevice && !this.isSecondaryVirtualCable && this.monitorCtx && this.monitorEffectsGain) {
-        monitorSource = this.monitorCtx.createBufferSource();
-        monitorSource.buffer = buffer;
-        monitorSource.loop = !!sound.loop;
-
-        const monitorSoundGain = this.monitorCtx.createGain();
-        monitorSoundGain.gain.setValueAtTime(soundVolume, this.monitorCtx.currentTime);
-
-        monitorSource.connect(monitorSoundGain);
-        monitorSoundGain.connect(this.monitorEffectsGain);
-
-        sourcesToTrack.push(monitorSource);
-        gainsToTrack.push(monitorSoundGain);
-        this.allLiveSources.add(monitorSource);
-
-        monitorSource.onended = () => {
-          if (monitorSource) {
-            this.allLiveSources.delete(monitorSource);
-            this.checkAndApplyMicDucking();
-          }
-        };
+    if (shouldUseMonitor && this.monitorCtx && this.monitorEffectsGain) {
+      monitorSource = this.monitorCtx.createBufferSource();
+      monitorSource.buffer = buffer;
+      monitorSource.loop = !!sound.loop;
+      if (isTrimmed) {
+        monitorSource.loopStart = trimStart;
+        monitorSource.loopEnd = trimEnd;
       }
 
-      cableSource.onended = () => {
-        this.allLiveSources.delete(cableSource);
-        // Only remove playing state if this exact instance is the active one!
-        if (this.currentPlayInstance.get(sound.id) === instanceId) {
-          this.activeSources.delete(sound.id);
-          this.activeSoundGains.delete(sound.id);
-          this.currentlyPlaying.delete(sound.id);
-          this.playbackMeta.delete(sound.id);
-          this.currentPlayInstance.delete(sound.id);
-          this.emitPlaybackListeners();
+      const monitorSoundGain = this.monitorCtx.createGain();
+      monitorSoundGain.gain.setValueAtTime(soundVolume, this.monitorCtx.currentTime);
+
+      monitorSource.connect(monitorSoundGain);
+      monitorSoundGain.connect(this.monitorEffectsGain);
+
+      sourcesToTrack.push(monitorSource);
+      gainsToTrack.push(monitorSoundGain);
+      this.allLiveSources.add(monitorSource);
+
+      monitorSource.onended = () => {
+        if (monitorSource) {
+          this.allLiveSources.delete(monitorSource);
+          this.checkAndApplyMicDucking();
         }
-        this.checkAndApplyMicDucking();
       };
+    }
 
-      this.activeSources.set(sound.id, sourcesToTrack);
-      this.activeSoundGains.set(sound.id, gainsToTrack);
-      this.currentPlayInstance.set(sound.id, instanceId);
-      this.currentlyPlaying.add(sound.id);
-      this.playbackMeta.set(sound.id, {
-        soundId: sound.id,
-        startedAt: Date.now(),
-        duration: buffer.duration || sound.duration || 1,
-        loop: !!sound.loop,
-      });
-
-      // Apply mic ducking immediately when playback starts to eradicate acoustic echo
+    cableSource.onended = () => {
+      this.allLiveSources.delete(cableSource);
+      // Only remove playing state if this exact instance is the active one!
+      if (this.currentPlayInstance.get(sound.id) === instanceId) {
+        this.activeSources.delete(sound.id);
+        this.activeSoundGains.delete(sound.id);
+        this.activeTrimBounds.delete(sound.id);
+        this.multiSegmentActive.delete(sound.id);
+        this.multiSegmentLoopFlags.delete(sound.id);
+        this.currentlyPlaying.delete(sound.id);
+        this.playbackMeta.delete(sound.id);
+        this.currentPlayInstance.delete(sound.id);
+        this.emitPlaybackListeners();
+      }
       this.checkAndApplyMicDucking();
-      this.emitPlaybackListeners();
+    };
 
-      try {
+    this.activeSources.set(sound.id, sourcesToTrack);
+    this.activeSoundGains.set(sound.id, gainsToTrack);
+    this.activeTrimBounds.set(sound.id, { start: trimStart, end: trimEnd });
+    this.currentPlayInstance.set(sound.id, instanceId);
+    this.currentlyPlaying.add(sound.id);
+    this.playbackMeta.set(sound.id, {
+      soundId: sound.id,
+      startedAt: Date.now(),
+      duration: clipDuration || sound.duration || 1,
+      loop: !!sound.loop,
+    });
+
+    // Apply mic ducking immediately when playback starts to eradicate acoustic echo
+    this.checkAndApplyMicDucking();
+    this.emitPlaybackListeners();
+
+    try {
+      if (sound.loop) {
+        cableSource.start(0, trimStart);
+        if (monitorSource) {
+          monitorSource.start(0, trimStart);
+        }
+      } else if (isTrimmed) {
+        cableSource.start(0, trimStart, clipDuration);
+        if (monitorSource) {
+          monitorSource.start(0, trimStart, clipDuration);
+        }
+      } else {
         cableSource.start(0);
         if (monitorSource) {
           monitorSource.start(0);
         }
-      } catch (e) {
-        console.warn('Audio playback start error:', e);
-        this.stopSound(sound.id);
       }
+    } catch (e) {
+      console.warn('Audio playback start error:', e);
+      this.stopSound(sound.id);
     }
+  }
 
   public stopSound(soundId: string) {
     this.pendingTokens.delete(soundId);
     this.currentPlayInstance.delete(soundId);
+    this.multiSegmentActive.delete(soundId);
+    this.multiSegmentLoopFlags.delete(soundId);
 
-    const sources = this.activeSources.get(soundId);
-    if (sources) {
-      sources.forEach((source) => {
-        try {
-          this.allLiveSources.delete(source);
-          source.onended = null;
-          source.stop();
-          source.disconnect();
-        } catch (e) { }
-      });
-      this.activeSources.delete(soundId);
-    }
+    this.cleanupSoundNodesOnly(soundId);
+    this.activeSources.delete(soundId);
     this.activeSoundGains.delete(soundId);
+    this.activeTrimBounds.delete(soundId);
     this.currentlyPlaying.delete(soundId);
     this.playbackMeta.delete(soundId);
     this.checkAndApplyMicDucking();
@@ -1591,6 +2189,8 @@ class AudioEngine {
   public stopAll() {
     this.pendingTokens.clear();
     this.currentPlayInstance.clear();
+    this.multiSegmentActive.clear();
+    this.multiSegmentLoopFlags.clear();
 
     this.activeSources.forEach((sources) => {
       sources.forEach((source) => {
@@ -1603,6 +2203,7 @@ class AudioEngine {
     });
     this.activeSources.clear();
     this.activeSoundGains.clear();
+    this.activeTrimBounds.clear();
 
     // Universal failsafe: Terminate and disconnect all live sources
     this.allLiveSources.forEach((source) => {

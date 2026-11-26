@@ -1,16 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
     AlertCircle,
+    Check,
+    Copy,
+    Eye,
+    EyeOff,
     Languages,
     LoaderCircle,
     Monitor,
+    MonitorOff,
+    RotateCcw,
     ScanText,
+    ShieldCheck,
     Square,
 } from "lucide-react";
 import { createWorker, PSM } from "tesseract.js";
 import type { SubtitleOverlaySettings } from "../types/sound";
 import { useTranslation } from "../i18n";
+import { LirSelect, LirSelectOption } from "./LirSelect";
+import { getPersistentItem, setPersistentItem } from "../utils/persistentStore";
 
 const OCR_LANGUAGES = {
     auto: {
@@ -180,7 +189,7 @@ export function SubtitleTranslatorView() {
     const [overlaySettings, setOverlaySettings] =
         useState<SubtitleOverlaySettings>(() => {
         try {
-            const saved = localStorage.getItem(OVERLAY_SETTINGS_KEY);
+            const saved = getPersistentItem(OVERLAY_SETTINGS_KEY);
             return saved
                 ? { ...DEFAULT_OVERLAY_SETTINGS, ...JSON.parse(saved) }
                 : DEFAULT_OVERLAY_SETTINGS;
@@ -663,7 +672,7 @@ export function SubtitleTranslatorView() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(
+            setPersistentItem(
                 OVERLAY_SETTINGS_KEY,
                 JSON.stringify(overlaySettings),
             );
@@ -797,143 +806,101 @@ export function SubtitleTranslatorView() {
         drawFrameRef.current?.();
     };
 
+    const [copiedTranslation, setCopiedTranslation] = useState(false);
+
     const hasValidSelection =
         selection !== null && selection.width >= 20 && selection.height >= 12;
 
+    const languageOptions = useMemo<LirSelectOption[]>(
+        () =>
+            Object.entries(OCR_LANGUAGES).map(([code, item]) => ({
+                value: code,
+                label: t(item.labelKey),
+            })),
+        [t],
+    );
+
+    const handleCopyTranslation = () => {
+        if (!translatedText.trim()) return;
+        void navigator.clipboard?.writeText(translatedText).then(() => {
+            setCopiedTranslation(true);
+            window.setTimeout(() => setCopiedTranslation(false), 1600);
+        });
+    };
+
+    const overlayCornerPresets = [
+        { id: "top-left", label: t("translator.presetTopLeft"), x: 2, y: 4 },
+        { id: "top-center", label: t("translator.presetTopCenter"), x: 50, y: 4 },
+        { id: "top-right", label: t("translator.presetTopRight"), x: 100, y: 4 },
+        { id: "bottom-center", label: t("translator.presetBottomCenter"), x: 50, y: 92 },
+    ];
+
     return (
-        <div className="flex w-full flex-col gap-6">
-            <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
-                    <ScanText className="w-5 h-5" />
-                </div>
-                <div>
-                    <div className="flex items-center gap-2.5">
+        <div className="flex flex-1 w-full flex-col gap-5">
+            {/* Page Header */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="w-11 h-11 ui-inner bg-[var(--accent-subtle)] border border-[var(--accent-border)] text-[var(--accent-text)] flex items-center justify-center shrink-0">
+                        <ScanText className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
                         <h1 className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
                             {t("translator.title")}
                         </h1>
-                        <span className="ui-control border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2.5 py-0.5 text-xs font-mono font-semibold text-[var(--accent-text)]">
-                            OCR · LIVE
-                        </span>
-                    </div>
-                    <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
-                        {t("translator.subtitle")}
-                    </p>
-                </div>
-            </div>
-
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }}
-                    className="app-card ui-card flex min-h-72 flex-col gap-3.5 border border-[var(--border-card)] p-5"
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
-                            <Monitor className="h-4 w-4 text-[var(--accent-text)]" />
-                            {t("translator.screenArea")}
-                        </div>
-                        {stream ? (
-                            <motion.button
-                                type="button"
-                                whileTap={{ scale: 0.94 }}
-                                onClick={stopCapture}
-                                className="flex items-center gap-1.5 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
-                            >
-                                <Square className="h-3 w-3" />
-                                {t("translator.stopScreenShare")}
-                            </motion.button>
-                        ) : (
-                            <motion.button
-                                type="button"
-                                whileHover={{ scale: 1.03 }}
-                                whileTap={{ scale: 0.94 }}
-                                onClick={() => void startCapture()}
-                                className="btn-accent flex items-center gap-1.5 ui-control px-4 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
-                            >
-                                <Monitor className="h-3.5 w-3.5" />
-                                {t("translator.selectScreen")}
-                            </motion.button>
-                        )}
-                    </div>
-
-                    <div className="flex min-h-60 flex-1 items-center justify-center overflow-hidden ui-inner border border-[var(--border-subtle)] bg-[var(--bg-inner)]">
-                        {stream ? (
-                            <canvas
-                                ref={canvasRef}
-                                onPointerDown={handlePointerDown}
-                                onPointerMove={handlePointerMove}
-                                onPointerUp={finishSelection}
-                                onPointerCancel={finishSelection}
-                                aria-label={t("translator.screenAreaPrompt")}
-                                className="max-h-[55vh] max-w-full cursor-crosshair touch-none"
-                                style={{ width: "100%", height: "auto" }}
-                            />
-                        ) : (
-                            <div className="flex max-w-xs flex-col items-center gap-2.5 p-6 text-center">
-                                <Monitor className="h-8 w-8 text-[var(--text-muted)]" />
-                                <p className="text-xs sm:text-[13px] text-[var(--text-secondary)]">
-                                    {t("translator.screenAreaPrompt")}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                    <video ref={videoRef} className="hidden" muted playsInline />
-                    {stream && (
-                        <p className="text-xs text-[var(--text-secondary)]">
-                            {hasValidSelection
-                                ? t("translator.selectionDone")
-                                : t("translator.selectionInstruction")}
+                        <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] mt-0.5">
+                            {t("translator.subtitle")}
                         </p>
-                    )}
-                </motion.section>
+                    </div>
+                </div>
 
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.24, delay: 0.06, ease: [0.22, 1, 0.36, 1] as const }}
-                    className="app-card ui-card flex flex-col gap-4 border border-[var(--border-card)] p-5"
-                >
-                    <div className="flex flex-col gap-1.5">
-                        <label
-                            htmlFor="subtitle-source-language"
-                            className="text-xs font-semibold text-[var(--text-primary)]"
-                        >
-                            {t("translator.subtitleLang")}
-                        </label>
-                        <select
-                            id="subtitle-source-language"
+                {/* Top Action Bar */}
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <div className="w-48">
+                        <LirSelect
                             value={language}
                             disabled={isTranslating || isLoadingOcr}
-                            onChange={(event) => {
-                                setLanguage(event.target.value as OcrLanguage);
+                            onChange={(nextVal) => {
+                                setLanguage(nextVal as OcrLanguage);
                                 lastTranslatedTextRef.current = "";
                             }}
-                            className="ui-input border border-[var(--border-input)] bg-[var(--bg-input)] px-3 py-2.5 text-xs sm:text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] disabled:opacity-50"
-                        >
-                            {Object.entries(OCR_LANGUAGES).map(([code, item]) => (
-                                <option key={code} value={code}>
-                                    {t(item.labelKey)}
-                                </option>
-                            ))}
-                        </select>
+                            options={languageOptions}
+                            ariaLabel={t("translator.subtitleLang")}
+                            buttonClassName="py-2"
+                        />
                     </div>
 
-                    {isTranslating ? (
-                        <motion.button
+                    {stream ? (
+                        <button
                             type="button"
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setIsTranslating(false)}
-                            className="flex items-center justify-center gap-2 ui-control border border-rose-900/80 bg-rose-950/40 px-4 py-2.5 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-950 cursor-pointer"
+                            onClick={stopCapture}
+                            className="flex items-center gap-2 ui-control border border-[var(--border-input)] bg-[var(--bg-card)] hover:border-[var(--border-hover)] px-3.5 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors cursor-pointer"
                         >
-                            <Square className="h-3.5 w-3.5" />
-                            {t("translator.stopTranslation")}
-                        </motion.button>
+                            <MonitorOff className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                            <span>{t("translator.stopScreenShare")}</span>
+                        </button>
                     ) : (
-                        <motion.button
+                        <button
                             type="button"
-                            whileHover={!stream || !hasValidSelection || isLoadingOcr ? undefined : { scale: 1.02 }}
-                            whileTap={!stream || !hasValidSelection || isLoadingOcr ? undefined : { scale: 0.95 }}
+                            onClick={() => void startCapture()}
+                            className="flex items-center gap-2 ui-control border border-[var(--border-card)] bg-[var(--bg-card)] hover:border-[var(--accent-border)] px-4 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors cursor-pointer"
+                        >
+                            <Monitor className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                            <span>{t("translator.selectScreen")}</span>
+                        </button>
+                    )}
+
+                    {isTranslating ? (
+                        <button
+                            type="button"
+                            onClick={() => setIsTranslating(false)}
+                            className="flex items-center gap-2 ui-control border border-rose-800/80 bg-rose-950/50 hover:bg-rose-950/80 px-4 py-2 text-xs font-semibold text-rose-200 transition-colors cursor-pointer"
+                        >
+                            <Square className="h-3.5 w-3.5 fill-current" />
+                            <span>{t("translator.stopTranslation")}</span>
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
                             disabled={!stream || !hasValidSelection || isLoadingOcr}
                             onClick={() => {
                                 setRecognizedText("");
@@ -945,164 +912,352 @@ export function SubtitleTranslatorView() {
                                 void setOverlayVisibility(true);
                                 setIsTranslating(true);
                             }}
-                            className="btn-accent flex items-center justify-center gap-2 ui-control px-4 py-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
+                            className="btn-accent flex items-center gap-2 ui-control px-4 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
                         >
                             {isLoadingOcr ? (
                                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                             ) : (
                                 <ScanText className="h-3.5 w-3.5" />
                             )}
-                            {t("translator.startLiveTranslation")}
-                        </motion.button>
+                            <span>{t("translator.startLiveTranslation")}</span>
+                        </button>
                     )}
+                </div>
+            </div>
 
-                    <AnimatePresence initial={false}>
-                        {isLoadingOcr && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="overflow-hidden flex items-center gap-2 text-xs text-[var(--text-secondary)]"
-                            >
-                                <LoaderCircle className="h-3.5 w-3.5 animate-spin text-[var(--accent-text)]" />
-                                {t("translator.loadingOcrModel")}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+            {/* Inline Alert & Status Feedback */}
+            <AnimatePresence initial={false}>
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        role="alert"
+                        className="flex items-start gap-2.5 ui-inner border border-rose-900/70 bg-rose-950/30 px-4 py-3 text-xs text-rose-200"
+                    >
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                        <span>{error}</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-                    <AnimatePresence initial={false}>
-                        {isTranslating && !isLoadingOcr && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="overflow-hidden flex items-center gap-2 text-xs text-[var(--accent-text)] font-medium"
-                            >
-                                <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
-                                {t("translator.trackingProgress", {
-                                    percent: Math.round(progress * 100),
-                                })}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    <AnimatePresence initial={false}>
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
-                                role="alert"
-                                className="overflow-hidden flex items-start gap-2 ui-inner border border-rose-900/70 bg-rose-950/30 p-3 text-xs text-rose-200"
-                            >
-                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                                <span>{error}</span>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    <div className="flex min-h-24 flex-col gap-2 border-t border-[var(--border-subtle)] pt-3">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
-                            <ScanText className="h-3.5 w-3.5" />
-                            {t("translator.recognizedSubtitle")}
+            {/* Two-Column Studio Workspace */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                {/* Left Column: Screen Capture & Crop Viewport */}
+                <section className="lg:col-span-7 app-card ui-card border border-[var(--border-card)] p-5 flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <Monitor className="h-4 w-4 text-[var(--accent-text)]" />
+                            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                                {t("translator.screenArea")}
+                            </h2>
                         </div>
-                        <p className="whitespace-pre-wrap text-xs sm:text-[13px] leading-relaxed text-[var(--text-primary)]">
-                            {recognizedText ||
-                                t("translator.recognizedPlaceholder")}
-                        </p>
-                        {ocrConfidence !== null && ocrConfidence < 20 && (
-                            <p className="text-xs text-amber-300">
-                                {t("translator.ocrLowConfidence", {
-                                    conf: Math.round(ocrConfidence),
-                                })}
+
+                        <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-[var(--text-secondary)]">
+                            {isLoadingOcr && (
+                                <span className="inline-flex items-center gap-1.5 text-[var(--accent-text)]">
+                                    <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+                                    {t("translator.loadingOcrModel")}
+                                </span>
+                            )}
+                            {isTranslating && !isLoadingOcr && (
+                                <span className="text-[var(--accent-text)] font-medium">
+                                    {t("translator.trackingProgress", {
+                                        percent: Math.round(progress * 100),
+                                    })}
+                                </span>
+                            )}
+                            {hasValidSelection && selection && (
+                                <>
+                                    <span>
+                                        {Math.round(selection.width)}×
+                                        {Math.round(selection.height)}px
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelection(null)}
+                                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                                    >
+                                        {t("translator.clearSelection")}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex min-h-[340px] flex-1 items-center justify-center overflow-hidden ui-inner border border-[var(--border-subtle)] bg-black/80 relative">
+                        {stream ? (
+                            <canvas
+                                ref={canvasRef}
+                                onPointerDown={handlePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={finishSelection}
+                                onPointerCancel={finishSelection}
+                                aria-label={t("translator.screenAreaPrompt")}
+                                className="max-h-[58vh] max-w-full cursor-crosshair touch-none"
+                                style={{ width: "100%", height: "auto" }}
+                            />
+                        ) : (
+                            <div className="flex max-w-sm flex-col items-center gap-3.5 p-8 text-center">
+                                <div className="w-12 h-12 ui-inner bg-[var(--bg-inner)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)]">
+                                    <Monitor className="h-6 w-6" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                                        {t("translator.emptyScreenTitle")}
+                                    </p>
+                                    <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+                                        {t("translator.screenAreaPrompt")}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => void startCapture()}
+                                    className="btn-accent mt-1 inline-flex items-center gap-2 ui-control px-4 py-2 text-xs font-semibold cursor-pointer"
+                                >
+                                    <Monitor className="h-3.5 w-3.5" />
+                                    <span>{t("translator.selectScreen")}</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <video ref={videoRef} className="hidden" muted playsInline />
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+                        <span>
+                            {stream
+                                ? hasValidSelection
+                                    ? t("translator.selectionDone")
+                                    : t("translator.selectionInstruction")
+                                : t("translator.stepHintIdle")}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-[var(--text-muted)]">
+                            <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent-text)] shrink-0" />
+                            <span>{t("translator.privacyCompact")}</span>
+                        </span>
+                    </div>
+                </section>
+
+                {/* Right Column: Live Transcript & Overlay Geometry */}
+                <div className="lg:col-span-5 flex flex-col gap-5">
+                    {/* Live Translation Output Card */}
+                    <section className="app-card ui-card border border-[var(--border-card)] overflow-hidden flex flex-col">
+                        {/* Turkish Translation Pane */}
+                        <div className="p-5 flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-[var(--accent-text)]">
+                                    <Languages className="h-3.5 w-3.5" />
+                                    <span>{t("translator.translatedOutputTitle")}</span>
+                                </div>
+                                {translatedText && (
+                                    <button
+                                        type="button"
+                                        onClick={handleCopyTranslation}
+                                        className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                                    >
+                                        {copiedTranslation ? (
+                                            <>
+                                                <Check className="w-3 h-3 text-[var(--accent-text)]" />
+                                                <span>{t("remoteControl.copied")}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="w-3 h-3" />
+                                                <span>{t("translator.copyBtn")}</span>
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                            <p
+                                className={`min-h-[3.5rem] whitespace-pre-wrap text-sm leading-relaxed ${
+                                    translatedText
+                                        ? "text-[var(--text-primary)] font-medium"
+                                        : "text-[var(--text-muted)]"
+                                }`}
+                            >
+                                {translatedText || t("translator.overlayPlaceholder")}
                             </p>
-                        )}
-                    </div>
-
-                    <div className="flex min-h-28 flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-text)]">
-                            <Languages className="h-3.5 w-3.5" />
-                            {t("translator.inGameOverlay")}
                         </div>
-                        <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
-                            {translatedText
-                                ? t("translator.inGameOverlayActive")
-                                : t("translator.inGameOverlayInactive")}
-                        </p>
-                        <motion.button
-                            type="button"
-                            whileTap={{ scale: 0.96 }}
-                            onClick={() =>
-                                void setOverlayVisibility(!isOverlayVisible)
-                            }
-                            className="flex items-center justify-center gap-2 ui-control border border-[var(--border-input)] bg-[var(--bg-inner)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-hover)] cursor-pointer"
-                        >
-                            {isOverlayVisible
-                                ? t("translator.hideSticky")
-                                : t("translator.showSticky")}
-                        </motion.button>
-                        <p className="text-xs text-[var(--text-muted)]">
-                            {t("translator.stickyHint")}
-                        </p>
-                    </div>
 
-                    <div className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-3">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[var(--text-primary)]">
-                                {t("translator.stickyAppearance")}
-                            </span>
+                        {/* Recognized Source Text Pane */}
+                        <div className="p-5 border-t border-[var(--border-subtle)] bg-[var(--bg-inner)]/50 flex flex-col gap-2">
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center gap-1.5 font-semibold text-[var(--text-secondary)]">
+                                    <ScanText className="h-3.5 w-3.5" />
+                                    <span>{t("translator.recognizedSubtitle")}</span>
+                                </div>
+                                {ocrConfidence !== null && (
+                                    <span
+                                        className={`font-mono tabular-nums ${
+                                            ocrConfidence < 20
+                                                ? "text-amber-400 font-semibold"
+                                                : "text-[var(--text-muted)]"
+                                        }`}
+                                    >
+                                        %{Math.round(ocrConfidence)}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="min-h-[2.5rem] whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-secondary)]">
+                                {recognizedText || t("translator.recognizedPlaceholder")}
+                            </p>
+                            {ocrConfidence !== null && ocrConfidence < 20 && (
+                                <p className="text-xs text-amber-400">
+                                    {t("translator.ocrLowConfidence", {
+                                        conf: Math.round(ocrConfidence),
+                                    })}
+                                </p>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* In-Game Floating Overlay Controls */}
+                    <section className="app-card ui-card border border-[var(--border-card)] p-5 flex flex-col gap-4 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                                    {t("translator.inGameOverlay")}
+                                </h2>
+                                <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                                    {isOverlayVisible
+                                        ? t("translator.inGameOverlayActive")
+                                        : t("translator.inGameOverlayInactive")}
+                                </p>
+                            </div>
+
                             <button
                                 type="button"
                                 onClick={() =>
-                                    setOverlaySettings(DEFAULT_OVERLAY_SETTINGS)
+                                    void setOverlayVisibility(!isOverlayVisible)
                                 }
-                                className="text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+                                className={`shrink-0 inline-flex items-center gap-1.5 ui-control px-3.5 py-2 text-xs font-semibold border transition-colors cursor-pointer ${
+                                    isOverlayVisible
+                                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                        : "bg-[var(--bg-inner)] border-[var(--border-input)] hover:border-[var(--border-hover)] text-[var(--text-primary)]"
+                                }`}
                             >
-                                {t("translator.reset")}
+                                {isOverlayVisible ? (
+                                    <>
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                        <span>{t("translator.hideSticky")}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Eye className="h-3.5 w-3.5" />
+                                        <span>{t("translator.showSticky")}</span>
+                                    </>
+                                )}
                             </button>
                         </div>
 
-                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            {t("translator.horizontalPosition", {
-                                val: overlaySettings.x,
-                            })}
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={overlaySettings.x}
-                                onChange={(event) =>
-                                    setOverlaySettings((current) => ({
-                                        ...current,
-                                        x: Number(event.target.value),
-                                    }))
-                                }
-                            />
-                        </label>
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-3">
+                            <span>{t("translator.stickyClickThrough")}</span>
+                            <kbd className="px-2 py-0.5 ui-control bg-[var(--bg-inner)] border border-[var(--border-subtle)] font-mono text-[10px] text-[var(--text-secondary)] shrink-0">
+                                Ctrl + Shift + Y
+                            </kbd>
+                        </div>
 
-                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            {t("translator.verticalPosition", {
-                                val: overlaySettings.y,
-                            })}
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={overlaySettings.y}
-                                onChange={(event) =>
-                                    setOverlaySettings((current) => ({
-                                        ...current,
-                                        y: Number(event.target.value),
-                                    }))
-                                }
-                            />
-                        </label>
+                        {/* Quick Corner Presets */}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {t("translator.stickyAppearance")}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setOverlaySettings(DEFAULT_OVERLAY_SETTINGS)
+                                    }
+                                    className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                                >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>{t("translator.reset")}</span>
+                                </button>
+                            </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                                {t("translator.width", {
-                                    val: overlaySettings.width,
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                {overlayCornerPresets.map((preset) => {
+                                    const isActivePreset =
+                                        Math.abs(overlaySettings.x - preset.x) <= 2 &&
+                                        Math.abs(overlaySettings.y - preset.y) <= 2;
+                                    return (
+                                        <button
+                                            key={preset.id}
+                                            type="button"
+                                            onClick={() =>
+                                                setOverlaySettings((current) => ({
+                                                    ...current,
+                                                    x: preset.x,
+                                                    y: preset.y,
+                                                }))
+                                            }
+                                            className={`px-2 py-1.5 ui-inner text-[11px] font-medium border transition-colors cursor-pointer ${
+                                                isActivePreset
+                                                    ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)]"
+                                                    : "bg-[var(--bg-inner)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                            }`}
+                                        >
+                                            {preset.label}
+                                        </button>
+                                    );
                                 })}
+                            </div>
+                        </div>
+
+                        {/* Fine Geometry Sliders */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 pt-1">
+                            <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                                <div className="flex items-center justify-between">
+                                    <span>{t("translator.axisX")}</span>
+                                    <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                                        {overlaySettings.x}%
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={overlaySettings.x}
+                                    onChange={(event) =>
+                                        setOverlaySettings((current) => ({
+                                            ...current,
+                                            x: Number(event.target.value),
+                                        }))
+                                    }
+                                    className="accent-[var(--accent)] cursor-pointer"
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                                <div className="flex items-center justify-between">
+                                    <span>{t("translator.axisY")}</span>
+                                    <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                                        {overlaySettings.y}%
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={overlaySettings.y}
+                                    onChange={(event) =>
+                                        setOverlaySettings((current) => ({
+                                            ...current,
+                                            y: Number(event.target.value),
+                                        }))
+                                    }
+                                    className="accent-[var(--accent)] cursor-pointer"
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                                <div className="flex items-center justify-between">
+                                    <span>{t("translator.widthLabel")}</span>
+                                    <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                                        {overlaySettings.width}px
+                                    </span>
+                                </div>
                                 <input
                                     type="range"
                                     min="360"
@@ -1115,12 +1270,17 @@ export function SubtitleTranslatorView() {
                                             width: Number(event.target.value),
                                         }))
                                     }
+                                    className="accent-[var(--accent)] cursor-pointer"
                                 />
                             </label>
-                            <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                                {t("translator.height", {
-                                    val: overlaySettings.height,
-                                })}
+
+                            <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                                <div className="flex items-center justify-between">
+                                    <span>{t("translator.heightLabel")}</span>
+                                    <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                                        {overlaySettings.height}px
+                                    </span>
+                                </div>
                                 <input
                                     type="range"
                                     min="120"
@@ -1133,14 +1293,18 @@ export function SubtitleTranslatorView() {
                                             height: Number(event.target.value),
                                         }))
                                     }
+                                    className="accent-[var(--accent)] cursor-pointer"
                                 />
                             </label>
                         </div>
 
-                        <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
-                            {t("translator.fontSize", {
-                                val: overlaySettings.fontSize,
-                            })}
+                        <label className="flex flex-col gap-1.5 text-xs text-[var(--text-secondary)]">
+                            <div className="flex items-center justify-between">
+                                <span>{t("translator.fontSizeLabel")}</span>
+                                <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                                    {overlaySettings.fontSize}px
+                                </span>
+                            </div>
                             <input
                                 type="range"
                                 min="14"
@@ -1152,15 +1316,13 @@ export function SubtitleTranslatorView() {
                                         fontSize: Number(event.target.value),
                                     }))
                                 }
+                                className="accent-[var(--accent)] cursor-pointer"
                             />
                         </label>
-                    </div>
-                </motion.section>
+                    </section>
+                </div>
             </div>
-
-            <aside className="ui-inner border border-amber-900/50 bg-amber-950/20 px-4 py-3 text-xs leading-relaxed text-amber-100/80">
-                {t("translator.privacyNotice")}
-            </aside>
         </div>
     );
 }
+

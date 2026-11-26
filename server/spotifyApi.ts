@@ -1,15 +1,46 @@
 import { Buffer } from 'node:buffer';
 import { env } from 'node:process';
 
-export type SpotifyApiAction = 'token' | 'refresh' | 'config';
+export type SpotifyApiAction = 'token' | 'refresh' | 'config' | 'auth-url';
 
 export interface SpotifyApiResult {
   status: number;
   body: unknown;
 }
 
+const DEFAULT_SPOTIFY_SCOPES = [
+  'user-read-playback-state',
+  'user-modify-playback-state',
+  'user-read-currently-playing',
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-library-read',
+  'user-top-read',
+  'streaming',
+].join(' ');
+
 function getString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+const DEFAULT_PRODUCTION_REDIRECT_URI = 'https://lir.anticvalley.com.tr/auth/callback';
+
+function resolveSafeRedirectUri(requestedRedirect: string): string {
+  if (requestedRedirect) {
+    try {
+      const parsed = new URL(requestedRedirect);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        return parsed.toString();
+      }
+    } catch {
+      // fall through to APP_URL / default
+    }
+  }
+  const appUrl = getString(env.APP_URL).replace(/\/+$/, '');
+  if (appUrl) {
+    return `${appUrl}/auth/callback`;
+  }
+  return DEFAULT_PRODUCTION_REDIRECT_URI;
 }
 
 export async function handleSpotifyApi(
@@ -17,18 +48,57 @@ export async function handleSpotifyApi(
   body: Record<string, unknown> = {},
 ): Promise<SpotifyApiResult> {
   if (action === 'config') {
+    const appUrl = getString(env.APP_URL).replace(/\/+$/, '');
     return {
       status: 200,
       body: {
         hasEnvClientId: Boolean(env.SPOTIFY_CLIENT_ID),
         hasEnvClientSecret: Boolean(env.SPOTIFY_CLIENT_SECRET),
         envClientId: env.SPOTIFY_CLIENT_ID || '',
+        appRedirectUri: appUrl ? `${appUrl}/auth/callback` : DEFAULT_PRODUCTION_REDIRECT_URI,
       },
     };
   }
 
-  const clientId = getString(body.client_id) || env.SPOTIFY_CLIENT_ID || '';
-  const clientSecret = getString(body.client_secret) || env.SPOTIFY_CLIENT_SECRET || '';
+  if (action === 'auth-url') {
+    const clientId = getString(body.client_id) || getString(env.SPOTIFY_CLIENT_ID);
+    const redirectUri = resolveSafeRedirectUri(getString(body.redirect_uri));
+    const codeChallenge = getString(body.code_challenge);
+    const state = getString(body.state);
+    const scope = getString(body.scope) || DEFAULT_SPOTIFY_SCOPES;
+
+    if (!clientId) {
+      return { status: 400, body: { error: 'Spotify Client ID eksik' } };
+    }
+    if (!redirectUri) {
+      return { status: 400, body: { error: 'Geçerli Redirect URI sağlanamadı' } };
+    }
+    if (!codeChallenge || !state) {
+      return { status: 400, body: { error: 'PKCE code_challenge veya state eksik' } };
+    }
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      code_challenge_method: 'S256',
+      code_challenge: codeChallenge,
+      state,
+      scope,
+      show_dialog: 'true',
+    });
+
+    return {
+      status: 200,
+      body: {
+        url: `https://accounts.spotify.com/authorize?${params.toString()}`,
+        redirectUri,
+      },
+    };
+  }
+
+  const clientId = getString(body.client_id) || getString(env.SPOTIFY_CLIENT_ID);
+  const clientSecret = getString(env.SPOTIFY_CLIENT_SECRET);
 
   if (!clientId) {
     return { status: 400, body: { error: 'Spotify Client ID eksik' } };
@@ -39,7 +109,7 @@ export async function handleSpotifyApi(
 
   if (action === 'token') {
     const code = getString(body.code);
-    const redirectUri = getString(body.redirect_uri);
+    const redirectUri = resolveSafeRedirectUri(getString(body.redirect_uri));
     if (!code) {
       return { status: 400, body: { error: 'Yetkilendirme kodu (code) eksik' } };
     }
